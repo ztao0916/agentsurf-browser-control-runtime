@@ -29,6 +29,8 @@
 
 ## 新电脑安装及 Pi Agent 使用教程
 
+当前完整的 Chrome Native Host 安装流程支持 Windows。Pi Adapter 本身可以在 Windows、macOS 和 Linux 上安装，但 macOS/Linux 还缺少对应的 Native Host 安装脚本，因此暂时无法完成浏览器与 Chrome 的连接。
+
 ### 1. 安装基础环境
 
 新电脑需要安装：
@@ -38,7 +40,7 @@
 - Chrome 116 或更高版本
 - Pi Agent
 
-在 PowerShell 中确认命令可用：
+在 PowerShell 或终端中确认命令可用：
 
 ```powershell
 git --version
@@ -49,8 +51,8 @@ pi --version
 
 ### 2. 克隆 AgentSurf 私有仓库
 
-```powershell
-cd $env:USERPROFILE\Desktop
+```shell
+cd ~/Desktop
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
 ```
@@ -120,8 +122,8 @@ Agent endpoint: ws://127.0.0.1:8765
 
 在 AgentSurf 项目根目录执行：
 
-```powershell
-pi install "$env:USERPROFILE\Desktop\agentsurf-browser-control-runtime"
+```shell
+pi install .
 ```
 
 检查安装结果：
@@ -176,8 +178,8 @@ Pi 会先调用 `browser.list_tabs`，再使用返回的 `tab_id` 获取页面�
 
 ### 9. 更新 AgentSurf
 
-```powershell
-cd $env:USERPROFILE\Desktop\agentsurf-browser-control-runtime
+```shell
+cd ~/Desktop/agentsurf-browser-control-runtime
 git pull
 npm install
 npm run build
@@ -198,7 +200,7 @@ Native Host 启动器会引用项目中的 `dist/native-host/host.js`。如果�
 npm install
 npm run build
 npm run native-host:install -- -ExtensionId <当前扩展ID>
-pi install "<新的项目绝对路径>"
+pi install .
 ```
 
 如果删除后重新加载扩展导致扩展 ID 变化，也需要使用新的扩展 ID 再次运行 `native-host:install`。
