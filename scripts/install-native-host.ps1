@@ -69,6 +69,18 @@ internal static class NativeHostLauncher
     private const string HostScript = "$escapedHostScript";
     private const string ConfigPath = "$escapedConfigPath";
 
+    private static void Forward(Stream source, Stream destination)
+    {
+        var buffer = new byte[8192];
+        int count;
+        while ((count = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            destination.Write(buffer, 0, count);
+            // Native Messaging exchanges small frames while pipes stay open.
+            destination.Flush();
+        }
+    }
+
     public static int Main()
     {
         var startInfo = new ProcessStartInfo
@@ -85,10 +97,13 @@ internal static class NativeHostLauncher
         using (var process = Process.Start(startInfo))
         {
             if (process == null) return 1;
-            var input = Console.OpenStandardInput().CopyToAsync(process.StandardInput.BaseStream)
-                .ContinueWith(_ => process.StandardInput.Close());
-            var output = process.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput());
-            var error = process.StandardError.BaseStream.CopyToAsync(Console.OpenStandardError());
+            Task.Run(() =>
+            {
+                try { Forward(Console.OpenStandardInput(), process.StandardInput.BaseStream); }
+                finally { process.StandardInput.Close(); }
+            });
+            var output = Task.Run(() => Forward(process.StandardOutput.BaseStream, Console.OpenStandardOutput()));
+            var error = Task.Run(() => Forward(process.StandardError.BaseStream, Console.OpenStandardError()));
             process.WaitForExit();
             Task.WaitAll(output, error);
             return process.ExitCode;

@@ -1,46 +1,52 @@
 # AgentSurf
 
-这是一个基于 Chrome Extension Manifest V3 的 Browser Control Runtime。它提供与 AI 模型无关的浏览器 Tool Protocol，并通过 Native Messaging 连接本机 Browser Bridge，供 Claude、GPT、Gemini、Codex 或其他 Agent 调用。Extension 不监听 HTTP 或 WebSocket 端口。
+AgentSurf 是一个供 AI Agent 控制本机 Chrome 的浏览器运行时。它复用 Chrome 的现有登录态，通过统一的 `browser.*` 工具提供页面观察、点击、输入、截图等能力，不绑定特定 AI 模型。
 
-当前实现的 Tool：
+已提供 **Pi Agent Adapter**。项目自身不内置模型调用、任务规划或业务自动化流程。
 
-- `browser.list_tabs`
-- `browser.get_page`
-- `browser.get_page_state`
-- `browser.get_interactives`
-- `browser.click`
-- `browser.type`
-- `browser.scroll`
-- `browser.screenshot`
-- `browser.switch_tab`
-- `browser.open`
-- `browser.start_session` / `browser.end_session` / `browser.name_session`
-- `browser.claim_tab` / `browser.release_tab`
-- `browser.close_tab` / `browser.back` / `browser.forward` / `browser.reload`
-- `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events`
-- `browser.get_accessibility_tree` / `browser.observe` / `browser.get_capabilities`
-- `browser.double_click` / `browser.press` / `browser.set_checked` / `browser.select_option`
-- `browser.drag` / `browser.wait_for_element`
-- `browser.mouse_move` / `browser.click_at` / `browser.drag_at` / `browser.scroll_at`
-- `browser.press_key` / `browser.type_text` / `browser.handle_dialog`
-- `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files`
+## 目录
 
-当前未实现：AI 接入、OCR、iframe、Shadow DOM、MCP 和业务自动化。文件上传使用本地绝对路径，下载只返回 Chrome Downloads API 能提供的元数据。
+- [工作原理与支持范围](#工作原理与支持范围)
+- [Windows 与 Pi 快速安装](#windows-与-pi-快速安装)
+- [第一次使用](#第一次使用)
+- [更新重启与移动目录](#更新重启与移动目录)
+- [常见问题与排障](#常见问题与排障)
+- [工具速查](#工具速查)
+- [安全使用边界](#安全使用边界)
+- [开发与调试](#开发与调试)
+- [外部调用协议](#外部调用协议)
+- [项目结构与实现说明](#项目结构与实现说明)
 
-## 新电脑安装及 Pi Agent 使用教程
+## 工作原理与支持范围
 
-当前完整的 Chrome Native Host 安装流程支持 Windows。Pi Adapter 本身可以在 Windows、macOS 和 Linux 上安装，但 macOS/Linux 还缺少对应的 Native Host 安装脚本，因此暂时无法完成浏览器与 Chrome 的连接。
+```text
+Pi Agent
+  ↕ AgentSurf Adapter
+本机 Browser Bridge（WebSocket，仅监听 127.0.0.1）
+  ↕ Native Host（通过 Native Messaging 与扩展通信）
+Chrome 扩展（Manifest V3）
+  ↕ Chrome API / Page Agent
+网页
+```
 
-### 1. 安装基础环境
+Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host 启动 Bridge。**正常使用不需要手动运行 `npm run bridge`。** 扩展自身不监听 HTTP 或 WebSocket 端口。
 
-新电脑需要安装：
+当前提供 Windows 完整安装流程。Pi Adapter 可在 Windows、macOS 和 Linux 安装，但 macOS/Linux 的 Native Host 安装脚本和完整连接教程尚未提供。
+
+当前未提供 OCR、iframe / Shadow DOM 专门支持及 MCP 接入。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。
+
+## Windows 与 Pi 快速安装
+
+以下命令在 **PowerShell** 中执行。
+
+### 1. 准备环境
 
 - Git
-- Node.js 20 或更高版本
+- Node.js 20 或更高版本、npm 10 或更高版本
 - Chrome 116 或更高版本
-- Pi Agent
+- 已安装的 Pi Agent
 
-在 PowerShell 或终端中确认命令可用：
+可用以下命令确认环境：
 
 ```powershell
 git --version
@@ -49,270 +55,262 @@ npm --version
 pi --version
 ```
 
-### 2. 克隆 AgentSurf 私有仓库
+### 2. 获取代码并构建
 
-```shell
+```powershell
 cd ~/Desktop
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
-```
-
-仓库是私有的，首次克隆时 GitHub 可能打开浏览器要求登录或授权。必须使用具有该仓库访问权限的 GitHub 账号。
-
-### 3. 安装依赖并构建
-
-```powershell
 npm install
 npm run build
 ```
 
-构建产物位于项目的 `dist/` 目录。`dist/` 不提交到 Git，需要在每台电脑上本地构建。
+仓库访问需要相应 GitHub 权限；如提示登录，在 GitHub 授权流程中完成。后续命令均在项目根目录执行。
 
-### 4. 在 Chrome 中加载 AgentSurf
+构建产物位于 `dist/`，不提交到 Git，每台电脑都需要本地构建。**Chrome 加载的是 `dist/`，不是源码目录。**
 
-1. 打开 `chrome://extensions`。
-2. 开启右上角的“开发者模式”。
-3. 点击“加载已解压的扩展程序”。
-4. 选择项目中的 `dist/` 目录。
-5. 在扩展详情中复制 AgentSurf 的扩展 ID。
+### 3. 加载 Chrome 扩展
 
-未打包扩展在不同电脑或不同加载路径下可能获得不同的扩展 ID，因此必须以当前电脑显示的 ID 为准。
+1. 打开 `chrome://extensions`，开启“开发者模式”。
+2. 点击“加载已解压的扩展程序”，选择项目中的 `dist/`。
+3. 在扩展详情中复制 AgentSurf 的扩展 ID。
 
-### 5. 安装 Native Host
+首次加载时尚未注册 Native Host，暂时无法连接属于预期情况。未打包扩展在不同电脑或加载路径下可能获得不同 ID，以当前 Chrome 显示的 ID 为准。
 
-在项目根目录执行，使用刚才复制的扩展 ID 替换 `<扩展ID>`：
+### 4. 安装 Native Host
 
-```powershell
-npm run native-host:install -- -ExtensionId <扩展ID>
-```
-
-例如：
+先将下面的字符串替换为实际扩展 ID，再执行：
 
 ```powershell
-npm run native-host:install -- -ExtensionId hpageihlnphdohcplmimhmghljpilbpa
+$extensionId = "替换为Chrome显示的扩展ID"
+npm run native-host:install -- -ExtensionId $extensionId
 ```
 
 安装脚本会：
 
-- 在 `%LOCALAPPDATA%\BrowserControlRuntime` 创建 Native Messaging 配置；
-- 生成本机随机认证 token；
-- 注册 `com.browsercontrol.runtime` Native Host；
-- 将 Bridge 限制在 `127.0.0.1`。
+- 在 `%LOCALAPPDATA%\BrowserControlRuntime` 创建配置、Native Messaging manifest 和 `native-host.exe` 启动器；
+- 首次生成随机认证 token，重新安装时保留已有有效 token；
+- 注册 `com.browsercontrol.runtime`，只允许指定扩展连接；
+- 默认将 Bridge 配置为 `127.0.0.1:8765`。
 
-安装完成后，回到 `chrome://extensions`，点击 AgentSurf 的“重新加载”。
+安装后回到 `chrome://extensions`，重新加载 AgentSurf。
 
-### 6. 验证 Chrome 与 Native Host 连接
+### 5. 确认连接
 
-打开：
+扩展启动时会自动尝试连接。用实际扩展 ID 替换下面的占位符，在 Chrome 中打开：
 
 ```text
 chrome-extension://<扩展ID>/debug.html
 ```
 
-点击一次 `Connect native host`。正常状态为：
+正常状态为：
 
 ```text
 Connection: connected
 Agent endpoint: ws://127.0.0.1:8765
 ```
 
-如果状态未连接，先点击一次 `Disconnect`，等待一秒，再点击一次 `Connect native host`；不要连续点击 `Reconnect`。
+已经连接时无需再点击 Connect。如果未连接，点击一次 **Disconnect**，等待一秒，再点击 **Connect native host**；不要连续点击 Reconnect。仍失败时参见[排障说明](#常见问题与排障)。
 
-### 7. 安装 Pi Adapter
+### 6. 安装 Pi Adapter
 
-在 AgentSurf 项目根目录执行：
-
-```shell
-pi install .
-```
-
-检查安装结果：
+在项目根目录执行：
 
 ```powershell
+pi install .
 pi list
 ```
 
-列表中应出现 `agentsurf-browser-control-runtime`。重启 Pi，或者在已打开的 Pi 会话中执行：
+确认安装列表包含当前项目的本地路径。重启 Pi，或在已打开的 Pi 会话中执行：
 
 ```text
 /reload
 ```
 
-Pi 随后会获得一个名为 `agentsurf` 的工具。Adapter 自动完成以下工作：
+Pi 随后获得名为 `agentsurf` 的工具。Adapter 自动读取本机 Native Host 配置、连接 Bridge、完成认证并匹配请求响应。**日常使用无需手动填写地址、token 或 request_id，也不要将 token 粘贴到聊天中。**
 
-- 读取 `%LOCALAPPDATA%\BrowserControlRuntime\config.json`；
-- 连接 `ws://127.0.0.1:8765`；
-- 使用本机 token 认证；
-- 生成并匹配 `request_id`；
-- 将 Browser Tool 响应返回给 Pi。
+## 第一次使用
 
-用户和 Pi 都不需要手工填写 WebSocket 地址、token 或 `request_id`。
-
-### 8. 在 Pi 中调用 AgentSurf
-
-先测试基础连接：
+向 Pi 发送：
 
 ```text
-使用 AgentSurf 列出当前 Chrome 的所有标签页。
+使用 AgentSurf 打开 https://example.com，读取页面正文，并告诉我页面标题和链接。
 ```
 
-常见指令示例：
+推荐的只读调用流程：
+
+1. `browser.list_tabs`：了解当前标签页，避免覆盖用户正在使用的网页。
+2. `browser.open`，参数 `{"url":"https://example.com","activate":true}`：新建页面，取得返回的 `tab_id`。
+3. `browser.get_page_state`，传入该 `tab_id`：确认页面 URL 和加载状态；如果仍在加载，稍后再读取。
+4. `browser.get_accessibility_tree`，传入同一 `tab_id`：读取页面可访问文本和链接结构。
+
+**`browser.get_page` / `browser.get_page_state` 返回页面元信息，不是网页正文抓取工具。打开网址用 `browser.open`，没有 `browser.navigate`。**
+
+其他示例：
 
 ```text
-使用 AgentSurf 打开 https://example.com。
-```
-
-```text
-使用 AgentSurf 读取当前页面，并告诉我有哪些可交互元素。
-```
-
-```text
-使用 AgentSurf 找到搜索框，输入 Chrome Extension，然后提交。
-```
-
-```text
+使用 AgentSurf 列出当前 Chrome 的标签页。
+使用 AgentSurf 查看当前页面有哪些可交互元素，先不要点击。
 使用 AgentSurf 截取当前页面并描述页面状态。
 ```
 
-Pi 会先调用 `browser.list_tabs`，再使用返回的 `tab_id` 获取页面状态或交互元素。点击和输入操作必须使用 `browser.get_interactives` 返回的 `element_id`，不能自行构造 CSS Selector、XPath 或 element ID。
+元素操作前先调用 `browser.get_interactives`，点击和填写使用它返回的 `element_id`，不得自行编造 CSS Selector、XPath 或元素 ID。页面更新导致 ID 失效时，重新获取交互元素。
 
-### 9. 更新 AgentSurf
+## 更新重启与移动目录
 
-```shell
-cd ~/Desktop/agentsurf-browser-control-runtime
-git pull
-npm install
-npm run build
-```
+### 按修改范围更新
 
-更新完成后：
+| 修改范围 | 生效步骤 |
+| --- | --- |
+| Chrome 扩展代码或 Native Host JS | 重新构建，再重新加载扩展，让新 Host 启动 |
+| Native Host 安装脚本或启动器 | 禁用扩展，构建并重新安装 Native Host，再启用扩展 |
+| Pi Adapter | 在 Pi 中 `/reload` 或重启 Pi |
+| 项目路径或扩展 ID | 重新注册 Native Host；路径变化时还需更新 Pi 的本地安装路径 |
 
-1. 在 `chrome://extensions` 中重新加载 AgentSurf；
-2. 在 Pi 中执行 `/reload`，或重启 Pi。
+只改源码不会更新 `dist/`；只执行构建不会重新生成已安装的 `native-host.exe`；已经启动的 Host 也不会自动加载新的 JS。
 
-因为 Pi Adapter 以本地路径安装，所以仓库代码更新后不需要再次执行 `pi install`。
+### 完整更新流程
 
-### 10. 移动目录或重新加载扩展
+不确定本次更新涉及哪一层时，使用以下流程：
 
-Native Host 启动器会引用项目中的 `dist/native-host/host.js`。如果移动或重命名项目目录，需要在新目录重新构建并注册：
+1. 在 `chrome://extensions` 暂时禁用 AgentSurf，等待旧 Native Host 退出。
+2. 在项目实际目录执行：
 
-```powershell
-npm install
-npm run build
-npm run native-host:install -- -ExtensionId <当前扩展ID>
-pi install .
-```
+   ```powershell
+   git pull
+   npm install
+   npm run build
+   $extensionId = "替换为Chrome显示的扩展ID"
+   npm run native-host:install -- -ExtensionId $extensionId
+   ```
 
-如果删除后重新加载扩展导致扩展 ID 变化，也需要使用新的扩展 ID 再次运行 `native-host:install`。
+   每一步成功后再继续。如存在本地未提交修改，先妥善处理，不要用强制重置覆盖它们。
 
-## 环境要求
+3. 重新启用 AgentSurf，在 `debug.html` 确认连接状态。
+4. 如 Pi Adapter 有更新，在 Pi 中执行 `/reload` 或重启 Pi。本地路径未变化时无需再次 `pi install .`。
+5. 用“第一次使用”中的只读流程检查连接和页面读取。
 
-- Node.js 20 或更高版本
-- npm 10 或更高版本
-- Chrome 116 或更高版本（Manifest V3、Native Messaging 和 CDP）
+如果只是连接临时异常、没有更新代码，可以先在调试页 Disconnect / Connect，或重新加载扩展，无需每次重新构建安装。
 
-## 安装依赖
+### 移动目录或更换扩展 ID
 
-在项目根目录执行：
+Native Host 启动器引用项目中的 `dist/native-host/host.js`。移动或重命名项目后：
 
-```powershell
-npm install
-```
+1. 禁用旧扩展，在新目录安装依赖并构建。
+2. 在 Chrome 中加载新目录的 `dist/`，取得当前扩展 ID。
+3. 在新目录重新执行 `native-host:install`。
+4. 用 `pi list` 确认旧安装路径并移除失效项，再在新目录执行 `pi install .`。
+5. 重新加载扩展及 Pi。
 
-## 构建
+仅扩展 ID 变化时，也必须使用新 ID 重新注册 Native Host。
 
-```powershell
-npm run lint
-npm run typecheck
-npm run build
-npm test
-```
+## 常见问题与排障
 
-构建产物会生成到 `dist/`。Chrome 加载的是 `dist/`，不是源码目录。
+| 现象 | 含义与处理方向 |
+| --- | --- |
+| `Chrome Extension is not connected` | Bridge 能响应，但没有可用扩展连接。检查调试页状态、Native Host 握手，以及源码、构建产物、已安装启动器是否同步。 |
+| 连接被拒绝 / `ECONNREFUSED` | 目标端口没有可用监听。确认扩展已启用、Native Host 已安装并启动。 |
+| `EADDRINUSE` | Bridge 端口被占用。排查误启动的独立 Bridge、旧 Host 或其他 Chrome 配置中的扩展实例。 |
+| `tool is unsupported` | 工具名不受当前运行时支持。对照工具列表或 `browser.get_capabilities`，不要直接重装扩展。 |
+| 安装时 `native-host.exe` 被占用 | 先禁用扩展并等待旧 Host 退出，再安装。不要结束所有 `node.exe`，以免影响其他项目。 |
+| Native Host 找不到或禁止访问 | 检查 Native Host 注册、启动器路径，以及安装时填写的扩展 ID 是否与当前一致。 |
+| `unsupported_page` | Chrome 不允许在该页面注入 Page Agent。换普通 HTTP/HTTPS 页面。 |
+| `screenshot_unavailable` | 默认可视区域截图要求目标是所在窗口的活动标签页；截图期间也不能切换目标或改变 revision。 |
 
-## 在 Chrome 中加载插件
+定位顺序：
 
-1. 执行 `npm run build`。
-2. 打开 `chrome://extensions`。
-3. 开启右上角的“开发者模式”。
-4. 点击“加载已解压的扩展程序”。
-5. 选择项目中的 `dist/` 目录。
-6. 如果重新构建了代码，在扩展管理页面点击扩展的刷新按钮。
+1. 查看 `chrome://extensions` 中的启用状态和扩展错误。
+2. 查看 `debug.html` 的连接状态及连接、请求、响应事件。
+3. 必要时打开扩展 Service Worker 检查窗口查看 Native Messaging 错误。
+4. 检查端口对应进程，区分 Native Host 和独立 Bridge。不要仅因端口有监听就认定 Chrome 已连接。
 
-Chrome 的 `chrome://` 页面、Chrome Web Store 页面和其他受浏览器保护的页面不允许注入 Page Agent，这是浏览器限制。
-
-## 本地手动测试
-
-加载扩展后，在地址栏打开：
-
-```text
-chrome-extension://<扩展 ID>/debug.html
-```
-
-扩展 ID 可以在 `chrome://extensions` 的扩展详情中查看。调试页提供以下操作：
-
-- 列出浏览器中的 Tab
-- 获取当前激活 Tab 的页面状态（URL、标题、加载状态、viewport、`page_revision`）
-- 获取当前激活 Tab 的结构化交互元素 Snapshot
-- 使用 `element_id` 点击或输入文字
-- 滚动顶层页面
-- 截取活动 Tab 的当前可视区域
-- 选择并切换 Tab
-- 打开一个 `http` 或 `https` URL
-
-测试页面读取时，先在下拉框中选择一个普通 `http/https` 网页，再点击 “Get page state” 或 “Get interactives”。调试页会显式传入该页面的 `tab_id`，不需要先切换离开调试页。
-
-测试元素操作时，先调用 “Get interactives”，从结果中取得一个 `element_id`，填入 Element actions 区域。点击 “Click” 执行点击；输入文字后点击 “Type” 执行文本输入。Page scroll 区域通过 `delta_x`、`delta_y` 控制顶层页面滚动。
-
-测试截图时，目标页面必须是其所在 Chrome 窗口的活动 Tab。由于调试页本身也会占用一个活动 Tab，建议把调试页移到第二个 Chrome 窗口，然后在下拉框选择第一个窗口中的活动网页。选择 PNG 或 JPEG 后点击 “Screenshot”，页面会显示预览，输出中会显示 MIME、尺寸、revision 和经过缩略展示的 Data URL。
-
-调试页调用的是和未来 AI Adapter 相同的 `browser.*` Tool Protocol。输出区域会显示统一的成功或错误响应。
-
-## 安装 Native Host 与启动本地 Bridge
-
-Bridge 只监听 `127.0.0.1`，不会监听局域网或公网地址。Native Host 由 Chrome Extension 通过 Native Messaging 启动；先构建并安装 Host：
+默认端口可用以下只读 PowerShell 命令检查：
 
 ```powershell
-npm run build
-npm run native-host:install -- -ExtensionId <扩展 ID>
+Get-NetTCPConnection -LocalPort 8765 -State Listen |
+  Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
-安装脚本会在 `%LOCALAPPDATA%\BrowserControlRuntime` 创建随机 token、Native Messaging manifest 和可执行 Host 启动器。Chrome 扩展 ID 可从 `chrome://extensions` 复制。
+一次成功列出标签页只能证明当时链路可用，不能证明长时间运行和重连都稳定。分享日志前移除认证信息和敏感页面数据。
 
-独立 Bridge 也可以手动启动，用于 Bridge 协议测试；它不会自动拥有 Chrome 控制能力，必须有兼容的 Extension WebSocket 连接。未设置环境变量时，Bridge 会在每次启动时生成一个随机 token，并在终端显示。也可以在启动前设置一个至少 16 个字符的随机 token：
+## 工具速查
 
-```powershell
-$env:BROWSER_BRIDGE_TOKEN = "替换为本机随机生成的长 token"
-$env:BROWSER_BRIDGE_PORT = "8765"
-npm run bridge
-```
+| 目的 | 工具 |
+| --- | --- |
+| 查询能力 | `browser.get_capabilities` |
+| 标签页管理 | `browser.list_tabs` / `browser.open` / `browser.switch_tab` / `browser.close_tab` |
+| 前进、后退、刷新 | `browser.back` / `browser.forward` / `browser.reload` |
+| 页面元信息 | `browser.get_page` / `browser.get_page_state` |
+| 可访问文本与结构 | `browser.get_accessibility_tree` |
+| 交互元素快照 | `browser.get_interactives` |
+| 组合观察、截图 | `browser.observe` / `browser.screenshot` |
+| 元素点击与输入 | `browser.click` / `browser.double_click` / `browser.type` / `browser.press` |
+| 表单状态 | `browser.set_checked` / `browser.select_option` |
+| 元素拖动与等待 | `browser.drag` / `browser.wait_for_element` |
+| 滚动 | `browser.scroll` / `browser.scroll_at` |
+| 坐标操作 | `browser.mouse_move` / `browser.click_at` / `browser.drag_at` |
+| 键盘、文本、对话框 | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
+| 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
+| 会话与标签页归属 | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` |
+| 调试器与 CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
 
-开发时也可以使用 `npm run bridge:dev`，它会先重新构建再启动独立 Bridge（仅用于兼容旧的 WebSocket 调试）。Native Host 启动的 Bridge 会使用 `%LOCALAPPDATA%\BrowserControlRuntime\config.json` 中的 token。token 不在源码或构建产物中；Extension 端不保存 Bridge token。
+具体参数以 `src/core/protocol/tool-contract.ts` 和 `src/core/protocol/schemas.ts` 为准。工具名和参数不可仅凭其他浏览器工具的命名习惯猜测。
 
-## 让 Extension 连接 Native Host
+## 安全使用边界
 
-1. 在 `chrome://extensions` 重新加载 `dist/`，确保 Service Worker 使用最新构建。
-2. 打开扩展的 `debug.html`。
-3. 点击 `Connect native host`，等待 Connection 显示 `connected`。
-4. 调试页显示 Native Host 提供的本机 Agent endpoint；外部 Agent 使用同一 config token 连接该 endpoint。
+AgentSurf 可以操作当前 Chrome 登录态中的页面，CDP、上传等工具具有较强能力。建议在 Agent 的使用规则中明确：
 
-Native Messaging 由 Chrome 校验 `allowed_origins`，Extension 与 Host 之间不再重复发送 token。Native Host 到期或断开时，Extension 会清理 pending request 并按退避策略重连。调试页分别记录连接错误、Tool 请求和 Tool 响应，且不会把完整截图 Data URL 写入日志。
+- 默认只读；提交、保存、删除、发布、上传或发送消息等修改线上数据的操作，先取得用户明确授权。
+- 登录由用户自行完成；不索取密码、验证码，不读取或输出 Cookie、Token 等认证信息。
+- 不将本机 `config.json`、认证 token 或敏感页面数据提交到仓库或粘贴到聊天中。
+- 不向外网暴露 Bridge，不将认证 token 当作普通调试文本传播。
 
-## Agent WebSocket 协议
+以上是 **Agent 使用约束**，不表示运行时已经实现所有操作的人工审批。调用方仍需管理授权边界。
 
-外部 Agent 连接 Native Host 启动的本机 Bridge。每个 Agent WebSocket 连接的第一条消息必须完成认证，未认证消息或错误 token 会被拒绝，并且不会执行 Browser Tool：
+## 开发与调试
+
+### 构建和验证命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm install` | 安装依赖 |
+| `npm run build` | 生成 Chrome 扩展及 Native Host 构建产物 |
+| `npm run lint` | ESLint 检查 |
+| `npm run typecheck` | TypeScript 类型检查 |
+| `npm test` | Vitest 单元测试 |
+
+### 扩展调试页
+
+打开 `chrome-extension://<扩展ID>/debug.html`。调试页使用与 Pi Adapter 相同的 `browser.*` Tool Protocol，支持查询标签页、页面状态、交互元素、点击、输入、滚动和截图。
+
+- 先在下拉框选择普通 HTTP/HTTPS 页面；工具会显式传入目标 `tab_id`，读取页面无需切换离开调试页。
+- 元素操作先 Get interactives，再使用返回的 `element_id`。
+- 默认截图要求目标标签页在其窗口中处于活动状态。可把调试页移到第二个 Chrome 窗口，避免调试页占用目标的活动位置。
+- 截图输出会缩略展示 Data URL，不要把完整图像数据写入常规日志。
+
+### 独立 Bridge（仅协议开发）
+
+`npm run bridge` 启动的是独立 Bridge，**不会自动获得当前 Native Messaging 扩展的控制能力**，需要兼容的扩展 WebSocket 客户端。不要用它替代正常的 Native Host 启动流程，也不要与 Native Host 占用同一端口。
+
+`npm run bridge:dev` 会先构建再启动独立 Bridge。可通过 `BROWSER_BRIDGE_PORT` 和 `BROWSER_BRIDGE_TOKEN` 设置端口和认证 token；未设置 token 时会生成随机值并输出到终端，注意不要分享该输出。
+
+## 外部调用协议
+
+这一节面向自行开发 Adapter 的调用方。Pi 日常使用无需手工处理认证和消息封装。
+
+Agent 连接 Native Host 启动的本机 Bridge，第一条 WebSocket 消息为认证握手：
 
 ```json
-{"type":"auth","role":"agent","token":"<同一个随机 token>"}
+{"type":"auth","role":"agent","token":"<本机配置中的token>"}
 ```
 
-认证成功响应为：
+认证成功：
 
 ```json
 {"type":"auth_result","ok":true,"role":"agent"}
 ```
 
-Agent 认证后发送现有 External Tool Contract（外部协议不包含 Extension 内部使用的 `kind` 字段）：
+随后发送工具请求；外部协议不包含扩展内部使用的 `kind` 字段：
 
 ```json
 {
@@ -323,17 +321,13 @@ Agent 认证后发送现有 External Tool Contract（外部协议不包含 Exten
 }
 ```
 
-成功响应：
+成功响应结构：
 
 ```json
-{
-  "request_id": "req_123",
-  "ok": true,
-  "result": {}
-}
+{"request_id":"req_123","ok":true,"result":{}}
 ```
 
-失败响应继续使用统一 Error Model：
+失败响应结构：
 
 ```json
 {
@@ -347,41 +341,41 @@ Agent 认证后发送现有 External Tool Contract（外部协议不包含 Exten
 }
 ```
 
-Bridge 与 Agent 使用 `auth` 握手；Native Host 与 Extension 使用 Chrome Native Messaging framing。Bridge 按 `request_id` 转发响应；超时、Extension 断开或 Bridge 停止时会清理 pending request 并返回结构化错误。
+Bridge 按 `request_id` 转发响应；超时、扩展断开或 Bridge 停止时会清理待处理请求并返回结构化错误。未认证消息或错误认证不会执行浏览器工具。Native Host 与扩展之间使用 Chrome Native Messaging framing，由 Chrome 校验 `allowed_origins`，不再重复发送 Bridge token。
 
-## 从外部调用 Tool
+开发脚本 `scripts/call-tool.mjs`（`npm run bridge:call`）可模拟外部 Agent，通过 `BROWSER_BRIDGE_URL` 和 `BROWSER_BRIDGE_TOKEN` 配置连接。调用方应在本机安全加载凭据，不要将实际 token 写进文档、命令示例或提交记录。
 
-仓库内的开发调用脚本可模拟外部 Agent。Native Host 连接成功后，在另一个 PowerShell 终端读取 `%LOCALAPPDATA%\BrowserControlRuntime\config.json` 的 `token`，然后调用：
+## 项目结构与实现说明
 
-```powershell
-$env:BROWSER_BRIDGE_URL = "ws://127.0.0.1:8765"
-$env:BROWSER_BRIDGE_TOKEN = "config.json 中的 token"
-npm run bridge:call -- '{"protocol_version":"1","request_id":"req_123","tool":"browser.list_tabs","args":{}}'
-```
+| 路径 | 职责 |
+| --- | --- |
+| `integrations/pi/` | Pi Agent Adapter |
+| `src/core/` | 与 Chrome API 无关的工具契约、参数校验和 Runtime 调度 |
+| `src/chrome/` | Chrome API、CDP、下载与会话协调 |
+| `src/content/` | Page Agent、元素注册与可视化 Agent 光标 |
+| `src/transport/` | Native Messaging 和工具传输协议 |
+| `src/bridge/` | 本机 WebSocket Bridge |
+| `src/native-host/` | Native Host、配置和消息 framing |
+| `src/debug/` | 扩展调试页 |
+| `scripts/` | 构建、安装与开发调用脚本 |
+| `tests/` | 测试代码 |
 
-把 `tool` 和 `args` 换成 `browser.get_capabilities` 返回的任一 Tool 即可。截图响应中的 `image_data` 是 Data URL；日志脚本会缩略显示它。
+### 页面 revision 与元素 ID
 
-## 项目结构
+Page Agent 为每个 Document 生成独立 revision。导航、刷新以及重要 DOM 变化会更新 revision；`browser.get_page_state` 的 `revision_reason` 返回 `navigation`、`refresh` 或 `important_dom`。
 
-`src/core/` 只包含与 Chrome API 无关的 Tool Contract、Schema、错误模型和 Runtime 调度逻辑；`src/chrome/` 封装 Chrome API、CDP、下载和 Session/Tab Group；`src/content/` 是运行在网页中的 Page Agent、Element Registry 和可视化 Agent Cursor；`src/transport/` 负责可替换的 Native Messaging Adapter；`src/bridge/` 是本机 Node.js WebSocket Bridge；`src/native-host/` 是 Chrome Native Messaging Host。
+MutationObserver 不监听所有文本变化，只筛选交互元素增删、已注册元素关键属性变化和单批大型结构变化，单批至多推进一次 revision。普通文本或少量非交互节点变化不会更新 revision。
 
-Page Agent 为每个页面 Document 生成独立 revision，并在结构性 DOM 变化或交互语义属性变化时更新 revision。`element_id` 是不透明字符串，只能在生成它的 Tab 和页面 revision 内使用；Registry 中的 DOM 引用只保存在 Content Script 中。
+`browser.get_interactives` 返回 `tab_id`、`page_revision`、`snapshot_id` 和元素数组，包含角色、标签、可访问名称、状态及坐标等信息，不返回 CSS Selector 或 XPath。密码输入仅返回 `value_state: "redacted"`。
 
-页面加载时通过 Navigation Timing 区分 navigation 和 refresh；每次 Tool 请求前同步同文档 URL 变化。MutationObserver 不监听文本变化，只筛选交互元素增删、已注册元素的关键属性变化和单批大型结构变化，并按 mutation batch 至多推进一次 revision。普通文本或少量非交互节点变化不会更新 revision。`browser.get_page_state` 的 `revision_reason` 返回 `navigation`、`refresh` 或 `important_dom`。
+`element_id` 是不透明标识，仅能在生成它的标签页和 revision 内使用；DOM 引用只保存在 Content Script 中。元素操作会检查 ID、revision、连接状态、可见性以及 disabled/editable 状态。动作结果会提示是否建议重新获取交互元素。
 
-`browser.get_interactives` 返回 `tab_id`、`page_revision`、`snapshot_id` 和元素数组。元素包含角色、标签、可访问名称、文本、输入类型、占位符、值状态、选中/禁用/可见状态及页面坐标。响应不包含 CSS Selector 或 XPath，密码输入只返回 `value_state: "redacted"`。
+### 截图、光标与文件
 
-`browser.click` 和 `browser.type` 只接受 `tab_id` 和 `element_id`（type 另接收 `text`）。它们会验证 ID、revision、连接状态、可见性和 disabled/editable 状态。`browser.scroll` 接受 `tab_id`、`delta_x`、`delta_y`，返回最终位置和顶部/底部状态。三个动作都会返回当前 `page_revision`、revision 是否变化以及是否建议重新获取 interactives。
+默认可视区域截图使用 `chrome.tabs.captureVisibleTab`，支持 PNG/JPEG；目标必须是所在窗口的活动标签页，截图过程中活动目标或 revision 变化会导致失败。高级截图参数见工具契约。运行时不会为了默认截图自动切换标签页。
 
-`browser.screenshot` 使用官方 `chrome.tabs.captureVisibleTab`，默认返回当前可视区域的 PNG，也支持 JPEG。响应包含 `tab_id`、`page_revision`、实际像素宽高、MIME 和 Data URL。Runtime 不会为截图切换 Tab；目标不是其窗口的活动 Tab、截图期间活动 Tab 改变或 revision 改变时，返回 `screenshot_unavailable`。该 API 要求 `<all_urls>` host permission，但 Content Script 仍只注入 `http/https` 页面。
+坐标操作和元素级操作会在目标页面显示短暂的 `AI` 光标标记。标记不参与页面交互，不会被 `get_interactives` 返回，也不会改变 revision。
 
-`browser.mouse_move`、`browser.click_at`、`browser.drag_at` 和元素级操作会在目标页面显示一个不参与页面交互的短暂 `AI` 光标标记，帮助用户确认当前 Agent 操作位置。该标记不会被 `get_interactives` 返回，也不会改变 `page_revision`。
+`browser.set_files` 接收目标 `tab_id`、文件输入的 `element_id` 及本机绝对路径数组，通过临时内部标记和 CDP `DOM.setFileInputFiles` 设置文件，随后清理标记。
 
-`browser.set_files` 只接受 `element_id` 和本机绝对路径数组。Runtime 会在 Page Agent 中给目标 file input 添加临时内部标记，再通过 CDP `DOM.setFileInputFiles` 设置文件，最后清理标记。`browser.list_downloads` 使用 Chrome Downloads API；Chrome API 不提供历史下载的来源 Tab，因此无法可靠关联的记录返回 `tab_id: null`。
-
-## 验证命令
-
-- `npm run lint`：ESLint 检查
-- `npm run typecheck`：严格 TypeScript 类型检查
-- `npm run build`：生成可加载的 MV3 扩展
-- `npm test`：运行 Vitest 单元测试
+`browser.list_downloads` 使用 Chrome Downloads API。Chrome 不提供历史下载的来源标签页，无法可靠关联的记录返回 `tab_id: null`。

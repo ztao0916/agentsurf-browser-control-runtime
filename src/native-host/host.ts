@@ -2,6 +2,7 @@ import { BrowserBridgeServer } from '../bridge/server';
 import { createToolError } from '../core/protocol/errors';
 import {
   isNativePingMessage,
+  isNativePongMessage,
   isNativeToolResponseMessage,
   isRecord,
   type HostToExtensionMessage,
@@ -18,23 +19,18 @@ async function main(): Promise<void> {
     token: config.token,
     log: (message) => process.stderr.write(`[browser-control-host] ${message}\n`),
   });
-  // Notify the extension as soon as the configured local endpoint is known.
-  // Waiting for the WebSocket server's listening event can otherwise leave
-  // Chrome's Native Messaging transport stuck in "connecting" with no error.
-  send({
-    type: 'host_ready',
-    protocol_version: '1',
-    bridge_url: `ws://127.0.0.1:${config.port}`,
-    authentication_required: true,
-  });
-  await bridge.waitUntilListening();
-  let detachExtension: (() => void) | null = null;
+  const detachExtension = bridge.attachNativeExtension((request) => send({ type: 'tool_request', request }));
+  const port = await bridge.waitUntilListening();
 
   const heartbeat = setInterval(() => send({ type: 'ping', timestamp: Date.now() }), 20_000);
   const reader = new NativeMessageReader((message) => {
     if (isRecord(message) && message.type === 'extension_hello' && message.protocol_version === '1') {
-      detachExtension?.();
-      detachExtension = bridge.attachNativeExtension((request) => send({ type: 'tool_request', request }));
+      send({
+        type: 'host_ready',
+        protocol_version: '1',
+        bridge_url: `ws://127.0.0.1:${port}`,
+        authentication_required: true,
+      });
       return;
     }
     if (isNativeToolResponseMessage(message)) {
@@ -45,6 +41,7 @@ async function main(): Promise<void> {
       send({ type: 'pong', timestamp: message.timestamp });
       return;
     }
+    if (isNativePongMessage(message)) return;
     send({
       type: 'host_error',
       error: createToolError('invalid_request', 'Native Host received an unsupported message.', false),
@@ -63,7 +60,7 @@ async function main(): Promise<void> {
   });
   process.stdin.on('end', () => {
     clearInterval(heartbeat);
-    detachExtension?.();
+    detachExtension();
     void bridge.close().finally(() => process.exit(0));
   });
 }
