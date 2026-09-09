@@ -9,6 +9,9 @@ export interface NativeHostConfig {
 }
 
 export function getDefaultConfigPath(): string {
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support', 'BrowserControlRuntime', 'config.json');
+  }
   const localAppData = process.env.LOCALAPPDATA;
   const base = localAppData && localAppData.length > 0
     ? localAppData

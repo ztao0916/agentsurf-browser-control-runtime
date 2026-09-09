@@ -95,7 +95,9 @@ function rawDataToString(data: RawData): string {
 }
 
 async function readConfig(): Promise<BridgeConfig> {
-	const base = process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
+	const base = process.platform === "darwin"
+		? join(homedir(), "Library", "Application Support")
+		: process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
 	const path = join(base, "BrowserControlRuntime", "config.json");
 	const value = JSON.parse(await readFile(path, "utf8")) as Partial<BridgeConfig>;
 	if (!Number.isInteger(value.port) || typeof value.token !== "string") {

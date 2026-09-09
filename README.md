@@ -8,6 +8,7 @@ AgentSurf 是一个供 AI Agent 控制本机 Chrome 的浏览器运行时。它�
 
 - [工作原理与支持范围](#工作原理与支持范围)
 - [Windows 与 Pi 快速安装](#windows-与-pi-快速安装)
+- [macOS 与 Pi 安装](#macos-与-pi-安装)
 - [第一次使用](#第一次使用)
 - [更新重启与移动目录](#更新重启与移动目录)
 - [常见问题与排障](#常见问题与排障)
@@ -31,7 +32,7 @@ Chrome 扩展（Manifest V3）
 
 Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host 启动 Bridge。**正常使用不需要手动运行 `npm run bridge`。** 扩展自身不监听 HTTP 或 WebSocket 端口。
 
-当前提供 Windows 完整安装流程。Pi Adapter 可在 Windows、macOS 和 Linux 安装，但 macOS/Linux 的 Native Host 安装脚本和完整连接教程尚未提供。
+当前提供 Windows 和 macOS（Google Chrome 稳定版、当前用户）Native Host 安装脚本。macOS 适配已提供代码，但尚未在真实 Mac 上验证完整链路。Pi Adapter 可在 Linux 安装，但 Linux 的 Native Host 安装脚本和连接教程尚未提供。
 
 当前未提供 OCR、iframe / Shadow DOM 专门支持及 MCP 接入。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。
 
@@ -129,6 +130,72 @@ pi list
 
 Pi 随后获得名为 `agentsurf` 的工具。Adapter 自动读取本机 Native Host 配置、连接 Bridge、完成认证并匹配请求响应。**日常使用无需手动填写地址、token 或 request_id，也不要将 token 粘贴到聊天中。**
 
+## macOS 与 Pi 安装
+
+需要 Git、Node.js 20+、npm 10+、Chrome 116+ 和 Pi。以下命令在 Mac 终端执行，无需 `sudo`，适用于当前用户的 Google Chrome 稳定版，不自动注册 Chromium、Chrome Beta 或其他浏览器。
+
+### 1. 构建并加载扩展
+
+```sh
+cd ~/Desktop
+git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+cd agentsurf-browser-control-runtime
+npm install
+npm run build
+```
+
+在 `chrome://extensions` 开启开发者模式，加载项目的 `dist/`，复制扩展 ID。
+
+### 2. 安装 Native Host
+
+将字符串替换为实际扩展 ID：
+
+```sh
+npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
+```
+
+默认端口为 8765，可通过末尾额外参数指定端口。安装会保留已有有效 token，创建以下文件：
+
+| 文件 | 路径 |
+| --- | --- |
+| 配置（仅当前用户读写） | `~/Library/Application Support/BrowserControlRuntime/config.json` |
+| 可执行启动脚本 | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
+| Chrome Native Messaging manifest | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
+
+启动器记录安装时 Node 的绝对路径，不依赖从桌面启动 Chrome 时的 `PATH`。使用 nvm、Homebrew 等方式更换 Node 路径后，需要重新运行安装命令。项目路径含空格也会进行 shell 引号处理。
+
+### 3. 连接并安装 Pi Adapter
+
+重新加载 AgentSurf，在 `chrome-extension://<扩展ID>/debug.html` 确认 `connected`。然后在项目根目录执行：
+
+```sh
+pi install .
+pi list
+```
+
+在 Pi 中执行 `/reload` 或重启 Pi。Adapter 与 Host 使用上表中的同一配置路径，不需要手工复制 token。随后按“第一次使用”进行只读检查。
+
+### 4. 更新、重启与卸载
+
+完整更新时先在 Chrome 禁用 AgentSurf，等待旧 Host 退出，再执行：
+
+```sh
+git pull
+npm install
+npm run build
+npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
+```
+
+每一步成功后再继续；之后重新启用扩展，Adapter 有更新时在 Pi 中 `/reload`。移动项目目录或更换扩展 ID、Node 路径后同样需要重新安装；项目移动后还需更新 Pi 的本地安装路径。
+
+卸载前先禁用扩展：
+
+```sh
+npm run native-host:uninstall:macos
+```
+
+卸载仅移除 Native Host 注册和启动脚本，保留配置，不删除 Chrome 扩展或 Pi Adapter。该流程尚未经过真实 Mac 验证，不应将安装脚本提供等同于兼容性验证通过。
+
 ## 第一次使用
 
 向 Pi 发送：
@@ -169,9 +236,9 @@ Pi 随后获得名为 `agentsurf` 的工具。Adapter 自动读取本机 Native 
 
 只改源码不会更新 `dist/`；只执行构建不会重新生成已安装的 `native-host.exe`；已经启动的 Host 也不会自动加载新的 JS。
 
-### 完整更新流程
+### 完整更新流程（Windows）
 
-不确定本次更新涉及哪一层时，使用以下流程：
+macOS 使用上方 Mac 章节中的更新命令。以下 Windows 流程中，不确定本次更新涉及哪一层时，使用以下流程：
 
 1. 在 `chrome://extensions` 暂时禁用 AgentSurf，等待旧 Native Host 退出。
 2. 在项目实际目录执行：
@@ -193,6 +260,8 @@ Pi 随后获得名为 `agentsurf` 的工具。Adapter 自动读取本机 Native 
 如果只是连接临时异常、没有更新代码，可以先在调试页 Disconnect / Connect，或重新加载扩展，无需每次重新构建安装。
 
 ### 移动目录或更换扩展 ID
+
+以下 `native-host:install` 在 macOS 对应 `native-host:install:macos`，参数形式见 Mac 安装章节。
 
 Native Host 启动器引用项目中的 `dist/native-host/host.js`。移动或重命名项目后：
 
@@ -224,7 +293,9 @@ Native Host 启动器引用项目中的 `dist/native-host/host.js`。移动或�
 3. 必要时打开扩展 Service Worker 检查窗口查看 Native Messaging 错误。
 4. 检查端口对应进程，区分 Native Host 和独立 Bridge。不要仅因端口有监听就认定 Chrome 已连接。
 
-默认端口可用以下只读 PowerShell 命令检查：
+Mac 额外检查：manifest 是否安装在当前用户的 Google Chrome 目录、`native-host.sh` 是否可执行，以及其中引用的 Node 和 Host 路径是否仍存在。安装脚本设置执行权限；Node 路径变化时重新安装，不要用 `sudo` 混用用户目录。
+
+Mac 默认端口可用 `lsof -nP -iTCP:8765 -sTCP:LISTEN` 查看。Windows 默认端口可用以下只读 PowerShell 命令检查：
 
 ```powershell
 Get-NetTCPConnection -LocalPort 8765 -State Listen |

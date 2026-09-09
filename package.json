@@ -15,6 +15,8 @@
     "bridge:call": "node scripts/call-tool.mjs",
     "native-host:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-native-host.ps1",
     "native-host:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-native-host.ps1",
+    "native-host:install:macos": "node scripts/install-native-host-macos.mjs",
+    "native-host:uninstall:macos": "node scripts/uninstall-native-host-macos.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
