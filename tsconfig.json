@@ -15,5 +15,5 @@
     "types": ["chrome", "node", "vitest/globals"],
     "outDir": "dist"
   },
-  "include": ["src", "tests", "scripts/build.mjs"]
+  "include": ["src", "tests", "integrations", "scripts/build.mjs"]
 }

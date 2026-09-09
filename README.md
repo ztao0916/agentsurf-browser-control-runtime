@@ -27,6 +27,18 @@
 
 当前未实现：AI 接入、OCR、iframe、Shadow DOM、MCP 和业务自动化。文件上传使用本地绝对路径，下载只返回 Chrome Downloads API 能提供的元数据。
 
+## 在 Pi Agent 中使用
+
+全局安装本项目提供的轻量 Adapter：
+
+```powershell
+pi install C:\Users\epean\Desktop\vibeCoding\browser-control-runtime
+```
+
+重启 Pi，或在已有 Pi 会话中执行 `/reload`。之后直接告诉 Pi“使用 AgentSurf 操作浏览器”即可。Pi 会调用一个名为 `agentsurf` 的工具；Adapter 自动读取本机 Bridge 配置并完成认证，不需要手工填写 URL、token 或 request_id。
+
+使用前确保 Chrome 中 AgentSurf 的调试页显示 `Connection: connected`。可以先让 Pi 执行“使用 AgentSurf 列出所有浏览器标签页”验证连接。
+
 ## 环境要求
 
 - Node.js 20 或更高版本
