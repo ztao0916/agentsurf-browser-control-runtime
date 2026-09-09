@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "AgentSurf",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "description": "AgentSurf browser control runtime for AI agent integrations.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "AgentSurf",
+    "default_popup": "debug.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "alarms",
+    "debugger",
+    "downloads",
+    "nativeMessaging",
+    "tabs",
+    "tabGroups",
+    "scripting",
+    "storage",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": ["content/page-agent.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

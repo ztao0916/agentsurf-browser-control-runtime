@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentSurf Browser Control Debug</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 24px; max-width: 960px; }
+      button, input, select, textarea { font: inherit; margin: 4px; padding: 6px 8px; }
+      fieldset { margin: 16px 0; }
+      pre { min-height: 260px; overflow: auto; padding: 12px; background: #202124; color: #e8eaed; }
+      #screenshot-preview { display: block; max-width: 100%; max-height: 480px; margin-top: 12px; }
+      #status { min-height: 1.5em; }
+      .connection-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+      .connection-row input { min-width: 220px; }
+      .log-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+      .log-grid pre { min-height: 160px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>AgentSurf Browser Control Debug</h1>
+    <p id="status">Ready.</p>
+    <fieldset>
+      <legend>Native Host transport</legend>
+      <div class="connection-row">
+        <button id="connect-bridge" type="button">Connect native host</button>
+        <button id="disconnect-bridge" type="button">Disconnect</button>
+        <button id="reconnect-bridge" type="button">Reconnect</button>
+      </div>
+      <p>Connection: <strong id="connection-status">disconnected</strong></p>
+      <p>Host: <code id="native-host-name">com.browsercontrol.runtime</code></p>
+      <p>Agent endpoint: <code id="bridge-endpoint">unavailable</code></p>
+    </fieldset>
+    <fieldset>
+      <legend>Agent session and tab group</legend>
+      <input id="session-id-input" type="text" placeholder="session_id (generated when empty)" />
+      <input id="session-name-input" type="text" value="Debug session" aria-label="Session name" />
+      <button id="start-session" type="button">Start session</button>
+      <button id="name-session" type="button">Rename group</button>
+      <button id="end-session" type="button">End session</button>
+      <label><input id="group-claimed-tab" type="checkbox" checked /> Group claimed tab</label>
+      <button id="claim-tab" type="button">Claim selected tab</button>
+      <button id="release-tab" type="button">Release selected tab</button>
+    </fieldset>
+    <fieldset>
+      <legend>Tab tools</legend>
+      <button id="list-tabs" type="button">List tabs</button>
+      <button id="get-page-state" type="button">Get page state</button>
+      <button id="get-interactives" type="button">Get interactives</button>
+      <label>
+        Switch to
+        <select id="tab-select" aria-label="Tab to activate"></select>
+      </label>
+      <button id="switch-tab" type="button">Switch tab</button>
+      <button id="back-tab" type="button">Back</button>
+      <button id="forward-tab" type="button">Forward</button>
+      <button id="reload-tab" type="button">Reload</button>
+      <button id="close-tab" type="button">Close</button>
+    </fieldset>
+    <fieldset>
+      <legend>Open URL</legend>
+      <input id="url-input" type="url" size="48" value="https://example.com" />
+      <button id="open-url" type="button">Open URL</button>
+    </fieldset>
+    <fieldset>
+      <legend>Element actions</legend>
+      <input id="element-id-input" type="text" size="48" placeholder="element_id" />
+      <button id="click-element" type="button">Click</button>
+      <button id="double-click-element" type="button">Double click</button>
+      <br />
+      <input id="text-input" type="text" size="48" placeholder="Text to enter" />
+      <button id="type-element" type="button">Type</button>
+      <input id="key-input" type="text" value="Enter" aria-label="Key" />
+      <button id="press-element" type="button">Press</button>
+      <button id="check-element" type="button">Check</button>
+      <button id="uncheck-element" type="button">Uncheck</button>
+    </fieldset>
+    <fieldset>
+      <legend>Coordinate actions</legend>
+      <label>X <input id="coordinate-x-input" type="number" value="200" /></label>
+      <label>Y <input id="coordinate-y-input" type="number" value="200" /></label>
+      <button id="move-pointer" type="button">Move pointer</button>
+      <button id="click-coordinate" type="button">Click point</button>
+      <button id="scroll-coordinate" type="button">Scroll at point</button>
+    </fieldset>
+    <fieldset>
+      <legend>Page scroll</legend>
+      <label>Delta X <input id="delta-x-input" type="number" value="0" /></label>
+      <label>Delta Y <input id="delta-y-input" type="number" value="500" /></label>
+      <button id="scroll-page" type="button">Scroll</button>
+    </fieldset>
+    <fieldset>
+      <legend>Screenshot</legend>
+      <label>
+        Format
+        <select id="image-format-select">
+          <option value="png">PNG</option>
+          <option value="jpeg">JPEG</option>
+        </select>
+      </label>
+      <button id="screenshot-page" type="button">Screenshot</button>
+      <label><input id="full-page-input" type="checkbox" /> Full page</label>
+      <button id="observe-page" type="button">Observe all</button>
+      <button id="accessibility-tree" type="button">AX tree</button>
+      <img id="screenshot-preview" alt="Screenshot preview" />
+    </fieldset>
+    <fieldset>
+      <legend>Files and downloads</legend>
+      <textarea id="file-paths-input" rows="3" cols="72" placeholder="One absolute file path per line"></textarea>
+      <button id="set-files" type="button">Set files on element_id</button>
+      <button id="list-downloads" type="button">List downloads</button>
+      <button id="wait-download" type="button">Wait for selected tab download</button>
+    </fieldset>
+    <fieldset>
+      <legend>Chrome DevTools Protocol</legend>
+      <input id="cdp-method-input" type="text" size="32" value="Runtime.evaluate" />
+      <input id="cdp-params-input" type="text" size="56" value='{"expression":"document.title","returnByValue":true}' />
+      <button id="attach-debugger" type="button">Attach</button>
+      <button id="send-cdp" type="button">Send CDP</button>
+      <button id="read-cdp-events" type="button">Read events</button>
+      <button id="detach-debugger" type="button">Detach</button>
+    </fieldset>
+    <pre id="output" aria-live="polite"></pre>
+    <div class="log-grid">
+      <section><h2>Tool requests</h2><pre id="request-log"></pre></section>
+      <section><h2>Tool responses</h2><pre id="response-log"></pre></section>
+      <section><h2>Connection errors</h2><pre id="connection-log"></pre></section>
+    </div>
+    <script src="debug/debug.js"></script>
+  </body>
+</html>

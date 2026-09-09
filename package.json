@@ -1,0 +1,33 @@
+{
+  "name": "browser-control-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A model-agnostic Chrome Browser Control Core for AI agents.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/generate-icons.mjs && node scripts/build.mjs",
+    "bridge": "node dist/bridge/server.js",
+    "bridge:dev": "npm run build && node dist/bridge/server.js",
+    "bridge:call": "node scripts/call-tool.mjs",
+    "native-host:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-native-host.ps1",
+    "native-host:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-native-host.ps1",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "esbuild": "^0.24.2",
+    "eslint": "^8.57.1",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
