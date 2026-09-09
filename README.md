@@ -27,17 +27,181 @@
 
 当前未实现：AI 接入、OCR、iframe、Shadow DOM、MCP 和业务自动化。文件上传使用本地绝对路径，下载只返回 Chrome Downloads API 能提供的元数据。
 
-## 在 Pi Agent 中使用
+## 新电脑安装及 Pi Agent 使用教程
 
-全局安装本项目提供的轻量 Adapter：
+### 1. 安装基础环境
+
+新电脑需要安装：
+
+- Git
+- Node.js 20 或更高版本
+- Chrome 116 或更高版本
+- Pi Agent
+
+在 PowerShell 中确认命令可用：
 
 ```powershell
-pi install C:\Users\epean\Desktop\vibeCoding\browser-control-runtime
+git --version
+node --version
+npm --version
+pi --version
 ```
 
-重启 Pi，或在已有 Pi 会话中执行 `/reload`。之后直接告诉 Pi“使用 AgentSurf 操作浏览器”即可。Pi 会调用一个名为 `agentsurf` 的工具；Adapter 自动读取本机 Bridge 配置并完成认证，不需要手工填写 URL、token 或 request_id。
+### 2. 克隆 AgentSurf 私有仓库
 
-使用前确保 Chrome 中 AgentSurf 的调试页显示 `Connection: connected`。可以先让 Pi 执行“使用 AgentSurf 列出所有浏览器标签页”验证连接。
+```powershell
+cd $env:USERPROFILE\Desktop
+git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+cd agentsurf-browser-control-runtime
+```
+
+仓库是私有的，首次克隆时 GitHub 可能打开浏览器要求登录或授权。必须使用具有该仓库访问权限的 GitHub 账号。
+
+### 3. 安装依赖并构建
+
+```powershell
+npm install
+npm run build
+```
+
+构建产物位于项目的 `dist/` 目录。`dist/` 不提交到 Git，需要在每台电脑上本地构建。
+
+### 4. 在 Chrome 中加载 AgentSurf
+
+1. 打开 `chrome://extensions`。
+2. 开启右上角的“开发者模式”。
+3. 点击“加载已解压的扩展程序”。
+4. 选择项目中的 `dist/` 目录。
+5. 在扩展详情中复制 AgentSurf 的扩展 ID。
+
+未打包扩展在不同电脑或不同加载路径下可能获得不同的扩展 ID，因此必须以当前电脑显示的 ID 为准。
+
+### 5. 安装 Native Host
+
+在项目根目录执行，使用刚才复制的扩展 ID 替换 `<扩展ID>`：
+
+```powershell
+npm run native-host:install -- -ExtensionId <扩展ID>
+```
+
+例如：
+
+```powershell
+npm run native-host:install -- -ExtensionId hpageihlnphdohcplmimhmghljpilbpa
+```
+
+安装脚本会：
+
+- 在 `%LOCALAPPDATA%\BrowserControlRuntime` 创建 Native Messaging 配置；
+- 生成本机随机认证 token；
+- 注册 `com.browsercontrol.runtime` Native Host；
+- 将 Bridge 限制在 `127.0.0.1`。
+
+安装完成后，回到 `chrome://extensions`，点击 AgentSurf 的“重新加载”。
+
+### 6. 验证 Chrome 与 Native Host 连接
+
+打开：
+
+```text
+chrome-extension://<扩展ID>/debug.html
+```
+
+点击一次 `Connect native host`。正常状态为：
+
+```text
+Connection: connected
+Agent endpoint: ws://127.0.0.1:8765
+```
+
+如果状态未连接，先点击一次 `Disconnect`，等待一秒，再点击一次 `Connect native host`；不要连续点击 `Reconnect`。
+
+### 7. 安装 Pi Adapter
+
+在 AgentSurf 项目根目录执行：
+
+```powershell
+pi install "$env:USERPROFILE\Desktop\agentsurf-browser-control-runtime"
+```
+
+检查安装结果：
+
+```powershell
+pi list
+```
+
+列表中应出现 `agentsurf-browser-control-runtime`。重启 Pi，或者在已打开的 Pi 会话中执行：
+
+```text
+/reload
+```
+
+Pi 随后会获得一个名为 `agentsurf` 的工具。Adapter 自动完成以下工作：
+
+- 读取 `%LOCALAPPDATA%\BrowserControlRuntime\config.json`；
+- 连接 `ws://127.0.0.1:8765`；
+- 使用本机 token 认证；
+- 生成并匹配 `request_id`；
+- 将 Browser Tool 响应返回给 Pi。
+
+用户和 Pi 都不需要手工填写 WebSocket 地址、token 或 `request_id`。
+
+### 8. 在 Pi 中调用 AgentSurf
+
+先测试基础连接：
+
+```text
+使用 AgentSurf 列出当前 Chrome 的所有标签页。
+```
+
+常见指令示例：
+
+```text
+使用 AgentSurf 打开 https://example.com。
+```
+
+```text
+使用 AgentSurf 读取当前页面，并告诉我有哪些可交互元素。
+```
+
+```text
+使用 AgentSurf 找到搜索框，输入 Chrome Extension，然后提交。
+```
+
+```text
+使用 AgentSurf 截取当前页面并描述页面状态。
+```
+
+Pi 会先调用 `browser.list_tabs`，再使用返回的 `tab_id` 获取页面状态或交互元素。点击和输入操作必须使用 `browser.get_interactives` 返回的 `element_id`，不能自行构造 CSS Selector、XPath 或 element ID。
+
+### 9. 更新 AgentSurf
+
+```powershell
+cd $env:USERPROFILE\Desktop\agentsurf-browser-control-runtime
+git pull
+npm install
+npm run build
+```
+
+更新完成后：
+
+1. 在 `chrome://extensions` 中重新加载 AgentSurf；
+2. 在 Pi 中执行 `/reload`，或重启 Pi。
+
+因为 Pi Adapter 以本地路径安装，所以仓库代码更新后不需要再次执行 `pi install`。
+
+### 10. 移动目录或重新加载扩展
+
+Native Host 启动器会引用项目中的 `dist/native-host/host.js`。如果移动或重命名项目目录，需要在新目录重新构建并注册：
+
+```powershell
+npm install
+npm run build
+npm run native-host:install -- -ExtensionId <当前扩展ID>
+pi install "<新的项目绝对路径>"
+```
+
+如果删除后重新加载扩展导致扩展 ID 变化，也需要使用新的扩展 ID 再次运行 `native-host:install`。
 
 ## 环境要求
 
