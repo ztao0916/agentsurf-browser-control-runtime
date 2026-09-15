@@ -4,7 +4,7 @@
 
 - 验证环境：macOS，Chrome 153.0.8010.36，Node v24.14.1（nvm），npm 11.11.0
 - 起点提交：`ac4d9ed`
-- 终点提交：`07c6cca`
+- 终点提交：`4ffb24c`
 - 验证客户端：pi（`pi-mcp-adapter` v2.34.0，stdio MCP）
 
 ## 结论摘要
@@ -118,6 +118,26 @@ MV3 下 `webRequest` 是只读观测，**不需要 attach debugger，不弹调�
 
 **注意**：Tab 焦点遍历**只在标签页为活动标签页时生效**。后台标签页接受程序化 `focus()`，但不执行焦点遍历（这一点在测试中一度被误判为 bug）。
 
+### `2a735f5` 让 MCP 层能携带 session，使标签页归属真正生效
+
+**现象**：两个对话同时操作浏览器时，一个对话认领的标签页，另一个对话照样能读写。
+
+**根因**：`session_id` 位于**请求根字段**（`parseToolRequest` 读 `input.session_id`，`assertSessionAccess` 也用它），但 MCP 层只发送 `{protocol_version, request_id, tool, args}`，**从不发根级 `session_id`**；工具 schema 里也只有 session 类工具把 session_id 当 args。
+
+结果是 **“认领”给了虚假的安全感**：`claim_tab` 确实会拒绍对方，但对方可以直接绕过去继续操作同一标签页。
+
+**为何不能靠进程隔离**：实测 MCP server 的父进程是 `pi`（祖父为 PiDeck.app），即**一个 pi 进程只拉起一个 MCP server，多个对话共用同一条 stdio 连接**。所以“每连接会话状态”不可行，必须走 per-call。
+
+**修法**：所有工具统一接受可选 `session_id`，由 MCP 层转发到请求根。工具自己声明的 `session_id` 保留更严格的 schema（展开顺序上自己的定义在最后）。runtime 侧无需修改。
+
+**验证**：两个独立 MCP 客户端，A 认领后 B 在读取、列网络请求、认领三个动作上均被拒（`tab_in_use`）；A 自己正常；匿名单 agent 模式不受影响；释放后交接正常。
+
+**使用要点**：隔离是**协作式**的——必须在每次调用都带 `session_id` 才生效。不传即跳过所有归属检查（单 agent 模式）。
+
+### `4ffb24c` 为 session_id 的位置加防回归测试
+
+请求根是 `parseToolRequest` 与归属检查读取的位置，而 `claim_tab` 从 args 读取。两者任一环节错位都会静默关掉隔离。测试覆盖根级位置、不传时字段不存在、以及 session 类工具仍能在 args 里找到它。
+
 ## 验证证据
 
 ### 链路
@@ -140,8 +160,7 @@ MCP Client (pi) → MCP Server (stdio) → Bridge (ws 127.0.0.1:8765)
 
 | 操作 | 工具 | 结果 |
 | --- | --- | --- |
-| 文本输入（含中文） | `browser_type` | `name` 为 `张三` |
-| 多行文本 | `browser_type` | textarea 写入成功 |
+| 文本输入（含中文） | `browser_type` | `name` 为 `张三` || 多行文本 | `browser_type` | textarea 写入成功 |
 | 复选框 | `browser_set_checked` | `agree: true` |
 | 单选组 | `browser_set_checked` | `color: green`，且 Red 自动变 `false`（互斥正确） |
 | 单选下拉 | `browser_select_option` | `plan: pro` |
@@ -221,6 +240,7 @@ type=xmlhttprequest       562 字符 ≈   141 tokens
 | --- | --- | --- |
 | 浏览器实例 | 用户现有 Chrome | 自行拉起，独立 profile |
 | 登录态 | **有** | 无 |
+| 多会话标签页隔离 | 有，但需每次调用显式传 `session_id` | 无此概念 |
 | 用户当前标签页 | 直接可用 | 不可见 |
 | 元素模型 | `get_interactives` → 不透明 `element_id` | `take_snapshot` → uid || console | 有（MAIN world 补丁） | 有（CDP） |
 | network 元数据 | 有（`webRequest`） | 有（CDP） |
@@ -247,6 +267,8 @@ type=xmlhttprequest       562 字符 ≈   141 tokens
 - **网络缓冲随 SW 重启清空**：MV3 service worker 被回收后内存缓冲丢失。
 - **console 序列化有损**：深度上限 4、单条消息上限 2000 字符、DOM 节点降级为标签名、对象键上限 20。
 - **`chrome.debugger` 独占**：同一标签页已有 DevTools 时 attach 失败。
+- **错误码在 MCP 边界被丢弃**：底层 `{code, retryable, details}` 只剩一句文字。`stale_element` / `tab_in_use` / `tab_not_found` 在 MCP 层无法区分，agent 不能据此决定“刷新交互元素重试”还是“放弃”。**未修复**。
+- **会话隔离是协作式的**：必须每次调用都传 `session_id`。不传即跳过归属检查（单 agent 模式），因此一个带 session 的对话与一个不带的对话之间没有隔离。
 - **按键不支持修饰键组合**：`press` / `press_key` 的参数只有单个 `key`，没有修饰键字段，因此 Cmd+A、Ctrl+Enter 这类组合无法发送。
 - **拖拽不携带 `dataTransfer` 数据**：`drop` 事件会触发，但 `dataTransfer.getData()` 返回空。
 - **Tab 焦点遍历只在活动标签页生效**：后台标签页接受程序化 `focus()`，但不执行焦点遍历。
@@ -288,7 +310,7 @@ chrome-extension://<扩展 ID>/debug.html
 连接状态应为 `connected`。
 
 - `npm run typecheck`：应通过
-- `npm test`：应 79 项全通过
+- `npm test`：应 82 项全通过
 - `npm run lint`：仅剩 `src/chrome/scripting-adapter.ts` 的既有错误
 
 四条最有价值的验证（均已在 pi 中跑过）：
