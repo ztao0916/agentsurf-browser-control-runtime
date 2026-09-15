@@ -49,6 +49,9 @@ await build({
   format: 'esm',
   platform: 'node',
   target: 'node20',
+  // Bundled CommonJS dependencies (ws) call require() for Node builtins. Without a real
+  // require in scope, esbuild's ESM shim throws "Dynamic require is not supported" at startup.
+  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   outdir: dist,
   sourcemap: true,
   logLevel: 'info',
