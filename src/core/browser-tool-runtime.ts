@@ -360,10 +360,6 @@ export class BrowserToolRuntime {
       ...(args.full_page === undefined ? {} : { fullPage: args.full_page }),
       ...(args.clip === undefined ? {} : { clip: args.clip }),
     });
-    const currentTab = await this.tabs.get(tab.tab_id);
-    if (!currentTab.active) {
-      throw new ToolFailure(createToolError('screenshot_unavailable', 'The active tab changed during capture.', true));
-    }
     const after = await this.pageAgent.getState(tab.tab_id);
     if (before.page_revision !== after.page_revision) {
       throw new ToolFailure(

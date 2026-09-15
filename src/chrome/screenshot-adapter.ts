@@ -10,6 +10,10 @@ export interface CapturedScreenshot {
 }
 
 export interface ScreenshotAdapter {
+  /**
+   * Implementations that cannot target a tab directly (e.g. captureVisibleTab) must reject an
+   * inactive tab with `screenshot_unavailable` instead of capturing whatever is on screen.
+   */
   capture(tab: TabInfo, format: ImageFormat, options?: ScreenshotCaptureOptions): Promise<CapturedScreenshot>;
 }
 

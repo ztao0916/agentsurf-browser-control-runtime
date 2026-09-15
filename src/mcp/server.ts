@@ -1,8 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { TOOL_NAMES } from '../core/protocol/schemas';
-import type { ToolName, ToolRequest } from '../core/protocol/tool-contract';
+import type { ToolName } from '../core/protocol/tool-contract';
 import { callLocalBridge } from './bridge-client';
 
 const tabId = { tab_id: z.number().int().describe('Chrome tab ID.') };
@@ -56,6 +57,47 @@ const schemas = {
   'browser.open': { url: z.string().url(), tab_id: z.number().int().optional(), activate: z.boolean().optional() },
 };
 
+type ContentBlock = CallToolResult['content'][number];
+
+interface ScreenshotPayload {
+  mime_type: string;
+  image_data: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isScreenshotPayload(value: unknown): value is ScreenshotPayload {
+  return isRecord(value) && typeof value.image_data === 'string' && typeof value.mime_type === 'string';
+}
+
+/**
+ * Screenshots are returned as MCP image content so clients actually see them. The base64 payload is
+ * also stripped from the JSON text, which would otherwise cost roughly 15k tokens per capture.
+ */
+function toContent(tool: ToolName, result: unknown): ContentBlock[] {
+  const screenshot = tool === 'browser.screenshot' && isRecord(result) ? result.screenshot
+    : tool === 'browser.observe' && isRecord(result) && isRecord(result.observation) ? result.observation.screenshot
+    : undefined;
+  if (!isScreenshotPayload(screenshot)) {
+    return [{ type: 'text', text: JSON.stringify(result, null, 2) }];
+  }
+
+  const metadata: Record<string, unknown> = { ...screenshot };
+  delete metadata.image_data;
+  // The runtime returns a data URL, but MCP image content requires the bare base64 payload.
+  const comma = screenshot.image_data.indexOf(',');
+  const base64 = comma === -1 ? screenshot.image_data : screenshot.image_data.slice(comma + 1);
+  const text = tool === 'browser.observe' && isRecord(result) && isRecord(result.observation)
+    ? { ...result, observation: { ...result.observation, screenshot: metadata } }
+    : { ...(isRecord(result) ? result : {}), screenshot: metadata };
+  return [
+    { type: 'image', data: base64, mimeType: screenshot.mime_type },
+    { type: 'text', text: JSON.stringify(text, null, 2) },
+  ];
+}
+
 export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
     { name: 'agentsurf', version: '0.1.0' },
@@ -70,10 +112,10 @@ export async function startMcpServer(): Promise<void> {
       title: mcpName,
       description: descriptionFor(tool),
       inputSchema: schemas[tool],
-    }, async (args) => {
+    }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
       try {
-        const result = await callLocalBridge(tool, args as ToolRequest['args']);
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        const result = await callLocalBridge(tool, args);
+        return { content: toContent(tool, result) };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return { isError: true, content: [{ type: 'text', text: `AgentSurf error: ${message}` }] };
