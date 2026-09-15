@@ -13,6 +13,7 @@ import { sendPageAgentRequest } from '../transport/runtime-message-transport';
 export interface PageAgentClient {
   getState(tabId: number): Promise<PageAgentState>;
   getInteractives(tabId: number): Promise<PageAgentInteractiveSnapshot>;
+  getPageContent?(tabId: number, options: { include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number }): Promise<import('../core/protocol/tool-contract').PageContentResult>;
   click(tabId: number, elementId: string): Promise<PageAgentElementActionResult & { clicked: true }>;
   doubleClick(tabId: number, elementId: string): Promise<PageAgentElementActionResult & { double_clicked: true }>;
   type(tabId: number, elementId: string, text: string): Promise<PageAgentElementActionResult & { typed: true }>;
@@ -61,6 +62,13 @@ export class ChromePageAgentClient implements PageAgentClient {
       throw new ToolFailure(createToolError('internal_error', 'Unexpected Page Agent response.', true));
     }
     return response.snapshot;
+  }
+
+  public async getPageContent(tabId: number, options: { include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number }) {
+    const response = await this.send(tabId, { ...createRequestBase(), action: 'get-page-content', ...options });
+    if (!response.ok) throw new ToolFailure(response.error);
+    if (response.action !== 'get-page-content') throw this.unexpectedResponse();
+    return response.result;
   }
 
   public async click(tabId: number, elementId: string): Promise<PageAgentElementActionResult & { clicked: true }> {

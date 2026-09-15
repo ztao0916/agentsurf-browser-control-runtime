@@ -12,6 +12,7 @@ import { ElementRegistry } from './element-registry';
 import { InteractiveExtractor } from './interactive-extractor';
 import { PageRevisionTracker } from './page-revision-tracker';
 import { AgentCursor } from './agent-cursor';
+import { extractPageContent } from './page-content-extractor';
 
 const INSTALLATION_KEY = '__browserControlRuntimePageAgentInstalled';
 
@@ -61,6 +62,11 @@ if (!window[INSTALLATION_KEY]) {
       switch (request.action) {
         case 'get-page-state':
           return success(request, { action: 'get-page-state', state: getPageState(registry, tracker) });
+        case 'get-page-content':
+          return success(request, {
+            action: 'get-page-content',
+            result: { tab_id: 0, page_revision: registry.pageRevision, ...extractPageContent(document, request.include_html, request.include_images, request.include_frames, request.max_text_length) },
+          });
         case 'get-interactives':
           return success(request, {
             action: 'get-interactives',
@@ -122,6 +128,7 @@ if (!window[INSTALLATION_KEY]) {
 }
 
 type SuccessPayload =
+  | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-page-content' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-page-state' }>, 'action' | 'state'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-interactives' }>, 'action' | 'snapshot'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'click' }>, 'action' | 'result'>

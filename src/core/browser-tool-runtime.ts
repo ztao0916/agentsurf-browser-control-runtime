@@ -77,6 +77,8 @@ export class BrowserToolRuntime {
             file_upload: true,
             agent_cursor: true,
             top_level_document: true,
+            page_content: true,
+            page_images: true,
             iframes: false,
             shadow_dom: false,
           },
@@ -256,6 +258,17 @@ export class BrowserToolRuntime {
         return { page: await this.getPage(request.args.tab_id, request.session_id) } satisfies GetPageResult;
       case 'browser.get_interactives':
         return this.getInteractives(request.args.tab_id, request.session_id);
+      case 'browser.get_page_content': {
+        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        if (!this.pageAgent.getPageContent) throw new ToolFailure(createToolError('invalid_request', 'Page content extraction is unavailable.', false));
+        const result = await this.pageAgent.getPageContent(request.args.tab_id, {
+          include_html: request.args.include_html ?? false,
+          include_images: request.args.include_images ?? true,
+          include_frames: request.args.include_frames ?? true,
+          max_text_length: request.args.max_text_length ?? 50_000,
+        });
+        return { ...result, tab_id: request.args.tab_id };
+      }
       case 'browser.click': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         await this.tabs.get(request.args.tab_id);

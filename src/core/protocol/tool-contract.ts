@@ -32,6 +32,7 @@ export type ToolName =
   | 'browser.get_page'
   | 'browser.get_page_state'
   | 'browser.get_interactives'
+  | 'browser.get_page_content'
   | 'browser.click'
   | 'browser.double_click'
   | 'browser.type'
@@ -221,6 +222,14 @@ export interface GetInteractivesArgs {
   tab_id?: number;
 }
 
+export interface GetPageContentArgs {
+  tab_id: number;
+  include_html?: boolean;
+  include_images?: boolean;
+  include_frames?: boolean;
+  max_text_length?: number;
+}
+
 export interface ClickArgs {
   tab_id: number;
   element_id: string;
@@ -320,6 +329,7 @@ export interface ToolArguments {
   'browser.get_page': GetPageArgs;
   'browser.get_page_state': GetPageStateArgs;
   'browser.get_interactives': GetInteractivesArgs;
+  'browser.get_page_content': GetPageContentArgs;
   'browser.click': ClickArgs;
   'browser.double_click': ClickArgs;
   'browser.type': TypeArgs;
@@ -418,6 +428,25 @@ export interface GetInteractivesResult {
   snapshot: InteractiveSnapshot;
 }
 
+export interface PageContentImage {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
+export interface PageContentResult {
+  tab_id: number;
+  page_revision: string;
+  url: string;
+  title: string;
+  text: string;
+  html?: string;
+  images: PageContentImage[];
+  frames: Array<{ src: string; name: string; title: string }>;
+}
+
 export interface ElementActionState {
   tab_id: number;
   page_revision: string;
@@ -514,6 +543,8 @@ export interface ToolResults {
       file_upload: true;
       agent_cursor: true;
       top_level_document: true;
+      page_content: true;
+      page_images: true;
       iframes: false;
       shadow_dom: false;
     };
@@ -552,6 +583,7 @@ export interface ToolResults {
   'browser.get_page': GetPageResult;
   'browser.get_page_state': GetPageStateResult;
   'browser.get_interactives': GetInteractivesResult;
+  'browser.get_page_content': PageContentResult;
   'browser.click': ClickResult;
   'browser.double_click': DoubleClickResult;
   'browser.type': TypeResult;
@@ -598,6 +630,7 @@ export type ToolResponse<TTool extends ToolName = ToolName> =
 export type PageAgentAction =
   | 'get-page-state'
   | 'get-interactives'
+  | 'get-page-content'
   | 'click'
   | 'double-click'
   | 'type'
@@ -619,6 +652,7 @@ interface PageAgentRequestBase {
 
 export type PageAgentRequest =
   | (PageAgentRequestBase & { action: 'get-page-state' | 'get-interactives' })
+  | (PageAgentRequestBase & { action: 'get-page-content'; include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number })
   | (PageAgentRequestBase & { action: 'click'; element_id: string })
   | (PageAgentRequestBase & { action: 'double-click'; element_id: string })
   | (PageAgentRequestBase & { action: 'type'; element_id: string; text: string })
@@ -666,6 +700,14 @@ export interface PageAgentScrollResult extends PageAgentElementActionResult {
 }
 
 export type PageAgentSuccessResponse =
+  | {
+      kind: 'page-agent-response';
+      protocol_version: typeof PROTOCOL_VERSION;
+      request_id: string;
+      ok: true;
+      action: 'get-page-content';
+      result: PageContentResult;
+    }
   | {
       kind: 'page-agent-response';
       protocol_version: typeof PROTOCOL_VERSION;

@@ -11,6 +11,7 @@ import {
   type PageAgentResponse,
   type PageAgentScrollResult,
   type PageAgentState,
+  type PageContentResult,
   type RuntimeMessage,
   type ObservationContent,
   type ScreenshotArgs,
@@ -53,6 +54,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'browser.get_page',
   'browser.get_page_state',
   'browser.get_interactives',
+  'browser.get_page_content',
   'browser.click',
   'browser.double_click',
   'browser.type',
@@ -303,6 +305,16 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
       const tabId = optionalInteger(args.tab_id, 'args.tab_id');
       return tabId === undefined ? {} : { tab_id: tabId };
     }
+    case 'browser.get_page_content': {
+      const max = optionalPositiveInteger(args.max_text_length, 'args.max_text_length');
+      return {
+        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
+        include_html: args.include_html === true,
+        include_images: args.include_images !== false,
+        include_frames: args.include_frames !== false,
+        max_text_length: max ?? 50_000,
+      };
+    }
     case 'browser.click':
     case 'browser.double_click': {
       const tabId = requireInteger(args.tab_id, 'args.tab_id');
@@ -442,6 +454,8 @@ export function parsePageAgentRequest(value: unknown): PageAgentRequest {
     case 'get-page-state':
     case 'get-interactives':
       return { ...base, action: input.action };
+    case 'get-page-content':
+      return { ...base, action: 'get-page-content', include_html: input.include_html === true, include_images: input.include_images !== false, include_frames: input.include_frames !== false, max_text_length: optionalPositiveInteger(input.max_text_length, 'max_text_length') ?? 50_000 };
     case 'click':
     case 'double-click':
       return { ...base, action: input.action, element_id: requireString(input.element_id, 'element_id') };
@@ -562,6 +576,9 @@ export function parsePageAgentResponse(value: unknown, expectedAction: PageAgent
       action: 'get-interactives',
       snapshot: parseInteractiveSnapshot(input.snapshot),
     };
+  }
+  if (expectedAction === 'get-page-content') {
+    return { kind: 'page-agent-response', protocol_version: protocolVersion, request_id: requestId, ok: true, action: 'get-page-content', result: input.result as PageContentResult };
   }
   if (expectedAction === 'click') {
     const result = parseElementActionResult(input.result);
