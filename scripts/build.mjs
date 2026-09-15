@@ -27,13 +27,28 @@ await build({
 await build({
   entryPoints: {
     'bridge/server': resolve(projectRoot, 'src/bridge/cli.ts'),
-    'native-host/host': resolve(projectRoot, 'src/native-host/host.ts'),
+    'mcp/cli': resolve(projectRoot, 'src/mcp/cli.ts'),
   },
   bundle: true,
   format: 'esm',
   platform: 'node',
   target: 'node20',
   packages: 'external',
+  outdir: dist,
+  sourcemap: true,
+  logLevel: 'info',
+});
+
+// The Native Host is copied into the user's runtime directory during install,
+// so it must not resolve dependencies from the npm package or repository.
+await build({
+  entryPoints: {
+    'native-host/host': resolve(projectRoot, 'src/native-host/host.ts'),
+  },
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'node20',
   outdir: dist,
   sourcemap: true,
   logLevel: 'info',

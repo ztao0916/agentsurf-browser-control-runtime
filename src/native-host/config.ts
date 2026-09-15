@@ -19,6 +19,19 @@ export function getDefaultConfigPath(): string {
   return join(base, 'BrowserControlRuntime', 'config.json');
 }
 
+export async function readConfig(path = process.env.BROWSER_BRIDGE_CONFIG || getDefaultConfigPath()): Promise<NativeHostConfig> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+    if (isNativeHostConfig(parsed)) return parsed;
+    throw new Error(`Native Host config is invalid: ${path}`);
+  } catch (error: unknown) {
+    if (isMissingFile(error)) {
+      throw new Error(`AgentSurf is not installed on this machine. Native Host config not found: ${path}`);
+    }
+    throw error;
+  }
+}
+
 export async function loadOrCreateConfig(path = process.env.BROWSER_BRIDGE_CONFIG || getDefaultConfigPath()): Promise<NativeHostConfig> {
   try {
     const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;

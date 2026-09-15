@@ -1,12 +1,16 @@
 {
-  "name": "browser-control-runtime",
+  "name": "@agentsurf/mcp-server",
   "version": "0.1.0",
-  "private": true,
-  "description": "A model-agnostic Chrome Browser Control Core for AI agents.",
-  "keywords": ["pi-package"],
-  "pi": {
-    "extensions": ["./integrations/pi/index.ts"]
+  "description": "Local MCP server and Chrome browser control runtime for AI agents.",
+  "keywords": ["mcp", "browser-automation", "chrome", "agentsurf"],
+  "bin": {
+    "agentsurf-mcp": "./dist/mcp/cli.js"
   },
+  "files": ["dist/mcp", "dist/native-host"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "prepublishOnly": "npm run build",
   "type": "module",
   "scripts": {
     "build": "node scripts/generate-icons.mjs && node scripts/build.mjs",
@@ -22,10 +26,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ws": "^8.18.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.83.0",
     "@types/chrome": "^0.0.280",
     "@types/node": "^22.10.2",
     "@types/ws": "^8.5.13",

@@ -2,13 +2,14 @@
 
 AgentSurf 是一个供 AI Agent 控制本机 Chrome 的浏览器运行时。它复用 Chrome 的现有登录态，通过统一的 `browser.*` 工具提供页面观察、点击、输入、截图等能力，不绑定特定 AI 模型。
 
-已提供 **Pi Agent Adapter**。项目自身不内置模型调用、任务规划或业务自动化流程。
+已提供面向通用 MCP 客户端的本地 **MCP Server**。项目自身不内置模型调用、任务规划或业务自动化流程。
 
 ## 目录
 
 - [工作原理与支持范围](#工作原理与支持范围)
-- [Windows 与 Pi 快速安装](#windows-与-pi-快速安装)
-- [macOS 与 Pi 安装](#macos-与-pi-安装)
+- [公开 MCP 安装](#公开-mcp-安装)
+- [Windows 安装](#windows-安装)
+- [macOS 安装](#macos-安装)
 - [第一次使用](#第一次使用)
 - [更新重启与移动目录](#更新重启与移动目录)
 - [常见问题与排障](#常见问题与排障)
@@ -21,8 +22,8 @@ AgentSurf 是一个供 AI Agent 控制本机 Chrome 的浏览器运行时。它�
 ## 工作原理与支持范围
 
 ```text
-Pi Agent
-  ↕ AgentSurf Adapter
+MCP Client
+  ↕ AgentSurf MCP Server
 本机 Browser Bridge（WebSocket，仅监听 127.0.0.1）
   ↕ Native Host（通过 Native Messaging 与扩展通信）
 Chrome 扩展（Manifest V3）
@@ -32,11 +33,48 @@ Chrome 扩展（Manifest V3）
 
 Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host 启动 Bridge。**正常使用不需要手动运行 `npm run bridge`。** 扩展自身不监听 HTTP 或 WebSocket 端口。
 
-当前提供 Windows 和 macOS（Google Chrome 稳定版、当前用户）Native Host 安装脚本。macOS 适配已提供代码，但尚未在真实 Mac 上验证完整链路。Pi Adapter 可在 Linux 安装，但 Linux 的 Native Host 安装脚本和连接教程尚未提供。
+当前提供 Windows 和 macOS（Google Chrome 稳定版、当前用户）Native Host 安装脚本。macOS 适配已提供代码，但尚未在真实 Mac 上验证完整链路。Linux 的 Native Host 安装脚本和连接教程尚未提供。
 
-当前未提供 OCR、iframe / Shadow DOM 专门支持及 MCP 接入。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。
+当前未提供 OCR 及 iframe / Shadow DOM 专门支持。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。项目提供本地 MCP Server，供支持 MCP 的 Agent 使用。
 
-## Windows 与 Pi 快速安装
+## 公开 MCP 安装
+
+AgentSurf 按“公开分发、用户本地运行”设计：Chrome 扩展负责控制浏览器，公开 npm 包负责 MCP 接入，不需要账号、云端服务或固定项目路径。MCP Server 通过本机配置连接 `127.0.0.1` 上的 Bridge，认证 token 不需要粘贴到 Agent 对话中。
+
+当前仓库已经包含 MCP Server 的发布结构；npm 包和 Chrome Web Store 扩展仍需由项目维护者完成首次发布与审核，下面的配置示例应在发布后使用。
+
+### 三步安装
+
+```text
+安装 Chrome 扩展
+用一条命令安装 Native Host
+在 Agent 中添加 AgentSurf MCP
+```
+
+先从 Chrome Web Store 安装 AgentSurf 扩展，然后在终端执行下面的命令完成 Native Host 安装：
+
+```powershell
+npx -y @agentsurf/mcp-server install-native-host --extension-id <Chrome扩展ID>
+```
+
+该命令支持 Windows (PowerShell) 和 macOS；Linux 安装脚本尚未提供。安装完成后，在支持 stdio MCP 的客户端中添加 AgentSurf MCP：
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "npx",
+      "args": ["-y", "@agentsurf/mcp-server"]
+    }
+  }
+}
+```
+
+MCP Server 会自动读取 Windows 的 `%LOCALAPPDATA%\\BrowserControlRuntime\\config.json` 或 macOS 的 `~/Library/Application Support/BrowserControlRuntime/config.json`。如需覆盖连接配置，可设置 `BROWSER_BRIDGE_URL`、`BROWSER_BRIDGE_TOKEN` 或 `BROWSER_BRIDGE_CONFIG` 环境变量。
+
+MCP 工具名称使用下划线形式，例如 `browser_list_tabs`、`browser_get_page_content`、`browser_click`。首次使用建议先调用 `browser_list_tabs`；元素操作前调用 `browser_get_interactives`，只使用返回的 `element_id`。
+
+## Windows 安装
 
 以下命令在 **PowerShell** 中执行。
 
@@ -45,7 +83,7 @@ Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host
 - Git
 - Node.js 20 或更高版本、npm 10 或更高版本
 - Chrome 116 或更高版本
-- 已安装的 Pi Agent
+- 支持 stdio MCP 的 Agent
 
 可用以下命令确认环境：
 
@@ -53,7 +91,6 @@ Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host
 git --version
 node --version
 npm --version
-pi --version
 ```
 
 ### 2. 获取代码并构建
@@ -113,26 +150,26 @@ Agent endpoint: ws://127.0.0.1:8765
 
 已经连接时无需再点击 Connect。如果未连接，点击一次 **Disconnect**，等待一秒，再点击 **Connect native host**；不要连续点击 Reconnect。仍失败时参见[排障说明](#常见问题与排障)。
 
-### 6. 安装 Pi Adapter
+### 6. 配置 MCP
 
-在项目根目录执行：
+在 Agent 的 MCP 配置中加入：
 
-```powershell
-pi install .
-pi list
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "npx",
+      "args": ["-y", "@agentsurf/mcp-server"]
+    }
+  }
+}
 ```
 
-确认安装列表包含当前项目的本地路径。重启 Pi，或在已打开的 Pi 会话中执行：
+MCP Server 会自动读取本机配置并连接 Bridge。
 
-```text
-/reload
-```
+## macOS 安装
 
-Pi 随后获得名为 `agentsurf` 的工具。Adapter 自动读取本机 Native Host 配置、连接 Bridge、完成认证并匹配请求响应。**日常使用无需手动填写地址、token 或 request_id，也不要将 token 粘贴到聊天中。**
-
-## macOS 与 Pi 安装
-
-需要 Git、Node.js 20+、npm 10+、Chrome 116+ 和 Pi。以下命令在 Mac 终端执行，无需 `sudo`，适用于当前用户的 Google Chrome 稳定版，不自动注册 Chromium、Chrome Beta 或其他浏览器。
+需要 Git、Node.js 20+、npm 10+、Chrome 116+ 和支持 stdio MCP 的 Agent。以下命令在 Mac 终端执行，无需 `sudo`，适用于当前用户的 Google Chrome 稳定版，不自动注册 Chromium、Chrome Beta 或其他浏览器。
 
 ### 1. 构建并加载扩展
 
@@ -164,16 +201,22 @@ npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
 
 启动器记录安装时 Node 的绝对路径，不依赖从桌面启动 Chrome 时的 `PATH`。使用 nvm、Homebrew 等方式更换 Node 路径后，需要重新运行安装命令。项目路径含空格也会进行 shell 引号处理。
 
-### 3. 连接并安装 Pi Adapter
+### 3. 配置 MCP
 
-重新加载 AgentSurf，在 `chrome-extension://<扩展ID>/debug.html` 确认 `connected`。然后在项目根目录执行：
+重新加载 AgentSurf，在 `chrome-extension://<扩展ID>/debug.html` 确认 `connected`。然后在 Agent 的 MCP 配置中加入公开包：
 
-```sh
-pi install .
-pi list
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "npx",
+      "args": ["-y", "@agentsurf/mcp-server"]
+    }
+  }
+}
 ```
 
-在 Pi 中执行 `/reload` 或重启 Pi。Adapter 与 Host 使用上表中的同一配置路径，不需要手工复制 token。随后按“第一次使用”进行只读检查。
+MCP Server 与 Native Host 使用同一份本机配置，不需要手工复制 token。
 
 ### 4. 更新、重启与卸载
 
@@ -186,7 +229,7 @@ npm run build
 npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
 ```
 
-每一步成功后再继续；之后重新启用扩展，Adapter 有更新时在 Pi 中 `/reload`。移动项目目录或更换扩展 ID、Node 路径后同样需要重新安装；项目移动后还需更新 Pi 的本地安装路径。
+每一步成功后再继续；之后重新启用扩展并重新连接 MCP 客户端。移动项目目录或更换扩展 ID、Node 路径后同样需要重新安装 Native Host。
 
 卸载前先禁用扩展：
 
@@ -194,11 +237,11 @@ npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
 npm run native-host:uninstall:macos
 ```
 
-卸载仅移除 Native Host 注册和启动脚本，保留配置，不删除 Chrome 扩展或 Pi Adapter。该流程尚未经过真实 Mac 验证，不应将安装脚本提供等同于兼容性验证通过。
+卸载仅移除 Native Host 注册和启动脚本，保留配置，不删除 Chrome 扩展或 MCP 包。该流程尚未经过真实 Mac 验证，不应将安装脚本提供等同于兼容性验证通过。
 
 ## 第一次使用
 
-向 Pi 发送：
+向 MCP 客户端发送：
 
 ```text
 使用 AgentSurf 打开 https://example.com，读取页面正文，并告诉我页面标题和链接。
@@ -231,8 +274,8 @@ npm run native-host:uninstall:macos
 | --- | --- |
 | Chrome 扩展代码或 Native Host JS | 重新构建，再重新加载扩展，让新 Host 启动 |
 | Native Host 安装脚本或启动器 | 禁用扩展，构建并重新安装 Native Host，再启用扩展 |
-| Pi Adapter | 在 Pi 中 `/reload` 或重启 Pi |
-| 项目路径或扩展 ID | 重新注册 Native Host；路径变化时还需更新 Pi 的本地安装路径 |
+| MCP Server 或扩展代码 | 更新 MCP 包或扩展，并按对应平台流程重新加载 |
+| 项目路径或扩展 ID | 重新注册 Native Host |
 
 只改源码不会更新 `dist/`；只执行构建不会重新生成已安装的 `native-host.exe`；已经启动的 Host 也不会自动加载新的 JS。
 
@@ -254,7 +297,7 @@ macOS 使用上方 Mac 章节中的更新命令。以下 Windows 流程中，不
    每一步成功后再继续。如存在本地未提交修改，先妥善处理，不要用强制重置覆盖它们。
 
 3. 重新启用 AgentSurf，在 `debug.html` 确认连接状态。
-4. 如 Pi Adapter 有更新，在 Pi 中执行 `/reload` 或重启 Pi。本地路径未变化时无需再次 `pi install .`。
+4. 如 MCP 包有更新，重新启动 MCP 客户端以获取新版本。
 5. 用“第一次使用”中的只读流程检查连接和页面读取。
 
 如果只是连接临时异常、没有更新代码，可以先在调试页 Disconnect / Connect，或重新加载扩展，无需每次重新构建安装。
@@ -268,8 +311,7 @@ Native Host 启动器引用项目中的 `dist/native-host/host.js`。移动或�
 1. 禁用旧扩展，在新目录安装依赖并构建。
 2. 在 Chrome 中加载新目录的 `dist/`，取得当前扩展 ID。
 3. 在新目录重新执行 `native-host:install`。
-4. 用 `pi list` 确认旧安装路径并移除失效项，再在新目录执行 `pi install .`。
-5. 重新加载扩展及 Pi。
+4. 重新加载扩展并重新启动 MCP 客户端。
 
 仅扩展 ID 变化时，也必须使用新 ID 重新注册 Native Host。
 
@@ -352,7 +394,7 @@ AgentSurf 可以操作当前 Chrome 登录态中的页面，CDP、上传等工�
 
 ### 扩展调试页
 
-打开 `chrome-extension://<扩展ID>/debug.html`。调试页使用与 Pi Adapter 相同的 `browser.*` Tool Protocol，支持查询标签页、页面状态、交互元素、点击、输入、滚动和截图。
+打开 `chrome-extension://<扩展ID>/debug.html`。调试页使用与 MCP Server 相同的 `browser.*` Tool Protocol，支持查询标签页、页面状态、交互元素、点击、输入、滚动和截图。
 
 - 先在下拉框选择普通 HTTP/HTTPS 页面；工具会显式传入目标 `tab_id`，读取页面无需切换离开调试页。
 - 元素操作先 Get interactives，再使用返回的 `element_id`。
@@ -367,7 +409,7 @@ AgentSurf 可以操作当前 Chrome 登录态中的页面，CDP、上传等工�
 
 ## 外部调用协议
 
-这一节面向自行开发 Adapter 的调用方。Pi 日常使用无需手工处理认证和消息封装。
+这一节面向自行开发 MCP 客户端或其他协议客户端的调用方。普通 MCP 客户端无需手工处理认证和消息封装。
 
 Agent 连接 Native Host 启动的本机 Bridge，第一条 WebSocket 消息为认证握手：
 
@@ -420,12 +462,12 @@ Bridge 按 `request_id` 转发响应；超时、扩展断开或 Bridge 停止时
 
 | 路径 | 职责 |
 | --- | --- |
-| `integrations/pi/` | Pi Agent Adapter |
 | `src/core/` | 与 Chrome API 无关的工具契约、参数校验和 Runtime 调度 |
 | `src/chrome/` | Chrome API、CDP、下载与会话协调 |
 | `src/content/` | Page Agent、元素注册与可视化 Agent 光标 |
 | `src/transport/` | Native Messaging 和工具传输协议 |
 | `src/bridge/` | 本机 WebSocket Bridge |
+| `src/mcp/` | 面向公开分发的本地 MCP Server 与 Bridge 客户端 |
 | `src/native-host/` | Native Host、配置和消息 framing |
 | `src/debug/` | 扩展调试页 |
 | `scripts/` | 构建、安装与开发调用脚本 |
