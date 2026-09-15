@@ -134,6 +134,31 @@ MV3 下 `webRequest` 是只读观测，**不需要 attach debugger，不弹调�
 
 **使用要点**：隔离是**协作式**的——必须在每次调用都带 `session_id` 才生效。不传即跳过所有归属检查（单 agent 模式）。
 
+### 多会话并发（真实交错操作）
+
+两个独立 MCP 客户端各自建会话，**交错执行真实操作**（A 输入 → B 输入 → A 选择 → B 选择 → 分别提交），验证彼此不串扰：
+
+```
+对话A 页面: {"who":"AAA-from-对话A","plan":"alpha"}
+对话B 页面: {"who":"BBB-from-对话B","plan":"beta"}
+```
+
+| 项 | 结果 |
+| --- | --- |
+| 各自认领 + 建立独立标签分组 | ✓ 两个不同的 `group_id`（可见的蓝色分组，标题为会话名）|
+| 交错操作互不干扰 | ✓ 两边内容完全独立 |
+| B 在 A 操作过程中插手 | ✓ 读取与点击均被拒 `tab_in_use` |
+| 从已持有标签页开 `target=_blank` | ✓ 新标签页自动归该会话（`origin: child`），无需 claim |
+| 子标签页对另一会话 | ✓ 不可用，也无法抢走 |
+| 会话关闭 | ✓ `close_tabs` 回收标签页 |
+
+**验证细节**：子标签页测试特意比对了点击前后的标签页 id 集合，确认新标签页 id（`1445892243`）与父标签页（`1445892240`）不同——否则会因“导航了已有标签页”而假通过。
+
+**两种自动归属路径**（`src/core/browser-tool-runtime.ts`）：
+
+- `browser.open` 带 `session_id` 时，结果标签页以 `origin: 'agent'` 自动认领（新建时才建分组）
+- 从已持有标签页开出的新标签页，经由 `chrome.tabs.onCreated` + `openerTabId` 以 `origin: 'child'` 继承
+
 ### `4ffb24c` 为 session_id 的位置加防回归测试
 
 请求根是 `parseToolRequest` 与归属检查读取的位置，而 `claim_tab` 从 args 读取。两者任一环节错位都会静默关掉隔离。测试覆盖根级位置、不传时字段不存在、以及 session 类工具仍能在 args 里找到它。
