@@ -13,6 +13,7 @@ await build({
   entryPoints: {
     'background/service-worker': resolve(projectRoot, 'src/background/service-worker.ts'),
     'content/page-agent': resolve(projectRoot, 'src/content/page-agent.ts'),
+    'content/page-console': resolve(projectRoot, 'src/content/page-console.ts'),
     'debug/debug': resolve(projectRoot, 'src/debug/debug.ts'),
   },
   bundle: true,

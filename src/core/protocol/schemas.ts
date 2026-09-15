@@ -12,6 +12,8 @@ import {
   type PageAgentScrollResult,
   type PageAgentState,
   type PageContentResult,
+  type ConsoleEntry,
+  type ConsoleLevel,
   type RuntimeMessage,
   type ObservationContent,
   type ScreenshotArgs,
@@ -39,6 +41,8 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'browser.detach_debugger',
   'browser.cdp',
   'browser.get_cdp_events',
+  'browser.get_network_requests',
+  'browser.get_console_messages',
   'browser.get_accessibility_tree',
   'browser.mouse_move',
   'browser.click_at',
@@ -121,6 +125,16 @@ function optionalStringArray(value: unknown, field: string): string[] | undefine
     throw invalid(field, 'must be an array of non-empty strings');
   }
   return value.map((item) => item as string);
+}
+
+const CONSOLE_LEVELS: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
+
+function optionalConsoleLevels(value: unknown): ConsoleLevel[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.every((item) => CONSOLE_LEVELS.includes(item as ConsoleLevel))) {
+    throw invalid('args.levels', 'must be an array of log, info, warn, error, debug');
+  }
+  return value as ConsoleLevel[];
 }
 
 function parseScreenshotOptions(args: UnknownRecord): Pick<ScreenshotArgs, 'image_format' | 'full_page' | 'clip'> {
@@ -223,12 +237,38 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         ...(methods === undefined ? {} : { methods }),
       };
     }
+    case 'browser.get_network_requests': {
+      const afterSequence = optionalInteger(args.after_sequence, 'args.after_sequence');
+      if (afterSequence !== undefined && afterSequence < 0) throw invalid('args.after_sequence', 'must be non-negative');
+      const limit = optionalPositiveInteger(args.limit, 'args.limit');
+      const type = optionalString(args.type, 'args.type');
+      const failedOnly = optionalBoolean(args.failed_only, 'args.failed_only');
+      return {
+        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
+        ...(afterSequence === undefined ? {} : { after_sequence: afterSequence }),
+        ...(limit === undefined ? {} : { limit }),
+        ...(type === undefined ? {} : { type }),
+        ...(failedOnly === undefined ? {} : { failed_only: failedOnly }),
+      };
+    }
     case 'browser.mouse_move':
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         x: requireFiniteNumber(args.x, 'args.x'),
         y: requireFiniteNumber(args.y, 'args.y'),
       };
+    case 'browser.get_console_messages': {
+      const afterSequence = optionalInteger(args.after_sequence, 'args.after_sequence');
+      if (afterSequence !== undefined && afterSequence < 0) throw invalid('args.after_sequence', 'must be non-negative');
+      const limit = optionalPositiveInteger(args.limit, 'args.limit');
+      const levels = optionalConsoleLevels(args.levels);
+      return {
+        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
+        ...(afterSequence === undefined ? {} : { after_sequence: afterSequence }),
+        ...(limit === undefined ? {} : { limit }),
+        ...(levels === undefined ? {} : { levels }),
+      };
+    }
     case 'browser.click_at': {
       const button = args.button;
       if (button !== undefined && button !== 'left' && button !== 'right' && button !== 'middle') {
@@ -456,6 +496,8 @@ export function parsePageAgentRequest(value: unknown): PageAgentRequest {
       return { ...base, action: input.action };
     case 'get-page-content':
       return { ...base, action: 'get-page-content', include_html: input.include_html === true, include_images: input.include_images !== false, include_frames: input.include_frames !== false, max_text_length: optionalPositiveInteger(input.max_text_length, 'max_text_length') ?? 50_000 };
+    case 'get-console-messages':
+      return { ...base, action: 'get-console-messages' };
     case 'click':
     case 'double-click':
       return { ...base, action: input.action, element_id: requireString(input.element_id, 'element_id') };
@@ -580,6 +622,16 @@ export function parsePageAgentResponse(value: unknown, expectedAction: PageAgent
   if (expectedAction === 'get-page-content') {
     return { kind: 'page-agent-response', protocol_version: protocolVersion, request_id: requestId, ok: true, action: 'get-page-content', result: input.result as PageContentResult };
   }
+  if (expectedAction === 'get-console-messages') {
+    return {
+      kind: 'page-agent-response',
+      protocol_version: protocolVersion,
+      request_id: requestId,
+      ok: true,
+      action: 'get-console-messages',
+      result: parseConsoleCollection(input.result),
+    };
+  }
   if (expectedAction === 'click') {
     const result = parseElementActionResult(input.result);
     if (!isRecord(input.result) || input.result.clicked !== true) throw pageAgentError('Invalid click result from Page Agent.');
@@ -679,6 +731,34 @@ export function parsePageAgentResponse(value: unknown, expectedAction: PageAgent
     ok: true,
     action: 'scroll',
     result: parseScrollResult(input.result),
+  };
+}
+
+function parseConsoleCollection(value: unknown): { available: boolean; entries: ConsoleEntry[]; dropped: number } {
+  const input = requireRecord(value, 'result');
+  const rawEntries = Array.isArray(input.entries) ? input.entries : [];
+  return {
+    available: input.available === true,
+    entries: rawEntries.map((entry, index) => parseConsoleEntry(requireRecord(entry, `result.entries[${index}]`), index)),
+    dropped: optionalInteger(input.dropped, 'result.dropped') ?? 0,
+  };
+}
+
+function parseConsoleEntry(input: UnknownRecord, index: number): ConsoleEntry {
+  const field = (name: string): string => `result.entries[${index}].${name}`;
+  if (!CONSOLE_LEVELS.includes(input.level as ConsoleLevel)) {
+    throw invalid(field('level'), 'must be log, info, warn, error, or debug');
+  }
+  if (input.source !== 'console' && input.source !== 'exception' && input.source !== 'unhandledrejection') {
+    throw invalid(field('source'), 'must be console, exception, or unhandledrejection');
+  }
+  return {
+    sequence: requireInteger(input.sequence, field('sequence')),
+    level: input.level as ConsoleLevel,
+    source: input.source,
+    message: typeof input.message === 'string' ? input.message : '',
+    stack: typeof input.stack === 'string' && input.stack.length > 0 ? input.stack : null,
+    timestamp: requireFiniteNumber(input.timestamp, field('timestamp')),
   };
 }
 

@@ -2,6 +2,7 @@ import { createToolError, ToolFailure } from '../core/protocol/errors';
 import { parsePageAgentResponse } from '../core/protocol/schemas';
 import {
   PROTOCOL_VERSION,
+  type ConsoleEntry,
   type PageAgentElementActionResult,
   type PageAgentInteractiveSnapshot,
   type PageAgentRequest,
@@ -14,6 +15,7 @@ export interface PageAgentClient {
   getState(tabId: number): Promise<PageAgentState>;
   getInteractives(tabId: number): Promise<PageAgentInteractiveSnapshot>;
   getPageContent?(tabId: number, options: { include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number }): Promise<import('../core/protocol/tool-contract').PageContentResult>;
+  getConsoleMessages(tabId: number): Promise<{ available: boolean; entries: ConsoleEntry[]; dropped: number }>;
   click(tabId: number, elementId: string): Promise<PageAgentElementActionResult & { clicked: true }>;
   doubleClick(tabId: number, elementId: string): Promise<PageAgentElementActionResult & { double_clicked: true }>;
   type(tabId: number, elementId: string, text: string): Promise<PageAgentElementActionResult & { typed: true }>;
@@ -68,6 +70,13 @@ export class ChromePageAgentClient implements PageAgentClient {
     const response = await this.send(tabId, { ...createRequestBase(), action: 'get-page-content', ...options });
     if (!response.ok) throw new ToolFailure(response.error);
     if (response.action !== 'get-page-content') throw this.unexpectedResponse();
+    return response.result;
+  }
+
+  public async getConsoleMessages(tabId: number) {
+    const response = await this.send(tabId, { ...createRequestBase(), action: 'get-console-messages' });
+    if (!response.ok) throw new ToolFailure(response.error);
+    if (response.action !== 'get-console-messages') throw this.unexpectedResponse();
     return response.result;
   }
 
@@ -219,6 +228,12 @@ export class ChromePageAgentClient implements PageAgentClient {
 
   private async inject(tabId: number): Promise<void> {
     try {
+      // The console collector must live in the MAIN world to observe the page's own console output.
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content/page-console.js'],
+        world: 'MAIN',
+      });
       await chrome.scripting.executeScript({
         target: { tabId },
         files: ['content/page-agent.js'],

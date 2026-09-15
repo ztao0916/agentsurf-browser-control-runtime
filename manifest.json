@@ -33,12 +33,22 @@
     "tabGroups",
     "scripting",
     "storage",
-    "webNavigation"
+    "webNavigation",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": ["content/page-console.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "http://*/*",

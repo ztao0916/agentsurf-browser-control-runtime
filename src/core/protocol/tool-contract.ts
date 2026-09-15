@@ -17,6 +17,8 @@ export type ToolName =
   | 'browser.detach_debugger'
   | 'browser.cdp'
   | 'browser.get_cdp_events'
+  | 'browser.get_network_requests'
+  | 'browser.get_console_messages'
   | 'browser.get_accessibility_tree'
   | 'browser.mouse_move'
   | 'browser.click_at'
@@ -116,6 +118,19 @@ export interface GetCdpEventsArgs extends TabTargetArgs {
   after_sequence?: number;
   limit?: number;
   methods?: string[];
+}
+
+export interface GetNetworkRequestsArgs extends TabTargetArgs {
+  after_sequence?: number;
+  limit?: number;
+  type?: string;
+  failed_only?: boolean;
+}
+
+export interface GetConsoleMessagesArgs extends TabTargetArgs {
+  after_sequence?: number;
+  limit?: number;
+  levels?: ConsoleLevel[];
 }
 
 export interface PointArgs extends TabTargetArgs {
@@ -314,6 +329,8 @@ export interface ToolArguments {
   'browser.detach_debugger': TabTargetArgs;
   'browser.cdp': CdpArgs;
   'browser.get_cdp_events': GetCdpEventsArgs;
+  'browser.get_network_requests': GetNetworkRequestsArgs;
+  'browser.get_console_messages': GetConsoleMessagesArgs;
   'browser.get_accessibility_tree': TabTargetArgs;
   'browser.mouse_move': PointArgs;
   'browser.click_at': ClickAtArgs;
@@ -393,6 +410,52 @@ export interface GetCdpEventsResult {
   events: CdpEventInfo[];
   has_more: boolean;
   truncated: boolean;
+}
+
+export interface NetworkRequestInfo {
+  sequence: number;
+  tab_id: number;
+  request_id: string;
+  url: string;
+  method: string;
+  type: string;
+  status_code: number | null;
+  status_line: string | null;
+  from_cache: boolean | null;
+  error: string | null;
+  started_at: number;
+  duration_ms: number | null;
+}
+
+export interface GetNetworkRequestsResult {
+  tab_id: number;
+  cursor: number;
+  requests: NetworkRequestInfo[];
+  has_more: boolean;
+  truncated: boolean;
+}
+
+export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
+export type ConsoleEntrySource = 'console' | 'exception' | 'unhandledrejection';
+
+export interface ConsoleEntry {
+  sequence: number;
+  level: ConsoleLevel;
+  source: ConsoleEntrySource;
+  message: string;
+  stack: string | null;
+  timestamp: number;
+}
+
+export interface GetConsoleMessagesResult {
+  tab_id: number;
+  /** False when the MAIN-world collector was not present, so an empty list is not proof of silence. */
+  available: boolean;
+  cursor: number;
+  entries: ConsoleEntry[];
+  has_more: boolean;
+  truncated: boolean;
+  dropped: number;
 }
 
 export interface AccessibilityTreeResult {
@@ -562,6 +625,8 @@ export interface ToolResults {
   'browser.detach_debugger': DebuggerStateResult;
   'browser.cdp': CdpResult;
   'browser.get_cdp_events': GetCdpEventsResult;
+  'browser.get_network_requests': GetNetworkRequestsResult;
+  'browser.get_console_messages': GetConsoleMessagesResult;
   'browser.get_accessibility_tree': AccessibilityTreeResult;
   'browser.mouse_move': CoordinateActionResult;
   'browser.click_at': CoordinateActionResult;
@@ -631,6 +696,7 @@ export type PageAgentAction =
   | 'get-page-state'
   | 'get-interactives'
   | 'get-page-content'
+  | 'get-console-messages'
   | 'click'
   | 'double-click'
   | 'type'
@@ -653,6 +719,7 @@ interface PageAgentRequestBase {
 export type PageAgentRequest =
   | (PageAgentRequestBase & { action: 'get-page-state' | 'get-interactives' })
   | (PageAgentRequestBase & { action: 'get-page-content'; include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number })
+  | (PageAgentRequestBase & { action: 'get-console-messages' })
   | (PageAgentRequestBase & { action: 'click'; element_id: string })
   | (PageAgentRequestBase & { action: 'double-click'; element_id: string })
   | (PageAgentRequestBase & { action: 'type'; element_id: string; text: string })
@@ -707,6 +774,14 @@ export type PageAgentSuccessResponse =
       ok: true;
       action: 'get-page-content';
       result: PageContentResult;
+    }
+  | {
+      kind: 'page-agent-response';
+      protocol_version: typeof PROTOCOL_VERSION;
+      request_id: string;
+      ok: true;
+      action: 'get-console-messages';
+      result: { available: boolean; entries: ConsoleEntry[]; dropped: number };
     }
   | {
       kind: 'page-agent-response';

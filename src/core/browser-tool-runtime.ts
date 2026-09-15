@@ -24,6 +24,8 @@ import type { PageAgentClient } from '../chrome/scripting-adapter';
 import type { TabsAdapter } from '../chrome/tabs-adapter';
 import type { ScreenshotAdapter } from '../chrome/screenshot-adapter';
 import type { DownloadAdapter } from '../chrome/download-adapter';
+import type { NetworkAdapter } from '../chrome/network-adapter';
+import type { ConsoleEntry, GetConsoleMessagesArgs, GetConsoleMessagesResult } from './protocol/tool-contract';
 
 export class BrowserToolRuntime {
   public constructor(
@@ -33,6 +35,7 @@ export class BrowserToolRuntime {
     private readonly sessions?: SessionCoordinator,
     private readonly debuggerAdapter?: DebuggerAdapter,
     private readonly downloads?: DownloadAdapter,
+    private readonly network?: NetworkAdapter,
   ) {}
 
   public handle<TTool extends ToolName>(request: ToolRequest<TTool>): Promise<ToolResponse<TTool>>;
@@ -146,6 +149,21 @@ export class BrowserToolRuntime {
           request.args.methods,
         );
         return { tab_id: request.args.tab_id, ...events };
+      }
+      case 'browser.get_network_requests': {
+        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        const page = this.requireNetwork().list(request.args.tab_id, {
+          after_sequence: request.args.after_sequence ?? 0,
+          limit: Math.min(request.args.limit ?? 100, 1_000),
+          ...(request.args.type === undefined ? {} : { type: request.args.type }),
+          ...(request.args.failed_only === undefined ? {} : { failed_only: request.args.failed_only }),
+        });
+        return { tab_id: request.args.tab_id, ...page };
+      }
+      case 'browser.get_console_messages': {
+        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        const collected = await this.pageAgent.getConsoleMessages(request.args.tab_id);
+        return { tab_id: request.args.tab_id, ...selectConsoleMessages(collected, request.args) };
       }
       case 'browser.get_accessibility_tree': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
@@ -518,6 +536,13 @@ export class BrowserToolRuntime {
     return this.downloads;
   }
 
+  private requireNetwork(): NetworkAdapter {
+    if (this.network === undefined) {
+      throw new ToolFailure(createToolError('internal_error', 'Chrome network observation is unavailable.', false));
+    }
+    return this.network;
+  }
+
   private async showAgentCursor(tabId: number, x: number, y: number): Promise<void> {
     await this.pageAgent.showAgentCursor(tabId, x, y).catch(() => undefined);
   }
@@ -545,4 +570,24 @@ function interpolatePoints(fromX: number, fromY: number, toX: number, toY: numbe
     const progress = (index + 1) / steps;
     return { x: fromX + (toX - fromX) * progress, y: fromY + (toY - fromY) * progress };
   });
+}
+
+function selectConsoleMessages(
+  collected: { available: boolean; entries: ConsoleEntry[]; dropped: number },
+  args: GetConsoleMessagesArgs,
+): Omit<GetConsoleMessagesResult, 'tab_id'> {
+  const afterSequence = args.after_sequence ?? 0;
+  const earliest = collected.entries[0]?.sequence ?? 0;
+  const filtered = collected.entries.filter((entry) =>
+    entry.sequence > afterSequence && (args.levels === undefined || args.levels.includes(entry.level)));
+  const entries = filtered.slice(0, Math.min(args.limit ?? 100, 500));
+  return {
+    available: collected.available,
+    cursor: entries.at(-1)?.sequence ?? afterSequence,
+    entries,
+    has_more: filtered.length > entries.length,
+    // The page keeps a bounded buffer, so an old cursor means messages were dropped in between.
+    truncated: afterSequence > 0 && earliest > 0 && afterSequence < earliest - 1,
+    dropped: collected.dropped,
+  };
 }

@@ -13,6 +13,7 @@ import type {
   TabInfo,
   ToolRequest,
   ImageFormat,
+  ConsoleEntry,
 } from '../src/core/protocol/tool-contract';
 
 const tab: TabInfo = {
@@ -96,9 +97,19 @@ class FakeTabsAdapter implements TabsAdapter {
   }
 }
 
+const consoleEntries: ConsoleEntry[] = [
+  { sequence: 1, level: 'log', source: 'console', message: 'hello', stack: null, timestamp: 10 },
+  { sequence: 2, level: 'error', source: 'exception', message: 'boom', stack: 'Error: boom', timestamp: 20 },
+  { sequence: 3, level: 'warn', source: 'console', message: 'careful', stack: null, timestamp: 30 },
+];
+
 class FakePageAgentClient implements PageAgentClient {
   public getState(): Promise<PageAgentState> {
     return Promise.resolve(pageAgentState);
+  }
+
+  public getConsoleMessages(): Promise<{ available: boolean; entries: ConsoleEntry[]; dropped: number }> {
+    return Promise.resolve({ available: true, entries: consoleEntries, dropped: 0 });
   }
 
   public getInteractives(): Promise<PageAgentInteractiveSnapshot> {
@@ -216,6 +227,12 @@ class FakeScreenshotAdapter implements ScreenshotAdapter {
   }
 }
 
+class MissingConsolePageAgentClient extends FakePageAgentClient {
+  public override getConsoleMessages(): Promise<{ available: boolean; entries: ConsoleEntry[]; dropped: number }> {
+    return Promise.resolve({ available: false, entries: [], dropped: 0 });
+  }
+}
+
 class ChangingPageAgentClient extends FakePageAgentClient {
   private stateReads = 0;
 
@@ -266,6 +283,57 @@ describe('BrowserToolRuntime', () => {
     if (response.ok) {
       expect(response.result.snapshot.tab_id).toBe(7);
       expect(response.result.snapshot.snapshot_id).toBe('snap_document_0_test');
+    }
+  });
+
+  it('returns console messages with pagination metadata', async () => {
+    const response = await runtime.handle(request('browser.get_console_messages', { tab_id: 7 }));
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.available).toBe(true);
+      expect(response.result.entries.map((entry) => entry.message)).toEqual(['hello', 'boom', 'careful']);
+      expect(response.result.cursor).toBe(3);
+      expect(response.result.has_more).toBe(false);
+      expect(response.result.truncated).toBe(false);
+    }
+  });
+
+  it('filters console messages by level and by sequence', async () => {
+    const byLevel = await runtime.handle(request('browser.get_console_messages', { tab_id: 7, levels: ['error'] }));
+    expect(byLevel.ok).toBe(true);
+    if (byLevel.ok) {
+      expect(byLevel.result.entries.map((entry) => entry.message)).toEqual(['boom']);
+      expect(byLevel.result.cursor).toBe(2);
+    }
+
+    const afterSequence = await runtime.handle(request('browser.get_console_messages', { tab_id: 7, after_sequence: 2 }));
+    expect(afterSequence.ok).toBe(true);
+    if (afterSequence.ok) {
+      expect(afterSequence.result.entries.map((entry) => entry.sequence)).toEqual([3]);
+    }
+  });
+
+  it('limits console messages and reports that more are available', async () => {
+    const response = await runtime.handle(request('browser.get_console_messages', { tab_id: 7, limit: 2 }));
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.entries).toHaveLength(2);
+      expect(response.result.has_more).toBe(true);
+      expect(response.result.cursor).toBe(2);
+    }
+  });
+
+  it('surfaces an unavailable console collector instead of an empty list', async () => {
+    const unavailable = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new MissingConsolePageAgentClient(),
+      new FakeScreenshotAdapter(),
+    );
+    const response = await unavailable.handle(request('browser.get_console_messages', { tab_id: 7 }));
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.available).toBe(false);
+      expect(response.result.entries).toEqual([]);
     }
   });
 
