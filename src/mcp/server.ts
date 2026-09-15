@@ -59,6 +59,19 @@ const schemas = {
   'browser.open': { url: z.string().url(), tab_id: z.number().int().optional(), activate: z.boolean().optional() },
 };
 
+const optionalSessionId = {
+  session_id: z.string().min(1).optional().describe(
+    'Session that owns the tab. Pass it on every call so the runtime can refuse a tab another session holds.',
+  ),
+};
+
+// Every tool accepts a session so ownership can be enforced, but a tool that declares its own
+// session_id keeps its stricter schema because its own definition is spread last. The shape is
+// widened from the literal map, so the conversion is intentional.
+const toolSchemas = Object.fromEntries(
+  Object.entries(schemas).map(([tool, schema]) => [tool, { ...optionalSessionId, ...schema }]),
+) as unknown as typeof schemas;
+
 type ContentBlock = CallToolResult['content'][number];
 
 interface ScreenshotPayload {
@@ -113,10 +126,12 @@ export async function startMcpServer(): Promise<void> {
     server.registerTool(mcpName, {
       title: mcpName,
       description: descriptionFor(tool),
-      inputSchema: schemas[tool],
+      inputSchema: toolSchemas[tool],
     }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
       try {
-        const result = await callLocalBridge(tool, args);
+        // Forwarded at the request root, and left in args for the session tools that read it there.
+        const sessionId = typeof args.session_id === 'string' ? args.session_id : undefined;
+        const result = await callLocalBridge(tool, args, sessionId);
         return { content: toContent(tool, result) };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);

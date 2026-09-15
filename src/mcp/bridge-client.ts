@@ -4,7 +4,16 @@ import { type ToolName, type ToolRequest } from '../core/protocol/tool-contract'
 
 const REQUEST_TIMEOUT_MS = 40_000;
 
-export async function callLocalBridge(tool: ToolName, args: ToolRequest['args']): Promise<unknown> {
+/**
+ * `session_id` travels at the root of the request, not inside `args`, because that is where
+ * `parseToolRequest` reads it and where the runtime's ownership checks look for it. Without it a
+ * session can claim a tab but nothing stops another session from driving that same tab.
+ */
+export async function callLocalBridge(
+  tool: ToolName,
+  args: ToolRequest['args'],
+  sessionId?: string,
+): Promise<unknown> {
   const configuredUrl = process.env.BROWSER_BRIDGE_URL;
   const configuredToken = process.env.BROWSER_BRIDGE_TOKEN;
   const config = configuredUrl !== undefined && configuredToken !== undefined ? undefined : await readConfig();
@@ -53,6 +62,7 @@ export async function callLocalBridge(tool: ToolName, args: ToolRequest['args'])
           request_id: requestId,
           tool,
           args,
+          ...(sessionId === undefined ? {} : { session_id: sessionId }),
         }));
         return;
       }
