@@ -4,7 +4,7 @@
 
 - 验证环境：macOS，Chrome 153.0.8010.36，Node v24.14.1（nvm），npm 11.11.0
 - 起点提交：`ac4d9ed`
-- 终点提交：`64f0665`
+- 终点提交：`07c6cca`
 - 验证客户端：pi（`pi-mcp-adapter` v2.34.0，stdio MCP）
 
 ## 结论摘要
@@ -96,6 +96,28 @@ MV3 下 `webRequest` 是只读观测，**不需要 attach debugger，不弹调�
 
 **防复发**：描述表类型由 `Partial<Record<ToolName, string>>` 改为 `Record<ToolName, string>`，删除 fallback。少写一个描述就编译不过。
 
+### `07c6cca` 修复按键事件字段不完整，恢复 Enter / Tab 的默认行为
+
+**现象**：在文本输入框上按 Enter **不会提交表单**，按 Tab **不会移动焦点**。每一个搜索框、登录表单都依赖前者。
+
+**根因**：`browser.press` 与 `browser.press_key` 只传 `key`，其余字段全空：
+
+```
+修复前: { key: "Enter", code: "",      keyCode: 0 }
+修复后: { key: "Enter", code: "Enter", keyCode: 13, which: 13 }
+```
+
+两条路径各有不同的问题：
+
+- **`press_key`（CDP）**：CDP 产生的是**可信事件**，但 Chrome 只有在收到 Windows virtual key code 时才会执行默认动作，所以 Tab 无效。
+- **`press`（元素级）**：合成 `KeyboardEvent` 是 `isTrusted: false`，**浏览器根本不会为它执行任何默认动作**。原有实现只对 Enter/空格 + 可键盘点击元素做了 `element.click()` 兜底，因此按钮可用而**输入框不可用**。
+
+**修法**：新增共享按键表（`src/core/key-descriptors.ts`），两条路径共用。元素级 `press` 额外复现隐性表单提交（传递默认提交按钮，使其 name/value 被包含），并继续跳过 textarea（Enter 在其中有换行语义）。
+
+**验证**：Enter 提交后表单进入已提交状态；Tab 使焦点从 `name` 移到 `notes`；`code` / `keyCode` / `which` 字段完整；可打印字符仍能正常输入（实测输入得到 `ABCZ`）。
+
+**注意**：Tab 焦点遍历**只在标签页为活动标签页时生效**。后台标签页接受程序化 `focus()`，但不执行焦点遍历（这一点在测试中一度被误判为 bug）。
+
 ## 验证证据
 
 ### 链路
@@ -106,6 +128,36 @@ MCP Client (pi) → MCP Server (stdio) → Bridge (ws 127.0.0.1:8765)
 ```
 
 45 个工具在 pi 中全部暴露为 `agentsurf_browser_*` 并可调用。
+
+### 表单操作（核心能力）
+
+在一个包含全部表单控件的本地页面上走完整条操作链，**提交后读取页面真实状态**验证：
+
+```json
+{"name":"张三","notes":"hello from agent","agree":true,
+ "plan":"pro","planMulti":["a","c"],"color":"green"}
+```
+
+| 操作 | 工具 | 结果 |
+| --- | --- | --- |
+| 文本输入（含中文） | `browser_type` | `name` 为 `张三` |
+| 多行文本 | `browser_type` | textarea 写入成功 |
+| 复选框 | `browser_set_checked` | `agree: true` |
+| 单选组 | `browser_set_checked` | `color: green`，且 Red 自动变 `false`（互斥正确） |
+| 单选下拉 | `browser_select_option` | `plan: pro` |
+| 多选下拉 | `browser_select_option` | `planMulti: [a, c]` |
+| 按钮提交 | `browser_click` | 表单提交事件触发 |
+| 回车提交 | `browser_press` | 表单提交事件触发 |
+| **禁用元素** | `browser_type` | **正确拒绝**：`The element is disabled.` |
+
+补充验证：
+
+- `get_interactives` 同步反映状态：`value_state: filled`、`checked: true`、option `selected: true`；`disabled: true` 的元素被正确标记
+- 动态元素：页面 1.5 秒后插入的按钮被自动发现
+- hover：`browser_mouse_move` 到坐标后，CSS `:hover` 菜单真的展开（截图确认，并可见 AI 代理光标）
+- `browser_drag_at`：`drop` 事件**确实触发**，但 `dataTransfer` 为空（合成拖拽没有 `dragstart` 数据），依赖 `getData()` 的应用会拿到空值
+- `browser_wait_for_element`：`state: visible` 正确返回
+- `browser_scroll`：在内容不足一屏的页面上返回 `near_top` / `near_bottom` 均为 `true`（正确，但未验证到实际滚动）
 
 ### 截图
 
@@ -170,10 +222,10 @@ type=xmlhttprequest       562 字符 ≈   141 tokens
 | 浏览器实例 | 用户现有 Chrome | 自行拉起，独立 profile |
 | 登录态 | **有** | 无 |
 | 用户当前标签页 | 直接可用 | 不可见 |
-| 元素模型 | `get_interactives` → 不透明 `element_id` | `take_snapshot` → uid |
-| console | 有（MAIN world 补丁） | 有（CDP） |
+| 元素模型 | `get_interactives` → 不透明 `element_id` | `take_snapshot` → uid || console | 有（MAIN world 补丁） | 有（CDP） |
 | network 元数据 | 有（`webRequest`） | 有（CDP） |
 | network 响应体 | **无** | 有 |
+| `browser.scroll` / `scroll_at` | 仅像素增量。页面内容不足一屏时无滚动，返回的 `near_top`/`near_bottom` 同时为 `true` |
 | 性能 trace | 无（且 1000 条事件缓冲会截断，**推断**） | 有 |
 | 堆快照 / Lighthouse | 无 | 有 |
 | 与用户 DevTools 冲突 | **会**（`chrome.debugger` 独占） | 不会 |
@@ -195,6 +247,9 @@ type=xmlhttprequest       562 字符 ≈   141 tokens
 - **网络缓冲随 SW 重启清空**：MV3 service worker 被回收后内存缓冲丢失。
 - **console 序列化有损**：深度上限 4、单条消息上限 2000 字符、DOM 节点降级为标签名、对象键上限 20。
 - **`chrome.debugger` 独占**：同一标签页已有 DevTools 时 attach 失败。
+- **按键不支持修饰键组合**：`press` / `press_key` 的参数只有单个 `key`，没有修饰键字段，因此 Cmd+A、Ctrl+Enter 这类组合无法发送。
+- **拖拽不携带 `dataTransfer` 数据**：`drop` 事件会触发，但 `dataTransfer.getData()` 返回空。
+- **Tab 焦点遍历只在活动标签页生效**：后台标签页接受程序化 `focus()`，但不执行焦点遍历。
 - **受保护页面无法注入**：`chrome://` 等页面不能注入 Page Agent。
 
 ### 仅读代码推断、未实测
@@ -233,11 +288,12 @@ chrome-extension://<扩展 ID>/debug.html
 连接状态应为 `connected`。
 
 - `npm run typecheck`：应通过
-- `npm test`：应 74 项全通过
+- `npm test`：应 79 项全通过
 - `npm run lint`：仅剩 `src/chrome/scripting-adapter.ts` 的既有错误
 
-三条最有价值的验证（均已在 pi 中跑过）：
+四条最有价值的验证（均已在 pi 中跑过）：
 
 1. **截图**：`browser_screenshot` 应返回 image block，且客户端能渲染
 2. **后台截图**：用 `activate: false` 打开页面后截图，应成功
 3. **登录态**：对任一需登录的站点调用 `browser_get_page_state`，URL 不应跳转到登录页
+4. **回车提交**：在文本输入框上 `browser_press` 一个 `Enter`，表单应被提交
