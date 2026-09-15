@@ -117,7 +117,13 @@ export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
     { name: 'agentsurf', version: '0.1.0' },
     {
-      instructions: 'AgentSurf controls the user\'s local Chrome. Start with browser_list_tabs. Before element actions, call browser_get_interactives and use its returned opaque element_id; never invent selectors or element IDs. Ask the user before consequential actions such as submitting, purchasing, deleting, uploading, or sending messages.',
+      instructions: [
+        'AgentSurf controls the user\'s local Chrome.',
+        'Start with browser_list_tabs.',
+        'Before element actions, call browser_get_interactives and use its returned opaque element_id; never invent selectors or element IDs.',
+        'Ask the user before consequential actions such as submitting, purchasing, deleting, uploading, or sending messages.',
+        'If another conversation may drive Chrome at the same time, call browser_start_session once, then pass that session_id on every later call and claim each tab before use; otherwise sessions are optional and any tab_id can be driven directly.',
+      ].join(' '),
     },
   );
 
