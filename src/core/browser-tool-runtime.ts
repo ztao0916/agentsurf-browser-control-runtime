@@ -25,6 +25,7 @@ import type { TabsAdapter } from '../chrome/tabs-adapter';
 import type { ScreenshotAdapter } from '../chrome/screenshot-adapter';
 import type { DownloadAdapter } from '../chrome/download-adapter';
 import type { NetworkAdapter } from '../chrome/network-adapter';
+import { describeKey } from './key-descriptors';
 import type { ConsoleEntry, GetConsoleMessagesArgs, GetConsoleMessagesResult } from './protocol/tool-contract';
 
 export class BrowserToolRuntime {
@@ -233,15 +234,28 @@ export class BrowserToolRuntime {
           deltaY: request.args.delta_y,
         });
         return { tab_id: request.args.tab_id, performed: true };
-      case 'browser.press_key':
+      case 'browser.press_key': {
         await this.requireTabAccess(request.session_id, request.args.tab_id);
+        const descriptor = describeKey(request.args.key);
+        // Chrome only runs a key's default action when the Windows virtual key code is present, and
+        // only treats the key as text-producing when `text` is set.
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchKeyEvent', {
-          type: 'keyDown', key: request.args.key,
+          type: 'keyDown',
+          key: descriptor.key,
+          code: descriptor.code,
+          windowsVirtualKeyCode: descriptor.virtualKeyCode,
+          nativeVirtualKeyCode: descriptor.virtualKeyCode,
+          ...(descriptor.text === undefined ? {} : { text: descriptor.text, unmodifiedText: descriptor.text }),
         });
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchKeyEvent', {
-          type: 'keyUp', key: request.args.key,
+          type: 'keyUp',
+          key: descriptor.key,
+          code: descriptor.code,
+          windowsVirtualKeyCode: descriptor.virtualKeyCode,
+          nativeVirtualKeyCode: descriptor.virtualKeyCode,
         });
         return { tab_id: request.args.tab_id, performed: true };
+      }
       case 'browser.type_text':
         await this.requireTabAccess(request.session_id, request.args.tab_id);
         await this.requireDebugger().send(request.args.tab_id, 'Input.insertText', { text: request.args.text });

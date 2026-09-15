@@ -5,6 +5,7 @@ import type {
   WaitForElementArgs,
 } from '../core/protocol/tool-contract';
 import type { ElementRegistry } from './element-registry';
+import { describeKey, type KeyDescriptor } from '../core/key-descriptors';
 import { isElementDisabled, isElementVisible } from './element-state';
 import type { AgentCursor } from './agent-cursor';
 
@@ -90,13 +91,38 @@ export class ActionExecutor {
     this.cursor?.showForElement(element);
     const previousRevision = this.registry.pageRevision;
     element.focus();
-    const init: KeyboardEventInit = { key, bubbles: true, cancelable: true, composed: true };
+    const descriptor = describeKey(key);
+    const init: KeyboardEventInit = {
+      key: descriptor.key,
+      ...(descriptor.code === '' ? {} : { code: descriptor.code }),
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    };
     const accepted = element.dispatchEvent(new this.pageWindow.KeyboardEvent('keydown', init));
     element.dispatchEvent(new this.pageWindow.KeyboardEvent('keypress', init));
     element.dispatchEvent(new this.pageWindow.KeyboardEvent('keyup', init));
-    if (accepted && (key === 'Enter' || key === ' ') && isClickableByKeyboard(element)) element.click();
+    if (accepted) this.applyDefaultKeyAction(element, descriptor);
     this.flushMutations();
     return { pressed: true, ...this.actionState(previousRevision) };
+  }
+
+  /**
+   * Synthetic KeyboardEvents are untrusted, so the browser never runs a key's default action for
+   * them. Reproduce the two cases that matter when driving a page.
+   */
+  private applyDefaultKeyAction(element: HTMLElement, descriptor: KeyDescriptor): void {
+    if ((descriptor.key === 'Enter' || descriptor.key === ' ') && isClickableByKeyboard(element)) {
+      element.click();
+      return;
+    }
+    // Enter submits the form a field belongs to, except in a textarea where it inserts a newline.
+    if (descriptor.key !== 'Enter' || element instanceof HTMLTextAreaElement) return;
+    const form = element.closest('form');
+    if (form === null) return;
+    // Pass the default submit button so its name and value are included, matching implicit submission.
+    const submitter = form.querySelector('button[type=submit], input[type=submit], button:not([type])');
+    form.requestSubmit(submitter instanceof HTMLElement ? submitter : undefined);
   }
 
   public setChecked(elementId: string, checked: boolean): PageAgentElementActionResult & { checked: boolean } {

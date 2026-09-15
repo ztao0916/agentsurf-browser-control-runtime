@@ -201,3 +201,69 @@ function expectToolError(action: () => unknown, code: string): void {
     if (error instanceof ToolFailure) expect(error.toolError.code).toBe(code);
   }
 }
+
+describe('ActionExecutor key handling', () => {
+  function setupElement(html: string, selector: string): { elementId: string; executor: ActionExecutor } {
+    document.body.innerHTML = html;
+    const element = document.querySelector(selector);
+    if (!(element instanceof HTMLElement)) throw new Error(`Test element ${selector} was not created.`);
+    setVisible(element);
+    const registry = new ElementRegistry();
+    return {
+      elementId: registry.register(element),
+      executor: new ActionExecutor(document, window, registry, () => undefined),
+    };
+  }
+
+  it('submits the surrounding form when Enter is pressed in a field', () => {
+    const { elementId, executor } = setupElement('<form><input id="q"></form>', '#q');
+    const onSubmit = vi.fn((event: Event) => event.preventDefault());
+    document.querySelector('form')?.addEventListener('submit', onSubmit);
+
+    executor.press(elementId, 'Enter');
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Enter alone inside a textarea, where it inserts a newline', () => {
+    const { elementId, executor } = setupElement('<form><textarea id="t"></textarea></form>', '#t');
+    const onSubmit = vi.fn();
+    document.querySelector('form')?.addEventListener('submit', onSubmit);
+
+    executor.press(elementId, 'Enter');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('activates a button with Enter', () => {
+    const { elementId, executor } = setupElement('<button id="go">go</button>', '#go');
+    const onClick = vi.fn();
+    document.querySelector('#go')?.addEventListener('click', onClick);
+
+    executor.press(elementId, 'Enter');
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes event.code so listeners that read it keep working', () => {
+    const { elementId, executor } = setupElement('<input id="q">', '#q');
+    const seen: string[] = [];
+    document.querySelector('#q')?.addEventListener('keydown', (event) => seen.push((event as KeyboardEvent).code));
+
+    executor.press(elementId, 'Enter');
+    executor.press(elementId, 'a');
+
+    expect(seen).toEqual(['Enter', 'KeyA']);
+  });
+
+  it('does not submit when the keydown handler cancels the event', () => {
+    const { elementId, executor } = setupElement('<form><input id="q"></form>', '#q');
+    const onSubmit = vi.fn((event: Event) => event.preventDefault());
+    document.querySelector('form')?.addEventListener('submit', onSubmit);
+    document.querySelector('#q')?.addEventListener('keydown', (event) => event.preventDefault());
+
+    executor.press(elementId, 'Enter');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
