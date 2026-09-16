@@ -9,7 +9,9 @@ import { callLocalBridge, LocalBridgeError } from './bridge-client';
 
 const tabId = { tab_id: z.number().int().describe('Chrome tab ID.') };
 const optionalTabId = { tab_id: z.number().int().optional().describe('Chrome tab ID. Defaults to the active tab when omitted.') };
-const sessionId = { session_id: z.string().min(1).describe('Browser session ID.') };
+const sessionName = z.string().min(1).describe(
+  'Name for this conversation\'s Chrome tab group: a short label in the user\'s language describing what the conversation is doing (about 12 characters, so it fits a tab), for example "AdSense 数据核对". Omit it to fall back to the page title.',
+);
 const elementId = { tab_id: z.number().int(), element_id: z.string().min(1).describe('Opaque element_id returned by browser_get_interactives.') };
 const frameId = {
   frame_id: z.number().int().nonnegative().optional().describe(
@@ -19,8 +21,11 @@ const frameId = {
 
 const schemas = {
   'browser.start_session': { session_id: z.string().min(1).optional(), name: z.string().min(1).optional() },
-  'browser.claim_tab': { ...sessionId, tab_id: tabId.tab_id, group: z.boolean().optional() },
-  'browser.reset_sessions': { force: z.boolean().optional().describe('Also release sessions other conversations still hold. Default false.') },
+  'browser.claim_tab': { tab_id: tabId.tab_id, group: z.boolean().optional(), name: sessionName.optional() },
+  'browser.reset_sessions': {
+    force: z.boolean().optional().describe('Also release sessions other conversations still hold. Default false.'),
+    close_opened_tabs: z.boolean().optional().describe('Also close the tabs this conversation opened itself. A tab the user already had open is never closed. Default true.'),
+  },
   'browser.close_tab': tabId,
   'browser.back': tabId,
   'browser.forward': tabId,
@@ -56,7 +61,7 @@ const schemas = {
   'browser.screenshot': { ...tabId, image_format: z.enum(['png', 'jpeg']).optional(), full_page: z.boolean().optional(), clip: z.object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive(), scale: z.number().positive().optional() }).optional() },
   'browser.observe': { ...tabId, image_format: z.enum(['png', 'jpeg']).optional(), full_page: z.boolean().optional(), clip: z.object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive(), scale: z.number().positive().optional() }).optional(), include: z.array(z.enum(['page_state', 'interactives', 'screenshot', 'accessibility'])).optional() },
   'browser.switch_tab': tabId,
-  'browser.open': { url: z.string().url(), tab_id: z.number().int().optional(), activate: z.boolean().optional() },
+  'browser.open': { url: z.string().url(), tab_id: z.number().int().optional(), activate: z.boolean().optional(), name: sessionName.optional() },
 };
 
 const optionalSessionId = {
@@ -65,9 +70,9 @@ const optionalSessionId = {
   ),
 };
 
-// Every tool accepts a session so ownership can be enforced, but a tool that declares its own
-// session_id keeps its stricter schema because its own definition is spread last. The shape is
-// widened from the literal map, so the conversion is intentional.
+// Every tool accepts a session so ownership can be enforced, and every one of them leaves it
+// optional: the server owns a session per conversation, so the agent never has to supply an id it
+// has no way of knowing. The shape is widened from the literal map, so the conversion is intentional.
 const toolSchemas = Object.fromEntries(
   Object.entries(schemas).map(([tool, schema]) => [tool, { ...optionalSessionId, ...schema }]),
 ) as unknown as typeof schemas;
@@ -143,6 +148,26 @@ function adoptStartedSession(result: unknown): void {
   startedSessions.add(sessionId);
 }
 
+/** How long shutdown waits for the release request before the process goes away regardless. */
+const SHUTDOWN_RELEASE_TIMEOUT_MS = 1_500;
+
+let releasingOnShutdown = false;
+
+/**
+ * A client can end the conversation at any moment, and without this nothing would release the
+ * conversation's tabs until the idle timeout fired 30 minutes later, leaving its group in the user's
+ * tab bar in the meantime. Best effort and bounded: a bridge that is already gone rejects immediately,
+ * a hung request cannot keep the process alive, and a server that never opened a session does nothing.
+ */
+function releaseSessionOnShutdown(): void {
+  if (releasingOnShutdown || startedSessions.size === 0) return;
+  releasingOnShutdown = true;
+  setTimeout(() => process.exit(0), SHUTDOWN_RELEASE_TIMEOUT_MS).unref();
+  void callLocalBridge('browser.reset_sessions', { close_opened_tabs: true }, conversationSessionId)
+    .catch(() => undefined)
+    .finally(() => process.exit(0));
+}
+
 export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
     { name: 'agentsurf', version: '0.1.0' },
@@ -155,6 +180,8 @@ export async function startMcpServer(): Promise<void> {
         'browser_list_tabs hides tabs held by another conversation and reports the count instead; a tab that is not yours is refused with tab_in_use.',
         'Ask the user before consequential actions such as submitting, purchasing, deleting, uploading, or sending messages.',
         'This conversation already owns a browser session: tabs you open are claimed and grouped automatically, and another conversation is refused them. Use browser_claim_tab to take over a tab the user already had open; that claims and groups it too.',
+        'Name the tab group on the first tab you claim or open by passing name: a short label (about 12 characters) in the user\'s language describing what this conversation is doing, so the user sees a meaningful group title instead of a random code. Omit it and the group is titled after the page instead.',
+        'When the browser task is finished, call browser_reset_sessions so the tab group does not linger in the user\'s tab bar: it ungroups, and closes the tabs you opened yourself while leaving the user\'s own tabs open. Report your findings after that, and do not make cleanup the user\'s job.',
       ].join(' '),
     },
   );
@@ -199,6 +226,13 @@ export async function startMcpServer(): Promise<void> {
   }
 
   await server.connect(new StdioServerTransport());
+  // Registered once the server is up: a transport that failed to connect never created a session,
+  // so there would be nothing to release. Clients end a conversation either by killing the process
+  // or by closing its stdin, so both paths are covered.
+  process.once('SIGTERM', releaseSessionOnShutdown);
+  process.once('SIGINT', releaseSessionOnShutdown);
+  process.stdin.once('end', releaseSessionOnShutdown);
+  process.stdin.once('close', releaseSessionOnShutdown);
 }
 
 function descriptionFor(tool: ToolName): string {
@@ -206,7 +240,7 @@ function descriptionFor(tool: ToolName): string {
     // Never registered: ensureSession calls it directly, so the agent never sees this one.
     'browser.start_session': 'Create this conversation\'s own session. Called by the MCP server, not by the agent.',
     'browser.claim_tab': 'Take over a tab this session does not own yet, for example a page the user already had open. The tab joins the session group unless you pass group: false, and other sessions are refused it from then on.',
-    'browser.reset_sessions': 'Release this conversation\'s own browser session and any lease whose owner is gone, which recovers tabs stuck on a conversation that no longer exists. Other conversations are left alone unless you pass force: true, which releases every session and ungroups their tabs.',
+    'browser.reset_sessions': 'Finish a browser task: release this conversation\'s session and ungroup its tabs so the group does not linger in the user\'s tab bar. It also closes the tabs this conversation opened itself, but never a tab the user already had open, so pass close_opened_tabs: false to keep them. force: true instead releases every session, including other conversations\', and only ungroups.',
     'browser.list_tabs': 'List Chrome tabs without changing the active tab. Start here to find a tab_id. Only this conversation tabs and unclaimed tabs are returned, with other_session_tabs counting what was hidden; pass include_all to see every tab.',
     'browser.get_frames': 'List the frames inside a tab: iframes and blank-src app frames included. Frame 0 is the top document. Pass a returned frame_id to page reads and element actions to work inside that frame.',
     'browser.open': 'Open a URL in Chrome, or navigate an existing tab when tab_id is given.',

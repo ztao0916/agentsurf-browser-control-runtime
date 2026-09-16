@@ -33,11 +33,13 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 | Dialogs | `browser.handle_dialog` |
 | Files | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
 | Console | `browser.get_console_messages` |
-| Sessions and tab ownership | `browser.claim_tab` / `browser.reset_sessions` |
+| Sessions and tab ownership | `browser.claim_tab` / `browser.reset_sessions` (finish a task: ungroup + close the tabs this conversation opened) |
 
 > `browser.start_session` is still part of the protocol (usable by scripts and external clients) but is **not advertised as an MCP tool**: the MCP server establishes a session per conversation automatically. See [README section 6.5](../README.en.md#65-parallel-conversations-isolated-by-default).
 
 - `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.click`, `browser.double_click`.
+- `browser.open` and `browser.claim_tab` accept an optional `name` (**the session's tab group title**, about 12 characters), which the agent sets from what the conversation is doing. Without it the group is titled after the claimed page's title — its hostname while the tab is still loading — and `AgentSurf` last.
+- `browser.reset_sessions` accepts an optional `close_opened_tabs` (**default `true`**): besides ungrouping, it closes the tabs **this conversation opened itself** — the test is a lease with `origin: agent`, so a tab the user already had open (`origin: user`) is never closed. Pass `false` to ungroup only; `closed_tab_ids` in the result lists what was closed. `force: true` only ungroups and **closes no tabs at all**.
 - `frame_id` is accepted by `browser.get_page`, `browser.get_interactives`, `browser.get_page_content`, `browser.get_console_messages`, and every element action.
 - `browser.get_interactives` accepts `limit` (default **150**), `visible_only`, `tag`, `role`, `name_contains`. Filtering and truncation happen inside the page, and the result reports `total` plus `truncated`. Measured: a 665-element page fell from ~66,800 tokens to ~15,100 by the cap alone, and to ~380 tokens with `visible_only: true`.
 - **`truncated: true` means the list is incomplete** — do not conclude the element is missing; narrow with a filter instead.
@@ -159,7 +161,7 @@ Behaviour:
 
 - responses are matched by `request_id`; timeouts, extension disconnects, and bridge shutdown all clean up pending requests and return structured errors;
 - unauthenticated messages never execute browser tools;
-- a root-level `session_id` carries tab ownership (session tools additionally read it from their own args);
+- a root-level `session_id` carries tab ownership, and is also the fallback when a tool's own `session_id` argument is omitted (`browser.claim_tab` works that way: an explicit argument wins, the root is used otherwise, and `invalid_request` is returned when neither is present);
 - native messaging framing is handled by Chrome, which validates `allowed_origins`, so the bridge token is not repeated there.
 
 `scripts/call-tool.mjs` (`npm run bridge:call`) is a working reference client: it reads the local config automatically and accepts `BROWSER_BRIDGE_URL` / `BROWSER_BRIDGE_TOKEN` overrides.

@@ -91,18 +91,28 @@ export interface StartSessionArgs {
 }
 
 export interface ClaimTabArgs {
-  session_id: string;
+  /** Defaults to the session at the request root, which is the one the MCP server always sets. */
+  session_id?: string;
   tab_id: number;
   group?: boolean;
+  /** Names the session's tab group after the conversation, overriding the page-derived title. */
+  name?: string;
 }
 
 export interface ResetSessionsArgs {
   /** Release every session, including tabs another conversation still holds. Default false. */
   force?: boolean;
+  /**
+   * Close the tabs this conversation opened itself, so a finished task leaves nothing behind. Tabs
+   * the user already had open are never closed. Default true.
+   */
+  close_opened_tabs?: boolean;
 }
 
 export interface ResetSessionsResult {
   released_tab_ids: number[];
+  /** Subset of `released_tab_ids`: the tabs opened by this conversation and closed by this call. */
+  closed_tab_ids: number[];
   session_count: number;
   /** Sessions left alone because they belong to other conversations. */
   other_sessions_kept: number;
@@ -313,6 +323,8 @@ export interface OpenArgs {
   url: string;
   tab_id?: number;
   activate?: boolean;
+  /** Names the session's tab group after the conversation, overriding the page-derived title. */
+  name?: string;
 }
 
 export interface ToolArguments {

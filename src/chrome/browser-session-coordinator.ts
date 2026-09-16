@@ -20,7 +20,9 @@ interface TabLease {
 
 const SESSIONS_STORAGE_KEY = 'browserControlSessions';
 const LEASES_STORAGE_KEY = 'browserControlTabLeases';
-const DEFAULT_GROUP_TITLE = 'AI Browser';
+const DEFAULT_GROUP_TITLE = 'AgentSurf';
+/** Tab group labels are narrow, so a long page title is cut rather than shown as a truncated blob. */
+const GROUP_TITLE_MAX_LENGTH = 24;
 
 /**
  * A conversation can disappear without ending its session (the client is closed, the process is
@@ -36,19 +38,31 @@ export function isLeaseIdle(lease: TabLease, now: number): boolean {
 }
 
 export interface SessionTitleSource {
-  session_id: string;
   name: string | null;
 }
 
 /**
- * An unnamed session still needs a group title the user can tell apart from the other conversations,
- * so the last four characters of its ID are appended (`AI · 9A12`). Sessions created by the MCP
- * layer use a random id, which makes this stable per conversation.
+ * A group is titled after the conversation when the agent named it, and after the page it holds
+ * otherwise, so the user never has to read a random session id to tell conversations apart.
  */
-export function groupTitleFor(session: SessionTitleSource): string {
-  if (session.name !== null) return session.name;
-  const tail = session.session_id.replace(/[^0-9a-zA-Z]/gu, '').slice(-4).toUpperCase();
-  return tail.length === 0 ? DEFAULT_GROUP_TITLE : `AI · ${tail}`;
+export function groupTitleFor(session: SessionTitleSource, pageLabel?: string): string {
+  const label = session.name ?? pageLabel?.trim() ?? '';
+  return label === '' ? DEFAULT_GROUP_TITLE : label.slice(0, GROUP_TITLE_MAX_LENGTH);
+}
+
+/**
+ * A loading tab reports its own URL as the title, so a URL is not usable as a label; the hostname is
+ * the honest fallback there.
+ */
+function pageLabelFor(tab: { title?: string | undefined; url?: string | undefined }): string | undefined {
+  const title = tab.title?.trim();
+  if (title !== undefined && title !== '' && !/^https?:\/\//u.test(title)) return title;
+  try {
+    const { hostname } = new URL(tab.url ?? '');
+    return hostname === '' ? undefined : hostname;
+  } catch {
+    return undefined;
+  }
 }
 
 export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
@@ -219,9 +233,12 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
   public async reset(
     sessionId: string | undefined,
     force: boolean,
-  ): Promise<{ releasedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
+    closeOpenedTabs = false,
+  ): Promise<{ releasedTabIds: number[]; closedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
     return this.enqueue(async () => {
       if (force) {
+        // Never closes tabs: force reaches other conversations, and closing their tabs would throw
+        // away work they are still doing.
         const releasedTabIds = [...this.leases.keys()];
         const sessionCount = this.sessions.size;
         for (const session of this.sessions.values()) {
@@ -230,15 +247,25 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
         this.leases.clear();
         this.sessions.clear();
         await this.persistAll();
-        return { releasedTabIds, sessionCount, otherSessionsKept: 0 };
+        return { releasedTabIds, closedTabIds: [], sessionCount, otherSessionsKept: 0 };
       }
 
       const releasedTabIds: number[] = [];
+      const closedTabIds: number[] = [];
       let sessionCount = 0;
       if (sessionId !== undefined) {
         const session = this.sessions.get(sessionId);
         if (session !== undefined) {
-          await this.ungroupManagedTabs(session, [...session.tab_ids]);
+          // Only leases written by browser.open carry origin 'agent', which is what keeps a tab the
+          // user already had open out of this list.
+          const ownedTabIds = closeOpenedTabs
+            ? session.tab_ids.filter((tabId) => this.leases.get(tabId)?.origin === 'agent')
+            : [];
+          if (ownedTabIds.length > 0) {
+            await chrome.tabs.remove(ownedTabIds).catch(() => undefined);
+            closedTabIds.push(...ownedTabIds);
+          }
+          await this.ungroupManagedTabs(session, session.tab_ids.filter((tabId) => !ownedTabIds.includes(tabId)));
           for (const tabId of session.tab_ids) {
             if (this.leases.get(tabId)?.session_id === sessionId) {
               this.leases.delete(tabId);
@@ -256,7 +283,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
         releasedTabIds.push(tabId);
       }
       await this.persistAll();
-      return { releasedTabIds, sessionCount, otherSessionsKept: this.sessions.size };
+      return { releasedTabIds, closedTabIds, sessionCount, otherSessionsKept: this.sessions.size };
     });
   }
 
@@ -306,8 +333,11 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
       ...(groupId === null ? {} : { groupId }),
     });
     session.group_id = groupId;
+    // Read the tab here rather than at the call sites: this is the only place that needs the page,
+    // and an unnamed session has no other source for its group title.
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
     await chrome.tabGroups.update(groupId, {
-      title: groupTitleFor(session),
+      title: groupTitleFor(session, tab === null ? undefined : pageLabelFor(tab)),
       color: 'blue',
       collapsed: false,
     });

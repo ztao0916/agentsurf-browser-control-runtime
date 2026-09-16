@@ -28,6 +28,50 @@ describe('tool contract schemas', () => {
     ).toThrow(ToolFailure);
   });
 
+  // The MCP server puts the conversation's session at the request root, so a claim must not demand
+  // one inside args: requiring it there is what made browser_claim_tab unusable for agents.
+  it('accepts a claim whose session comes from the request root', () => {
+    const request = parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'claim',
+      session_id: 'mcp_conversation',
+      tool: 'browser.claim_tab',
+      args: { tab_id: 42 },
+    });
+
+    expect(request.args).toEqual({ tab_id: 42 });
+    expect(request.session_id).toBe('mcp_conversation');
+  });
+
+  it('keeps an explicit claim session and the group name', () => {
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'claim',
+      tool: 'browser.claim_tab',
+      args: { session_id: 's1', tab_id: 42, group: false, name: 'AdSense 数据核对' },
+    }).args).toEqual({ session_id: 's1', tab_id: 42, group: false, name: 'AdSense 数据核对' });
+  });
+
+  it('parses the reset options and rejects a non-boolean close flag', () => {
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'reset',
+      tool: 'browser.reset_sessions',
+      args: { close_opened_tabs: false },
+    }).args).toEqual({ close_opened_tabs: false });
+
+    expect(() => parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'reset',
+      tool: 'browser.reset_sessions',
+      args: { close_opened_tabs: 'yes' },
+    })).toThrow(ToolFailure);
+  });
+
   it('parses download and file input requests', () => {
     expect(parseToolRequest({
       kind: 'tool-request',

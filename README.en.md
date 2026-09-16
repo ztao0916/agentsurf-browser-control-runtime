@@ -442,12 +442,13 @@ Console collection runs in the page's MAIN world so it sees the page's own outpu
 
 Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
 
-- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**, titled `AI · <4 chars>` by default;
+- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**;
+- **group title**: pass `name` on the first `browser_open` / `browser_claim_tab` to label the group after what this conversation is doing (about 12 characters, in the user's language, for example `AdSense 数据核对`), so the user can tell one conversation's group from another. Without it the group is titled after the claimed page's title — its hostname while the tab is still loading — and `AgentSurf` when the page gives nothing;
 - another conversation is refused those tabs (`tab_in_use`), so conversations stop stepping on each other;
 - use `browser_claim_tab` to take over a tab the user already had open: it claims and, by default, groups it (pass `group: false` to claim without moving it);
 - `browser_list_tabs` returns this conversation's tabs plus unclaimed ones and reports the rest in `other_session_tabs`; pass `include_all: true` to see every tab (for scripts and troubleshooting);
 - **leases apply to every caller**: a session-less call (a script, the CLI) is refused with `tab_in_use` on a tab another conversation holds instead of silently bypassing the check — a script that wants such a tab calls `browser.start_session` (still in the protocol, just not advertised to agents) and claims it;
-- `browser_reset_sessions` releases this conversation's leases and ungroups its tabs.
+- `browser_reset_sessions` ungroups, releases this conversation's leases, and **closes the tabs this conversation opened itself** — never a tab the user already had open.
 
 Caveats:
 
@@ -455,9 +456,10 @@ Caveats:
 - `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
 - leases live in the extension's `storage.session` (**restarting Chrome clears them**), while session records persist in `storage.local`;
 - **idle reclaim**: if a conversation is closed without a clean finish, the tabs it claimed are freed **and ungrouped** after **30 minutes of inactivity**, and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
-- **finish the job**: call `browser_reset_sessions` when the work is done — it releases this conversation's leases and ungroups immediately; otherwise the group stays until the idle timeout. It does **not** close tabs, so close them yourself with `browser_close_tab`;
+- **finish the job**: call `browser_reset_sessions` when the work is done — it ungroups, releases the leases, and **closes the tabs this conversation opened itself** immediately (a tab the user already had open is only ungrouped, not closed); otherwise the group stays until the idle timeout. Pass `close_opened_tabs: false` to keep the tabs, and read `closed_tab_ids` to see which ones went;
+- **process-exit backstop**: ending a conversation kills the MCP server process (or closes its stdin), so the process makes one best-effort `reset_sessions` before it exits. A SIGKILL cannot be caught, and that case still falls to the idle reclaim below;
 - **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
-- **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs.
+- **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs, and note that **`force` only ungroups — it never closes tabs**, because that would destroy work another conversation is still doing.
 
 ## 7. Updating, moving, uninstalling
 

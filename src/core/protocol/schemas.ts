@@ -198,15 +198,23 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         ...(name === undefined ? {} : { name }),
       };
     }
-    case 'browser.claim_tab':
+    case 'browser.claim_tab': {
+      const sessionId = optionalString(args.session_id, 'args.session_id');
+      const name = optionalString(args.name, 'args.name');
       return {
-        session_id: requireString(args.session_id, 'args.session_id'),
+        ...(sessionId === undefined ? {} : { session_id: sessionId }),
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         ...(args.group === undefined ? {} : { group: requireBoolean(args.group, 'args.group') }),
+        ...(name === undefined ? {} : { name }),
       };
+    }
     case 'browser.reset_sessions': {
       const force = optionalBoolean(args.force, 'args.force');
-      return force === undefined ? {} : { force };
+      const closeOpenedTabs = optionalBoolean(args.close_opened_tabs, 'args.close_opened_tabs');
+      return {
+        ...(force === undefined ? {} : { force }),
+        ...(closeOpenedTabs === undefined ? {} : { close_opened_tabs: closeOpenedTabs }),
+      };
     }
     case 'browser.close_tab':
     case 'browser.back':
@@ -425,10 +433,12 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
       const url = requireString(args.url, 'args.url');
       const tabId = optionalInteger(args.tab_id, 'args.tab_id');
       const activate = optionalBoolean(args.activate, 'args.activate');
+      const name = optionalString(args.name, 'args.name');
       return {
         url,
         ...(tabId === undefined ? {} : { tab_id: tabId }),
         ...(activate === undefined ? {} : { activate }),
+        ...(name === undefined ? {} : { name }),
       };
     }
   }

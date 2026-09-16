@@ -33,13 +33,15 @@
 | 对话框 | `browser.handle_dialog` |
 | 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
 | Console | `browser.get_console_messages` |
-| 会话与标签页归属 | `browser.claim_tab` / `browser.reset_sessions` |
+| 会话与标签页归属 | `browser.claim_tab` / `browser.reset_sessions`（收尾：解除分组 + 关掉本对话自己开的页签） |
 
 > `browser.start_session` 仍在协议里（脚本、外部客户端可用），但**不作为 MCP 工具暴露**：MCP Server 会为每个对话自动建立会话，见 [README 第 6.5 节](../README.md#65-多对话并行默认自动隔离)。
 
 补充说明：
 
 - 支持 `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` 的工具：`browser.press`、`browser.click`、`browser.double_click`；
+- `browser.open` 与 `browser.claim_tab` 接受可选的 `name`（**会话分组名**，建议 12 字以内）：它决定该会话 Chrome 分组的标题，由 Agent 按对话主题填写；省略时用被接管页签的标题兜底（加载中标题即 URL 时改用域名），再退到 `AgentSurf`；
+- `browser.reset_sessions` 可选 `close_opened_tabs`（**默认 `true`**）：除解除分组外，还关掉**本对话自己 `open` 出来的**页签——判据是租约的 `origin` 为 `agent`，因此用户原本就开着的页签（`origin: user`）永远不会被关。传 `false` 则只解除分组；结果里的 `closed_tab_ids` 列出被关掉的页签。`force: true` 只解除分组、**不关任何页签**；
 - 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_interactives`、`browser.get_page_content`、`browser.get_console_messages`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
 - `browser.get_interactives` 支持 `limit`（默认 **150**）、`visible_only`、`tag`、`role`、`name_contains`。**过滤与截断在页面内完成**，结果里始终给出 `total` 与 `truncated`。实测：某重页面 665 个元素，仅靠默认上限就从 ~66,800 tokens 降到 ~15,100，用 `visible_only: true` 降到 ~380；
 - **`truncated: true` 意味着列表不完整**，不能据此判定「页面上没有这个元素」，应该用过滤器缩小范围（而不是把 limit 调大）；
@@ -176,7 +178,7 @@ npm run bridge:dev    # 先构建再启动
 
 - Bridge 按 `request_id` 转发响应；超时、扩展断开、Bridge 停止都会清理待处理请求并返回结构化错误；
 - 未认证或认证失败的消息不会执行任何浏览器工具；
-- 根级 `session_id` 用于标签页归属（工具自有的 `session_id` 参数按各自 schema 处理）；
+- 根级 `session_id` 用于标签页归属，并且是工具自带 `session_id` 参数省略时的默认值（`browser.claim_tab` 就是如此：显式传入优先，否则用根级；两处都没有才报 `invalid_request`）；
 - 与扩展之间使用 Chrome Native Messaging framing，由 Chrome 校验 `allowed_origins`，不再重复传 Bridge token。
 
 开发脚本 `scripts/call-tool.mjs`（`npm run bridge:call`）即按此协议实现，可直接当作参考客户端；它通过 `BROWSER_BRIDGE_URL` / `BROWSER_BRIDGE_TOKEN` 覆盖配置，未设置时自动读本机 `config.json`。

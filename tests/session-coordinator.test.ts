@@ -28,17 +28,21 @@ describe('lease idle timeout', () => {
 });
 
 describe('session group title', () => {
-  it('shortens an unnamed session id so conversations are distinguishable', () => {
-    expect(groupTitleFor({ session_id: 'mcp_4f2a91b7-9e10-4c8d-9f31-8c77b41e9d2a', name: null }))
-      .toBe('AI · 9D2A');
+  it('prefers the name the agent gave the conversation over the page', () => {
+    expect(groupTitleFor({ name: '禅道排查' }, '首页 – Google AdSense')).toBe('禅道排查');
   });
 
-  it('prefers an explicit name', () => {
-    expect(groupTitleFor({ session_id: 'mcp_whatever', name: '禅道排查' })).toBe('禅道排查');
+  it('titles an unnamed conversation after the page it holds', () => {
+    expect(groupTitleFor({ name: null }, '首页 – Google AdSense')).toBe('首页 – Google AdSense');
   });
 
-  it('falls back when the id has no usable characters', () => {
-    expect(groupTitleFor({ session_id: '----', name: null })).toBe('AI Browser');
+  it('cuts a page title that would not fit a tab group label', () => {
+    expect(groupTitleFor({ name: null }, 'x'.repeat(50))).toHaveLength(24);
+  });
+
+  it('falls back to a neutral title when there is neither a name nor a page', () => {
+    expect(groupTitleFor({ name: null })).toBe('AgentSurf');
+    expect(groupTitleFor({ name: null }, '   ')).toBe('AgentSurf');
   });
 });
 
@@ -85,5 +89,135 @@ describe('startup cleanup of groups whose lease is gone', () => {
     const { ungroup } = stubChrome([storedLease(11), storedLease(12)]);
     await new ChromeBrowserSessionCoordinator().listLeases();
     expect(ungroup).not.toHaveBeenCalled();
+  });
+});
+
+/** Stands in for the browser: one unnamed session claiming a single tab, so the title comes from the page. */
+function stubGroupingChrome(tab: { title?: string; url?: string }): { titles: string[] } {
+  const titles: string[] = [];
+  const listener = { addListener: () => undefined };
+  vi.stubGlobal('chrome', {
+    storage: {
+      local: {
+        get: () => ({ browserControlSessions: [{ session_id: 's1', name: null, tab_ids: [], group_id: null }] }),
+        set: () => undefined,
+      },
+      session: { get: () => ({ browserControlTabLeases: [] }), set: () => undefined },
+    },
+    tabs: {
+      get: () => Promise.resolve({ id: 11, groupId: 1, ...tab }),
+      group: () => Promise.resolve(77),
+      ungroup: () => Promise.resolve(),
+      onRemoved: listener,
+      onReplaced: listener,
+      onCreated: listener,
+    },
+    tabGroups: {
+      get: () => Promise.resolve({ id: 77 }),
+      update: (_groupId: number, properties: { title?: string }) => {
+        titles.push(properties.title ?? '');
+        return Promise.resolve();
+      },
+      onRemoved: listener,
+    },
+  });
+  return { titles };
+}
+
+describe('group title taken from the page', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('titles an unnamed conversation after the loaded page', async () => {
+    const { titles } = stubGroupingChrome({ title: '首页 – Google AdSense', url: 'https://adsense.google.com/adsense/u/0/home' });
+    await new ChromeBrowserSessionCoordinator().claim('s1', undefined, 11, 'user', true);
+    expect(titles).toEqual(['首页 – Google AdSense']);
+  });
+
+  it('uses the hostname while a tab still reports its URL as the title', async () => {
+    const { titles } = stubGroupingChrome({
+      title: 'https://adsense.google.com/adsense/u/0/home',
+      url: 'https://adsense.google.com/adsense/u/0/home',
+    });
+    await new ChromeBrowserSessionCoordinator().claim('s1', undefined, 11, 'user', true);
+    expect(titles).toEqual(['adsense.google.com']);
+  });
+
+  it('retitles the group once the agent names the session', async () => {
+    const { titles } = stubGroupingChrome({ title: '首页 – Google AdSense', url: 'https://adsense.google.com/' });
+    const coordinator = new ChromeBrowserSessionCoordinator();
+    await coordinator.claim('s1', undefined, 11, 'user', true);
+    await coordinator.name('s1', 'AdSense 数据核对');
+    expect(titles).toEqual(['首页 – Google AdSense', 'AdSense 数据核对']);
+  });
+});
+
+/** One session holding two tabs: 11 was opened by this conversation, 12 is one the user already had. */
+function stubResetChrome(): { removed: number[]; ungrouped: number[] } {
+  const removed: number[] = [];
+  const ungrouped: number[] = [];
+  const listener = { addListener: () => undefined };
+  const stored = (tabId: number, origin: 'agent' | 'user') => ({
+    tab_id: tabId,
+    lease: { ...lease(Date.now(), Date.now()), origin },
+  });
+  vi.stubGlobal('chrome', {
+    storage: {
+      local: {
+        get: () => ({ browserControlSessions: [{ session_id: 's1', name: null, tab_ids: [11, 12], group_id: GROUP_ID }] }),
+        set: () => undefined,
+      },
+      session: {
+        get: () => ({ browserControlTabLeases: [stored(11, 'agent'), stored(12, 'user')] }),
+        set: () => undefined,
+      },
+    },
+    tabs: {
+      get: (tabId: number) => Promise.resolve({ id: tabId, groupId: GROUP_ID }),
+      remove: (tabIds: number[]) => {
+        removed.push(...tabIds);
+        return Promise.resolve();
+      },
+      ungroup: (tabId: number) => {
+        ungrouped.push(tabId);
+        return Promise.resolve();
+      },
+      onRemoved: listener,
+      onReplaced: listener,
+      onCreated: listener,
+    },
+    tabGroups: { get: () => Promise.resolve({ id: GROUP_ID }), update: () => Promise.resolve(), onRemoved: listener },
+  });
+  return { removed, ungrouped };
+}
+
+describe('reset closes only what this conversation opened', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('closes the tab this conversation opened and ungroups the user tab instead of closing it', async () => {
+    const { removed, ungrouped } = stubResetChrome();
+    const result = await new ChromeBrowserSessionCoordinator().reset('s1', false, true);
+    expect(removed).toEqual([11]);
+    expect(ungrouped).toEqual([12]);
+    expect(result.closedTabIds).toEqual([11]);
+    expect(result.releasedTabIds.sort()).toEqual([11, 12]);
+  });
+
+  it('closes and ungroups nothing when tab closing is declined', async () => {
+    const { removed, ungrouped } = stubResetChrome();
+    const result = await new ChromeBrowserSessionCoordinator().reset('s1', false, false);
+    expect(removed).toEqual([]);
+    expect(ungrouped).toEqual([11, 12]);
+    expect(result.closedTabIds).toEqual([]);
+  });
+
+  it('never closes tabs when force reaches other conversations', async () => {
+    const { removed } = stubResetChrome();
+    const result = await new ChromeBrowserSessionCoordinator().reset(undefined, true, true);
+    expect(removed).toEqual([]);
+    expect(result.closedTabIds).toEqual([]);
   });
 });

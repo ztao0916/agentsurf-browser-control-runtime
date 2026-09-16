@@ -66,22 +66,42 @@ export class BrowserToolRuntime {
     switch (request.tool) {
       case 'browser.start_session':
         return { session: await this.requireSessions().start(request.args.session_id, request.args.name) };
-      case 'browser.claim_tab':
+      case 'browser.claim_tab': {
+        const sessions = this.requireSessions();
+        // Args first, for an explicit handover, then the request root, which is where the MCP server
+        // puts the conversation's session on every call.
+        const sessionId = request.args.session_id ?? request.session_id;
+        if (sessionId === undefined) {
+          throw new ToolFailure(createToolError(
+            'invalid_request',
+            'browser.claim_tab needs a session_id, at the request root or in args.',
+            false,
+          ));
+        }
+        const claimed = await sessions.claim(
+          sessionId,
+          request.turn_id,
+          request.args.tab_id,
+          'user',
+          // Claiming is a handover, so the tab joins the session's group by default: that is how the
+          // user can see which conversation owns which tab. Pass group: false to leave the tab bar alone.
+          request.args.group ?? true,
+        );
+        // Renamed after the claim: the session has to exist before it can be titled, and naming it
+        // here retitles the group the claim just created.
         return {
-          session: await this.requireSessions().claim(
-            request.args.session_id,
-            request.turn_id,
-            request.args.tab_id,
-            'user',
-            // Claiming is a handover, so the tab joins the session's group by default: that is how the
-            // user can see which conversation owns which tab. Pass group: false to leave the tab bar alone.
-            request.args.group ?? true,
-          ),
+          session: request.args.name === undefined ? claimed : await sessions.name(sessionId, request.args.name),
         };
+      }
       case 'browser.reset_sessions': {
-        const reset = await this.requireSessions().reset(request.session_id, request.args.force ?? false);
+        const reset = await this.requireSessions().reset(
+          request.session_id,
+          request.args.force ?? false,
+          request.args.close_opened_tabs ?? true,
+        );
         return {
           released_tab_ids: reset.releasedTabIds,
+          closed_tab_ids: reset.closedTabIds,
           session_count: reset.sessionCount,
           other_sessions_kept: reset.otherSessionsKept,
         };
@@ -297,6 +317,11 @@ export class BrowserToolRuntime {
             // it must not leave a tab behind. Only close what this call created.
             if (request.args.tab_id === undefined) await this.tabs.close(tab.tab_id).catch(() => undefined);
             throw error;
+          }
+          // Kept outside the try: the tab is legitimately owned by now, so a naming problem must not
+          // close it.
+          if (request.args.name !== undefined) {
+            await this.requireSessions().name(request.session_id, request.args.name);
           }
         }
         return { tab } satisfies OpenResult;

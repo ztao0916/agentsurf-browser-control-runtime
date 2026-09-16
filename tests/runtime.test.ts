@@ -297,7 +297,8 @@ interface ClaimCall {
 
 class FakeSessionCoordinator implements SessionCoordinator {
   public readonly claims: ClaimCall[] = [];
-  public readonly resetCalls: Array<{ sessionId: string | undefined; force: boolean }> = [];
+  public readonly resetCalls: Array<{ sessionId: string | undefined; force: boolean; closeOpenedTabs: boolean | undefined }> = [];
+  public readonly nameCalls: Array<{ sessionId: string; name: string }> = [];
   /** tab_id → owning session_id, as the runtime sees it when filtering list_tabs. */
   public owners = new Map<number, string>();
 
@@ -313,13 +314,18 @@ class FakeSessionCoordinator implements SessionCoordinator {
     return Promise.resolve({ releasedTabIds: [] });
   }
 
-  public reset(sessionId: string | undefined, force: boolean): Promise<{ releasedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
-    this.resetCalls.push({ sessionId, force });
-    return Promise.resolve({ releasedTabIds: [42], sessionCount: 1, otherSessionsKept: 2 });
+  public reset(
+    sessionId: string | undefined,
+    force: boolean,
+    closeOpenedTabs?: boolean,
+  ): Promise<{ releasedTabIds: number[]; closedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
+    this.resetCalls.push({ sessionId, force, closeOpenedTabs });
+    return Promise.resolve({ releasedTabIds: [42], closedTabIds: [8], sessionCount: 1, otherSessionsKept: 2 });
   }
 
-  public name(sessionId: string): Promise<BrowserSessionInfo> {
-    return Promise.resolve(sessionInfo(sessionId));
+  public name(sessionId: string, name?: string): Promise<BrowserSessionInfo> {
+    if (name !== undefined) this.nameCalls.push({ sessionId, name });
+    return Promise.resolve({ ...sessionInfo(sessionId), name: name ?? null });
   }
 
   public claim(
@@ -618,6 +624,59 @@ describe('BrowserToolRuntime', () => {
     expect(sessions.claims.at(-1)).toEqual({ sessionId: 's1', tabId: 7, origin: 'agent', group: false });
   });
 
+  it('claims with the request-root session when args carries none', async () => {
+    const sessions = new FakeSessionCoordinator();
+    const runtimeWithSessions = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      sessions,
+    );
+
+    const response = await runtimeWithSessions.handle(request('browser.claim_tab', { tab_id: 42 }, 'mcp_conversation'));
+    expect(response.ok).toBe(true);
+    expect(sessions.claims.at(-1)).toEqual({ sessionId: 'mcp_conversation', tabId: 42, origin: 'user', group: true });
+  });
+
+  it('reports a missing claim session instead of failing deep in the coordinator', async () => {
+    const runtimeWithSessions = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      new FakeSessionCoordinator(),
+    );
+
+    const response = await runtimeWithSessions.handle(request('browser.claim_tab', { tab_id: 42 }));
+    expect(response.ok).toBe(false);
+    if (!response.ok) expect(response.error.code).toBe('invalid_request');
+  });
+
+  it('names the session when claim_tab or open carries a name', async () => {
+    const sessions = new FakeSessionCoordinator();
+    const runtimeWithSessions = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      sessions,
+    );
+
+    const claimed = await runtimeWithSessions.handle(
+      request('browser.claim_tab', { session_id: 's1', tab_id: 42, name: 'AdSense 数据核对' }),
+    );
+    expect(sessions.nameCalls).toEqual([{ sessionId: 's1', name: 'AdSense 数据核对' }]);
+    expect(claimed.ok && claimed.result).toMatchObject({ session: { name: 'AdSense 数据核对' } });
+
+    await runtimeWithSessions.handle(
+      request('browser.open', { url: 'https://open.example/', name: '线上排障' }, 's1'),
+    );
+    expect(sessions.nameCalls.at(-1)).toEqual({ sessionId: 's1', name: '线上排障' });
+
+    // Unnamed calls must not rename an already-named session.
+    await runtimeWithSessions.handle(request('browser.claim_tab', { session_id: 's1', tab_id: 43 }));
+    await runtimeWithSessions.handle(request('browser.open', { url: 'https://open.example/' }, 's1'));
+    expect(sessions.nameCalls).toHaveLength(2);
+  });
+
   it('routes reset_sessions to the coordinator with the caller session and the force flag', async () => {
     const sessions = new FakeSessionCoordinator();
     const runtimeWithSessions = new BrowserToolRuntime(
@@ -630,12 +689,21 @@ describe('BrowserToolRuntime', () => {
     const response = await runtimeWithSessions.handle(request('browser.reset_sessions', {}, 'my_session'));
     expect(response.ok).toBe(true);
     if (response.ok) {
-      expect(response.result).toEqual({ released_tab_ids: [42], session_count: 1, other_sessions_kept: 2 });
+      expect(response.result).toEqual({
+        released_tab_ids: [42],
+        closed_tab_ids: [8],
+        session_count: 1,
+        other_sessions_kept: 2,
+      });
     }
-    expect(sessions.resetCalls).toEqual([{ sessionId: 'my_session', force: false }]);
+    // Closing the tabs this conversation opened is the default, so a finished task leaves nothing behind.
+    expect(sessions.resetCalls).toEqual([{ sessionId: 'my_session', force: false, closeOpenedTabs: true }]);
+
+    await runtimeWithSessions.handle(request('browser.reset_sessions', { close_opened_tabs: false }, 'my_session'));
+    expect(sessions.resetCalls.at(-1)).toEqual({ sessionId: 'my_session', force: false, closeOpenedTabs: false });
 
     await runtimeWithSessions.handle(request('browser.reset_sessions', { force: true }));
-    expect(sessions.resetCalls.at(-1)).toEqual({ sessionId: undefined, force: true });
+    expect(sessions.resetCalls.at(-1)).toEqual({ sessionId: undefined, force: true, closeOpenedTabs: true });
   });
 
   it('hides tabs another session holds, unless include_all is set', async () => {
