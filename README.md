@@ -198,6 +198,32 @@ Pending   0
 {
   "mcpServers": {
     "agentsurf": {
+      "command": "C:/Users/<用户名>/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
+    }
+  }
+}
+```
+
+注意两点：
+
+- **没有 `args`**。第 4.4 步的安装脚本会生成这个启动器，并把现成的 JSON 直接打印到终端——**照抄打印出来的那段即可**，不用自己拼路径；
+- 启动器里记录了当前的 Node 路径与项目路径。**换电脑、移动项目目录、切 Node 版本后，重跑一次第 4.4 步的安装命令就会重新生成它**（和 Native Host 用的是同一条命令，不需要额外步骤）。
+
+注意事项：
+
+- 修改 MCP 配置后需要**重启 MCP 客户端**（或它的会话），配置只在启动时读取；
+- 该项目不需要任何环境变量，MCP Server 会自动读取第 4.4 步生成的 `config.json`；
+- 如需覆盖连接目标，可设置 `BROWSER_BRIDGE_URL`、`BROWSER_BRIDGE_TOKEN` 或 `BROWSER_BRIDGE_CONFIG`。
+
+<details>
+<summary>备选写法：不用启动器，直接指向 node 与 cli.js</summary>
+
+如果客户端要求显式给出解释器（或你想自己控制路径）：
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
       "command": "C:/Program Files/nodejs/node.exe",
       "args": ["C:/Users/<用户名>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
     }
@@ -205,22 +231,14 @@ Pending   0
 }
 ```
 
-把两条路径换成你自己的实际路径：
-
 ```powershell
-# Node 可执行文件路径
-(Get-Command node).Source
-# MCP Server 入口路径
-(Resolve-Path dist/mcp/cli.js).Path
+(Get-Command node).Source          # Node 可执行文件路径
+(Resolve-Path dist/mcp/cli.js).Path  # MCP Server 入口路径
 ```
 
-注意事项：
+代价：两条绝对路径都要自己维护，而且客户端的 `PATH` 必须能看到 `node`（GUI 客户端不一定）。启动器写法把这些都包在里面了。
 
-- **用绝对路径**。MCP 客户端常常是 GUI 应用，它的 `PATH` 不一定包含 nvm/Node 的安装目录；
-- 路径写正斜杠 `/` 或双反斜杠 `\\` 都可以，不要写单个反斜杠；
-- 修改 MCP 配置后需要**重启 MCP 客户端**（或它的会话），配置只在启动时读取；
-- 该项目不需要任何环境变量，MCP Server 会自动读取第 4.4 步生成的 `config.json`；
-- 如需覆盖连接目标，可设置 `BROWSER_BRIDGE_URL`、`BROWSER_BRIDGE_TOKEN` 或 `BROWSER_BRIDGE_CONFIG`。
+</details>
 
 ### 4.8 在 Agent 里确认工具可用
 
@@ -261,7 +279,8 @@ npm run native-host:install:macos -- "<扩展ID>"
 | 文件 | 路径 |
 | --- | --- |
 | 配置（仅当前用户可读写） | `~/Library/Application Support/BrowserControlRuntime/config.json` |
-| 可执行启动脚本 | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
+| Native Host 启动脚本 | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
+| MCP 启动器（给 MCP 客户端用） | `~/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh` |
 | Native Messaging manifest | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
 
 要点：
@@ -280,14 +299,15 @@ npm run native-host:install:macos -- "<扩展ID>"
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "/usr/local/bin/node",
-      "args": ["/Users/<用户名>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
+      "command": "/Users/<用户名>/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
     }
   }
 }
 ```
 
-取真实路径：`which node` 与 `realpath dist/mcp/cli.js`。
+同样由第 5.2 步的安装脚本生成，终端会直接打印这段 JSON。换机器、移动项目或切 Node 后重跑安装命令即可更新。
+
+备选写法：`command` 写 node 路径、`args` 写 `dist/mcp/cli.js` 的绝对路径（`which node` / `realpath dist/mcp/cli.js` 取路径），代价是两条路径都要自己维护。
 
 ## 6. 验证接入是否成功
 
@@ -933,6 +953,32 @@ Add this to your agent's MCP config (example is pi's `~/.pi/agent/mcp.json`; oth
 {
   "mcpServers": {
     "agentsurf": {
+      "command": "C:/Users/<user>/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
+    }
+  }
+}
+```
+
+Two things to notice:
+
+- **There are no `args`.** The installer from 4.4 builds this launcher and prints the finished JSON to the terminal, so you copy what it printed instead of assembling paths yourself;
+- the launcher records the Node path and the project path it was built with. **A new machine, a moved project, or a switched Node version is fixed by re-running the 4.4 install command** — the same single command that also re-registers the native host.
+
+Notes:
+
+- **restart the MCP client** after editing its config; it is read at startup;
+- no environment variables are required: the server reads the `config.json` written in 4.4;
+- to override the connection, set `BROWSER_BRIDGE_URL`, `BROWSER_BRIDGE_TOKEN`, or `BROWSER_BRIDGE_CONFIG`.
+
+<details>
+<summary>Alternative: point at node and cli.js directly</summary>
+
+Use this if a client insists on an explicit interpreter, or if you prefer to own the paths:
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
       "command": "C:/Program Files/nodejs/node.exe",
       "args": ["C:/Users/<user>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
     }
@@ -940,20 +986,14 @@ Add this to your agent's MCP config (example is pi's `~/.pi/agent/mcp.json`; oth
 }
 ```
 
-Resolve both paths on your machine:
-
 ```powershell
 (Get-Command node).Source              # node executable
 (Resolve-Path dist/mcp/cli.js).Path    # MCP server entry point
 ```
 
-Notes:
+The cost: you maintain two absolute paths, and `node` must be on the client's `PATH` (GUI clients often have a narrow one). The launcher hides all of that.
 
-- **Use absolute paths.** MCP clients are often GUI apps whose `PATH` does not include nvm or a Node install;
-- forward slashes `/` or escaped `\\` both work — a single backslash does not;
-- **restart the MCP client** after editing its config; it is read at startup;
-- no environment variables are required: the server reads the `config.json` written in 4.4;
-- to override the connection, set `BROWSER_BRIDGE_URL`, `BROWSER_BRIDGE_TOKEN`, or `BROWSER_BRIDGE_CONFIG`.
+</details>
 
 ### 4.8 Confirm the tools
 
@@ -994,7 +1034,8 @@ Port 8765 by default; append another port to override. Files created:
 | File | Path |
 | --- | --- |
 | Config (user-only) | `~/Library/Application Support/BrowserControlRuntime/config.json` |
-| Launcher script | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
+| Native host launcher | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
+| MCP launcher (for the MCP client) | `~/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh` |
 | Native messaging manifest | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
 
 Notes:
@@ -1013,14 +1054,15 @@ Reload AgentSurf, then open `chrome-extension://<EXTENSION_ID>/debug.html` and c
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "/usr/local/bin/node",
-      "args": ["/Users/<user>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
+      "command": "/Users/<user>/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
     }
   }
 }
 ```
 
-Get the real paths with `which node` and `realpath dist/mcp/cli.js`.
+Built by the 5.2 installer, which prints this block for you. Re-run that command after moving the project, changing machine, or switching Node.
+
+Alternative: `command` as the node path plus `args` with the absolute `dist/mcp/cli.js` (from `which node` and `realpath dist/mcp/cli.js`) — two paths to maintain yourself.
 
 ## 6. Verifying the setup
 
