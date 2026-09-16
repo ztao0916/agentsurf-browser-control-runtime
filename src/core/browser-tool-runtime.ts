@@ -123,8 +123,12 @@ export class BrowserToolRuntime {
           released_tab_id: request.args.tab_id,
         };
       case 'browser.reset_sessions': {
-        const reset = await this.requireSessions().reset();
-        return { released_tab_ids: reset.releasedTabIds, session_count: reset.sessionCount };
+        const reset = await this.requireSessions().reset(request.session_id, request.args.force ?? false);
+        return {
+          released_tab_ids: reset.releasedTabIds,
+          session_count: reset.sessionCount,
+          other_sessions_kept: reset.otherSessionsKept,
+        };
       }
       case 'browser.close_tab':
         await this.assertSessionAccess(request.session_id, request.args.tab_id);

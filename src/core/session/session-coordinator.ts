@@ -11,6 +11,13 @@ export interface SessionCoordinator {
   assertAccess(sessionId: string | undefined, tabId: number): Promise<void>;
   /** Live leases as tab_id → owning session_id; tabs owned by nobody are absent. */
   listLeases(): Promise<Map<number, string>>;
-  /** Escape hatch: drop every session and lease, for tabs stuck on a conversation that is gone. */
-  reset(): Promise<{ releasedTabIds: number[]; sessionCount: number }>;
+  /**
+   * Escape hatch for tabs stuck on a conversation that is gone. Without `force` it releases the
+   * caller's own session plus leases that have no owner, and leaves other sessions alone.
+   */
+  reset(sessionId: string | undefined, force: boolean): Promise<{
+    releasedTabIds: number[];
+    sessionCount: number;
+    otherSessionsKept: number;
+  }>;
 }

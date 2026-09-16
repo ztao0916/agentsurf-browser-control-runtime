@@ -124,9 +124,16 @@ export interface ReleaseTabArgs {
   tab_id: number;
 }
 
+export interface ResetSessionsArgs {
+  /** Release every session, including tabs another conversation still holds. Default false. */
+  force?: boolean;
+}
+
 export interface ResetSessionsResult {
   released_tab_ids: number[];
   session_count: number;
+  /** Sessions left alone because they belong to other conversations. */
+  other_sessions_kept: number;
 }
 
 export interface TabTargetArgs {
@@ -395,7 +402,7 @@ export interface ToolArguments {
   'browser.name_session': NameSessionArgs;
   'browser.claim_tab': ClaimTabArgs;
   'browser.release_tab': ReleaseTabArgs;
-  'browser.reset_sessions': Record<string, never>;
+  'browser.reset_sessions': ResetSessionsArgs;
   'browser.close_tab': TabTargetArgs;
   'browser.back': TabTargetArgs;
   'browser.forward': TabTargetArgs;

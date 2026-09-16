@@ -231,8 +231,10 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         session_id: requireString(args.session_id, 'args.session_id'),
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
       };
-    case 'browser.reset_sessions':
-      return {};
+    case 'browser.reset_sessions': {
+      const force = optionalBoolean(args.force, 'args.force');
+      return force === undefined ? {} : { force };
+    }
     case 'browser.close_tab':
     case 'browser.back':
     case 'browser.forward':

@@ -213,20 +213,50 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
   }
 
   /**
-   * Releases every session and lease. This is the escape hatch for a conversation that was closed
-   * without ending its session: without it those tabs stay owned until Chrome restarts.
+   * Releases the caller's own session and any lease whose owner is gone. Wiping every session needs
+   * force: true, because that also drops tabs another conversation is still using.
    */
-  public async reset(): Promise<{ releasedTabIds: number[]; sessionCount: number }> {
+  public async reset(
+    sessionId: string | undefined,
+    force: boolean,
+  ): Promise<{ releasedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
     return this.enqueue(async () => {
-      const releasedTabIds = [...this.leases.keys()];
-      const sessionCount = this.sessions.size;
-      for (const session of this.sessions.values()) {
-        await this.ungroupManagedTabs(session, [...session.tab_ids]);
+      if (force) {
+        const releasedTabIds = [...this.leases.keys()];
+        const sessionCount = this.sessions.size;
+        for (const session of this.sessions.values()) {
+          await this.ungroupManagedTabs(session, [...session.tab_ids]);
+        }
+        this.leases.clear();
+        this.sessions.clear();
+        await this.persistAll();
+        return { releasedTabIds, sessionCount, otherSessionsKept: 0 };
       }
-      this.leases.clear();
-      this.sessions.clear();
+
+      const releasedTabIds: number[] = [];
+      let sessionCount = 0;
+      if (sessionId !== undefined) {
+        const session = this.sessions.get(sessionId);
+        if (session !== undefined) {
+          await this.ungroupManagedTabs(session, [...session.tab_ids]);
+          for (const tabId of session.tab_ids) {
+            if (this.leases.get(tabId)?.session_id === sessionId) {
+              this.leases.delete(tabId);
+              releasedTabIds.push(tabId);
+            }
+          }
+          this.sessions.delete(sessionId);
+          sessionCount = 1;
+        }
+      }
+      // Leases left behind by a session that no longer exists only block tabs, so always drop them.
+      for (const [tabId, lease] of [...this.leases]) {
+        if (this.sessions.has(lease.session_id)) continue;
+        this.leases.delete(tabId);
+        releasedTabIds.push(tabId);
+      }
       await this.persistAll();
-      return { releasedTabIds, sessionCount };
+      return { releasedTabIds, sessionCount, otherSessionsKept: this.sessions.size };
     });
   }
 

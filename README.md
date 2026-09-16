@@ -453,7 +453,7 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查�
 - 主动 `browser.open` 一个已有 `tab_id`（即导航已有页签）会建立归属但**不**动你的标签栏；
 - 租约存在扩展的 `storage.session` 里（**Chrome 重启即清空**），会话记录在 `storage.local` 里是持久的；
 - **空闲自动回收**：某个对话被直接关掉（没调 `end_session`）时，它占用过的页签在**空闲 30 分钟**后自动释放，别的对话即可接管；正在使用的页签会续租，不会被误抢；
-- **手动兜底**：`browser.reset_sessions` 一次性释放所有会话与租约并解除分组，用于页签被一个已经消失的对话卡住的情况。
+- **手动兜底**：`browser.reset_sessions` 默认只释放**本对话自己的**会话与租约，并顺带清掉“拥有者已不存在”的租约（正是页签被消失的对话卡住的情形）；它**不会**动别的对话，返回值里的 `other_sessions_kept` 会告诉你还有几个会话没动。确实需要清全局（会释放并解除所有人的分组）时才传 `force: true`。
 
 ## 8. 更新、移动目录、卸载
 
@@ -1206,7 +1206,7 @@ Caveats:
 - `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
 - leases live in the extension's `storage.session` (**restarting Chrome clears them**), while session records persist in `storage.local`;
 - **idle reclaim**: if a conversation is closed without calling `end_session`, the tabs it claimed are freed after **30 minutes of inactivity** and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
-- **manual escape hatch**: `browser_reset_sessions` releases every session and lease at once and ungroups their tabs, for tabs stuck on a conversation that is gone.
+- **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs.
 
 ## 8. Updating, moving, uninstalling
 

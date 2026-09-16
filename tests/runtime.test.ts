@@ -297,7 +297,7 @@ interface ClaimCall {
 
 class FakeSessionCoordinator implements SessionCoordinator {
   public readonly claims: ClaimCall[] = [];
-  public resetCount = 0;
+  public readonly resetCalls: Array<{ sessionId: string | undefined; force: boolean }> = [];
   /** tab_id → owning session_id, as the runtime sees it when filtering list_tabs. */
   public owners = new Map<number, string>();
 
@@ -313,9 +313,9 @@ class FakeSessionCoordinator implements SessionCoordinator {
     return Promise.resolve({ releasedTabIds: [] });
   }
 
-  public reset(): Promise<{ releasedTabIds: number[]; sessionCount: number }> {
-    this.resetCount += 1;
-    return Promise.resolve({ releasedTabIds: [42], sessionCount: 2 });
+  public reset(sessionId: string | undefined, force: boolean): Promise<{ releasedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
+    this.resetCalls.push({ sessionId, force });
+    return Promise.resolve({ releasedTabIds: [42], sessionCount: 1, otherSessionsKept: 2 });
   }
 
   public name(sessionId: string): Promise<BrowserSessionInfo> {
@@ -619,7 +619,7 @@ describe('BrowserToolRuntime', () => {
     expect(sessions.claims.at(-1)).toEqual({ sessionId: 's1', tabId: 7, origin: 'agent', group: false });
   });
 
-  it('routes reset_sessions to the coordinator', async () => {
+  it('routes reset_sessions to the coordinator with the caller session and the force flag', async () => {
     const sessions = new FakeSessionCoordinator();
     const runtimeWithSessions = new BrowserToolRuntime(
       new FakeTabsAdapter(),
@@ -628,12 +628,15 @@ describe('BrowserToolRuntime', () => {
       sessions,
     );
 
-    const response = await runtimeWithSessions.handle(request('browser.reset_sessions', {}));
+    const response = await runtimeWithSessions.handle(request('browser.reset_sessions', {}, 'my_session'));
     expect(response.ok).toBe(true);
     if (response.ok) {
-      expect(response.result).toEqual({ released_tab_ids: [42], session_count: 2 });
+      expect(response.result).toEqual({ released_tab_ids: [42], session_count: 1, other_sessions_kept: 2 });
     }
-    expect(sessions.resetCount).toBe(1);
+    expect(sessions.resetCalls).toEqual([{ sessionId: 'my_session', force: false }]);
+
+    await runtimeWithSessions.handle(request('browser.reset_sessions', { force: true }));
+    expect(sessions.resetCalls.at(-1)).toEqual({ sessionId: undefined, force: true });
   });
 
   it('hides tabs another session holds, unless include_all is set', async () => {
