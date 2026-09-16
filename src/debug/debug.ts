@@ -70,23 +70,39 @@ function addEvent(event: NativeTransportEvent): void {
   renderEvents();
 }
 
+function setResult(text: string, isError = false): void {
+  result.textContent = text;
+  result.style.color = isError ? '#d93025' : '#1e8e3e';
+}
+
 async function refresh(): Promise<void> {
-  const response = await sendRuntimeMessage({ kind: 'transport-control', action: 'get-state' } satisfies TransportControlRequest);
-  if (isTransportControlResponse(response) && response.ok) renderState(response.state);
+  try {
+    const response = await sendRuntimeMessage({ kind: 'transport-control', action: 'get-state' } satisfies TransportControlRequest);
+    if (isTransportControlResponse(response) && response.ok) {
+      renderState(response.state);
+      return;
+    }
+    setResult('The extension service worker returned an unusable state.', true);
+  } catch (error: unknown) {
+    // Without this the card would sit on "loading…" and read as if the link were down.
+    setResult(`Cannot reach the extension service worker: ${error instanceof Error ? error.message : String(error)}`, true);
+  }
 }
 
 async function control(action: 'connect' | 'disconnect' | 'reconnect'): Promise<void> {
-  result.textContent = '';
+  setResult('');
   const response = await sendRuntimeMessage({ kind: 'transport-control', action } satisfies TransportControlRequest);
   if (isTransportControlResponse(response) && response.ok) {
     renderState(response.state);
     return;
   }
   // The service worker also reports failures as events; this covers a rejected message.
-  result.textContent = isTransportControlResponse(response) && !response.ok
-    ? response.error.message
-    : 'The extension service worker did not answer.';
-  result.style.color = '#d93025';
+  setResult(
+    isTransportControlResponse(response) && !response.ok
+      ? response.error.message
+      : 'The extension service worker did not answer.',
+    true,
+  );
 }
 
 /**
@@ -113,11 +129,9 @@ function diagnosticsText(): string {
 async function copyDiagnostics(): Promise<void> {
   try {
     await navigator.clipboard.writeText(diagnosticsText());
-    result.style.color = '#1e8e3e';
-    result.textContent = 'Diagnostics copied.';
+    setResult('Diagnostics copied.');
   } catch (error: unknown) {
-    result.style.color = '#d93025';
-    result.textContent = `Could not copy: ${error instanceof Error ? error.message : String(error)}`;
+    setResult(`Could not copy: ${error instanceof Error ? error.message : String(error)}`, true);
   }
 }
 
