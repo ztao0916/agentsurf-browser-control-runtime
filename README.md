@@ -167,9 +167,9 @@ npm run native-host:install -- -ExtensionId $extensionId
 
 扩展重新加载后会自动 `connectNative`，拉起 Native Host 与 Bridge。
 
-### 4.6 用调试页确认链路
+### 4.6 用状态页确认链路
 
-Chrome 打开：
+Chrome 打开（也可以直接点工具栏上的 AgentSurf 图标，弹的就是同一页）：
 
 ```text
 chrome-extension://<扩展ID>/debug.html
@@ -178,14 +178,16 @@ chrome-extension://<扩展ID>/debug.html
 期望看到：
 
 ```text
-Connection: connected
-Agent endpoint: ws://127.0.0.1:8765
+● connected
+Host      com.browsercontrol.runtime
+Endpoint  ws://127.0.0.1:8765
+Pending   0
 ```
 
 如果显示未连接：
 
 1. 点一次 **Disconnect**，等 1 秒；
-2. 再点 **Connect native host**；
+2. 再点 **Connect**；
 3. 不要连续点 Reconnect（会造成重连风暴）。
 
 ### 4.7 配置 MCP 客户端
@@ -502,7 +504,7 @@ npm run native-host:uninstall:macos
 ### 9.2 定位顺序
 
 1. `chrome://extensions`：扩展是否启用？有没有报错？
-2. `debug.html`：连接状态与事件日志（Connect / 请求 / 响应）；
+2. `debug.html`（或点工具栏图标）：连接状态与最近事件；
 3. 端口是否有监听（见 6.1）；
 4. `node scripts/call-tool.mjs ...`（见 6.2）区分链路问题与 MCP 配置问题；
 5. 必要时打开扩展的 **Service Worker 检查窗口**看 Native Messaging 报错。
@@ -604,13 +606,26 @@ AgentSurf 能操作你登录态下的页面，`browser.cdp`、文件上传等能
 
 `npm run build` 由两部分组成：`scripts/generate-icons.mjs`（图标）与 `scripts/build.mjs`（esbuild 打包扩展、Bridge、MCP Server，以及**自包含**的 Native Host bundle）。
 
-### 13.2 扩展调试页
+### 13.2 扩展状态页
 
-`chrome-extension://<扩展ID>/debug.html`，用的是与 MCP 相同的 `browser.*` 协议，可以直接查询标签页、页面状态、交互元素，并执行点击/输入/滚动/截图。
+`chrome-extension://<扩展ID>/debug.html`，也是点工具栏 AgentSurf 图标时弹出的那一页。它**只做一件代码里做不到的事**：告诉你看得见的链路状态，并在断连时能强制重连。
 
-- 先在下拉框选择普通 HTTP/HTTPS 页面；
-- 元素操作先 Get interactives，再用返回的 `element_id`；
-- 截图结果里的 Data URL 只做缩略展示，不要把完整图像数据写进日志。
+页面上只有：
+
+- 连接状态（`connected` / `connecting` / `reconnecting` / `error` / `disconnected`）与最近的错误文本；
+- Host、Endpoint、Pending（含重连次数）；
+- `Connect` / `Disconnect` / `Reconnect` 三个按钮；
+- 最近 30 条连接事件；
+- `Copy diagnostics`：把状态、扩展版本、浏览器 UA 与最近事件复制到剪贴板，方便直接粘给 Agent 或写进 issue（**不含 token**）。
+
+其余手工工具面板（标签页、元素操作、坐标、截图、文件、CDP、原始报文日志）已经移除：这些都用代码驱动更省事：
+
+```powershell
+# 不经 MCP，直接验证链路（见 6.2）
+npm run bridge:call -- '{"protocol_version":"1","request_id":"t","tool":"browser.list_tabs","args":{}}'
+```
+
+需要看返回结果、批量跑工具或做断点调试时，直接用 MCP 工具或 `scripts/call-tool.mjs`。
 
 ### 13.3 独立 Bridge（仅协议开发）
 
@@ -694,7 +709,7 @@ npm run bridge:dev    # 先构建再启动
 | `src/bridge/` | 本机 WebSocket Bridge |
 | `src/mcp/` | MCP Server、Bridge 客户端、Native Host 安装 CLI |
 | `src/native-host/` | Native Host 入口、配置与 framing |
-| `src/debug/` | 扩展调试页 |
+| `src/debug/` | 扩展状态页（连接状态、重连、诊断导出） |
 | `scripts/` | 构建、安装与开发调用脚本 |
 | `tests/` | 单元测试 |
 | `docs/` | 改造与验证报告 |
@@ -887,9 +902,9 @@ Re-running keeps the existing valid token, so your MCP config stays valid when y
 
 Back in `chrome://extensions`, press **Reload** (🔄) on the AgentSurf card. The extension then calls `connectNative`, which starts the native host and the bridge.
 
-### 4.6 Confirm the link in the debug page
+### 4.6 Confirm the link on the status page
 
-Open:
+Open in Chrome (or just click the AgentSurf toolbar icon — it is the same page):
 
 ```text
 chrome-extension://<EXTENSION_ID>/debug.html
@@ -898,11 +913,13 @@ chrome-extension://<EXTENSION_ID>/debug.html
 Expected:
 
 ```text
-Connection: connected
-Agent endpoint: ws://127.0.0.1:8765
+● connected
+Host      com.browsercontrol.runtime
+Endpoint  ws://127.0.0.1:8765
+Pending   0
 ```
 
-If it is not connected: click **Disconnect**, wait a second, then **Connect native host**. Do not hammer Reconnect.
+If it is not connected: click **Disconnect**, wait a second, then **Connect**. Do not hammer Reconnect.
 
 ### 4.7 Configure the MCP client
 
@@ -1197,7 +1214,7 @@ This removes the native host registration and launcher, **keeps the config**, an
 ### 9.2 Order of investigation
 
 1. `chrome://extensions` — enabled? any error?
-2. `debug.html` — connection state and event log;
+2. `debug.html` (or the toolbar icon) — connection state and recent events;
 3. is anything listening on the port (6.1);
 4. `node scripts/call-tool.mjs ...` (6.2) to separate a link problem from an MCP config problem;
 5. the extension's **Service Worker inspector** for native messaging errors.
@@ -1295,11 +1312,17 @@ These are **instructions for the agent**, not an enforced approval layer. The ca
 
 `npm run build` runs `scripts/generate-icons.mjs` and `scripts/build.mjs` (esbuild bundling for the extension, the bridge, the MCP server, and a fully self-contained native host bundle).
 
-### 13.2 Extension debug page
+### 13.2 Extension status page
 
-`chrome-extension://<EXTENSION_ID>/debug.html` speaks the same `browser.*` protocol as MCP: list tabs, read page state, read interactive elements, click, type, scroll, screenshot.
+`chrome-extension://<EXTENSION_ID>/debug.html` is also what the toolbar icon opens. It does **only the one thing code cannot**: show you the link state and let you force a reconnect.
 
-Element actions need a `get_interactives` call first. Screenshot Data URLs are shown as thumbnails — do not log the full payload.
+It contains: the connection state (`connected` / `connecting` / `reconnecting` / `error` / `disconnected`) with the last error text, the host name, the endpoint, the pending request count, `Connect` / `Disconnect` / `Reconnect`, the last 30 connection events, and `Copy diagnostics` — which copies the state, extension version, user agent, and recent events (never the token) so you can paste them into a chat or an issue.
+
+The manual tool panels were removed (tabs, element actions, coordinates, screenshots, files, CDP, raw protocol logs). Driving those from code is less work:
+
+```powershell
+npm run bridge:call -- '{"protocol_version":"1","request_id":"t","tool":"browser.list_tabs","args":{}}'
+```
 
 ### 13.3 Standalone bridge (protocol work only)
 
