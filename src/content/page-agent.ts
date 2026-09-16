@@ -81,13 +81,18 @@ if (!window[INSTALLATION_KEY]) {
             },
           });
         case 'click':
-          return success(request, { action: 'click', result: executor.click(request.element_id) });
+          return success(request, { action: 'click', result: executor.click(request.element_id, request.modifiers ?? []) });
         case 'double-click':
-          return success(request, { action: 'double-click', result: executor.doubleClick(request.element_id) });
+          return success(request, { action: 'double-click', result: executor.doubleClick(request.element_id, request.modifiers ?? []) });
         case 'type':
           return success(request, { action: 'type', result: executor.type(request.element_id, request.text) });
         case 'press':
-          return success(request, { action: 'press', result: executor.press(request.element_id, request.key) });
+          return success(request, { action: 'press', result: executor.press(request.element_id, request.key, request.modifiers) });
+        case 'select-text':
+          return success(request, {
+            action: 'select-text',
+            result: executor.selectText(request.element_id, request.text, request.selection_type),
+          });
         case 'set-checked':
           return success(request, { action: 'set-checked', result: executor.setChecked(request.element_id, request.checked) });
         case 'select-option':
@@ -140,6 +145,7 @@ type SuccessPayload =
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'double-click' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'type' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'press' }>, 'action' | 'result'>
+  | Pick<Extract<PageAgentResponse, { ok: true; action: 'select-text' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'set-checked' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'select-option' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'drag' }>, 'action' | 'result'>

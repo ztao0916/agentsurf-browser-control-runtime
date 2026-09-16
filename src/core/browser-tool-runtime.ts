@@ -9,6 +9,7 @@ import type {
   ScrollResult,
   ScreenshotArgs,
   ScreenshotResult,
+  SelectTextResult,
   ObserveResult,
   TabInfo,
   ToolRequest,
@@ -20,11 +21,13 @@ import type {
 import type { SessionCoordinator } from './session/session-coordinator';
 import type { DebuggerAdapter } from '../chrome/debugger-adapter';
 import { TOOL_NAMES } from './protocol/schemas';
+import { TOP_FRAME_ID } from './protocol/tool-contract';
 import type { PageAgentClient } from '../chrome/scripting-adapter';
 import type { TabsAdapter } from '../chrome/tabs-adapter';
 import type { ScreenshotAdapter } from '../chrome/screenshot-adapter';
 import type { DownloadAdapter } from '../chrome/download-adapter';
 import type { NetworkAdapter } from '../chrome/network-adapter';
+import type { FrameAdapter } from '../chrome/frames-adapter';
 import { describeKey } from './key-descriptors';
 import type { ConsoleEntry, GetConsoleMessagesArgs, GetConsoleMessagesResult } from './protocol/tool-contract';
 
@@ -37,6 +40,7 @@ export class BrowserToolRuntime {
     private readonly debuggerAdapter?: DebuggerAdapter,
     private readonly downloads?: DownloadAdapter,
     private readonly network?: NetworkAdapter,
+    private readonly frames?: FrameAdapter,
   ) {}
 
   public handle<TTool extends ToolName>(request: ToolRequest<TTool>): Promise<ToolResponse<TTool>>;
@@ -81,9 +85,10 @@ export class BrowserToolRuntime {
             file_upload: true,
             agent_cursor: true,
             top_level_document: true,
+            frames: true,
             page_content: true,
             page_images: true,
-            iframes: false,
+            iframes: true,
             shadow_dom: false,
           },
         };
@@ -163,12 +168,12 @@ export class BrowserToolRuntime {
       }
       case 'browser.get_console_messages': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const collected = await this.pageAgent.getConsoleMessages(request.args.tab_id);
+        const collected = await this.pageAgent.getConsoleMessages(request.args.tab_id, request.args.frame_id ?? TOP_FRAME_ID);
         return { tab_id: request.args.tab_id, ...selectConsoleMessages(collected, request.args) };
       }
       case 'browser.get_accessibility_tree': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const state = await this.pageAgent.getState(request.args.tab_id);
+        const state = await this.pageAgent.getState(request.args.tab_id, TOP_FRAME_ID);
         const value = await this.requireDebugger().send(request.args.tab_id, 'Accessibility.getFullAXTree');
         const nodes = getArray(value, 'nodes');
         return { tab_id: request.args.tab_id, page_revision: state.page_revision, nodes };
@@ -188,11 +193,12 @@ export class BrowserToolRuntime {
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
           type: 'mouseMoved', x: request.args.x, y: request.args.y,
         });
+        const modifiers = modifierBitmask(request.args.modifiers);
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mousePressed', x: request.args.x, y: request.args.y, button, clickCount,
+          type: 'mousePressed', x: request.args.x, y: request.args.y, button, clickCount, modifiers,
         });
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseReleased', x: request.args.x, y: request.args.y, button, clickCount,
+          type: 'mouseReleased', x: request.args.x, y: request.args.y, button, clickCount, modifiers,
         });
         return { tab_id: request.args.tab_id, performed: true };
       }
@@ -239,12 +245,14 @@ export class BrowserToolRuntime {
         const descriptor = describeKey(request.args.key);
         // Chrome only runs a key's default action when the Windows virtual key code is present, and
         // only treats the key as text-producing when `text` is set.
+        const modifiers = modifierBitmask(request.args.modifiers);
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchKeyEvent', {
           type: 'keyDown',
           key: descriptor.key,
           code: descriptor.code,
           windowsVirtualKeyCode: descriptor.virtualKeyCode,
           nativeVirtualKeyCode: descriptor.virtualKeyCode,
+          modifiers,
           ...(descriptor.text === undefined ? {} : { text: descriptor.text, unmodifiedText: descriptor.text }),
         });
         await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchKeyEvent', {
@@ -253,6 +261,7 @@ export class BrowserToolRuntime {
           code: descriptor.code,
           windowsVirtualKeyCode: descriptor.virtualKeyCode,
           nativeVirtualKeyCode: descriptor.virtualKeyCode,
+          modifiers,
         });
         return { tab_id: request.args.tab_id, performed: true };
       }
@@ -281,63 +290,118 @@ export class BrowserToolRuntime {
         };
       case 'browser.set_files':
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        return this.setFiles(request.args.tab_id, request.args.element_id, request.args.files);
+        return this.setFiles(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.files,
+        );
       case 'browser.list_tabs':
         return { tabs: await this.tabs.list(request.args.window_id) };
+      case 'browser.get_frames':
+        return this.getFrames(request.args.tab_id, request.session_id);
       case 'browser.get_page':
-        return { page: await this.getPage(request.args.tab_id, request.session_id) } satisfies GetPageResult;
+        return { page: await this.getPage(request.args.tab_id, request.args.frame_id, request.session_id) } satisfies GetPageResult;
       case 'browser.get_page_state':
-        return { page: await this.getPage(request.args.tab_id, request.session_id) } satisfies GetPageResult;
+        return { page: await this.getPage(request.args.tab_id, request.args.frame_id, request.session_id) } satisfies GetPageResult;
       case 'browser.get_interactives':
-        return this.getInteractives(request.args.tab_id, request.session_id);
+        return this.getInteractives(request.args.tab_id, request.args.frame_id, request.session_id);
       case 'browser.get_page_content': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         if (!this.pageAgent.getPageContent) throw new ToolFailure(createToolError('invalid_request', 'Page content extraction is unavailable.', false));
-        const result = await this.pageAgent.getPageContent(request.args.tab_id, {
+        const frameId = request.args.frame_id ?? TOP_FRAME_ID;
+        const result = await this.pageAgent.getPageContent(request.args.tab_id, frameId, {
           include_html: request.args.include_html ?? false,
           include_images: request.args.include_images ?? true,
           include_frames: request.args.include_frames ?? true,
           max_text_length: request.args.max_text_length ?? 50_000,
         });
-        return { ...result, tab_id: request.args.tab_id };
+        return { ...result, tab_id: request.args.tab_id, frame_id: frameId };
       }
       case 'browser.click': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         await this.tabs.get(request.args.tab_id);
-        const result = await this.pageAgent.click(request.args.tab_id, request.args.element_id);
+        const result = await this.pageAgent.click(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.modifiers ?? [],
+        );
         return { action: { tab_id: request.args.tab_id, ...result } } satisfies ClickResult;
       }
       case 'browser.double_click': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         await this.tabs.get(request.args.tab_id);
-        const result = await this.pageAgent.doubleClick(request.args.tab_id, request.args.element_id);
+        const result = await this.pageAgent.doubleClick(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.modifiers ?? [],
+        );
         return { action: { tab_id: request.args.tab_id, ...result } };
       }
       case 'browser.type': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         await this.tabs.get(request.args.tab_id);
-        const result = await this.pageAgent.type(request.args.tab_id, request.args.element_id, request.args.text);
+        const result = await this.pageAgent.type(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.text,
+        );
         return { action: { tab_id: request.args.tab_id, ...result } } satisfies TypeResult;
       }
       case 'browser.press': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const result = await this.pageAgent.press(request.args.tab_id, request.args.element_id, request.args.key);
+        const result = await this.pageAgent.press(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.key,
+          request.args.modifiers ?? [],
+        );
         return { action: { tab_id: request.args.tab_id, ...result } };
+      }
+      case 'browser.select_text': {
+        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        const selectText = this.pageAgent.selectText?.bind(this.pageAgent);
+        if (selectText === undefined) {
+          throw new ToolFailure(createToolError('invalid_request', 'Text selection is unavailable.', false));
+        }
+        const result = await selectText(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.text,
+          request.args.selection_type ?? 'text',
+        );
+        return { action: { tab_id: request.args.tab_id, ...result } } satisfies SelectTextResult;
       }
       case 'browser.set_checked': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const result = await this.pageAgent.setChecked(request.args.tab_id, request.args.element_id, request.args.checked);
+        const result = await this.pageAgent.setChecked(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.checked,
+        );
         return { action: { tab_id: request.args.tab_id, ...result } };
       }
       case 'browser.select_option': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const result = await this.pageAgent.selectOption(request.args.tab_id, request.args.element_id, request.args.values);
+        const result = await this.pageAgent.selectOption(
+          request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
+          request.args.element_id,
+          request.args.values,
+        );
         return { action: { tab_id: request.args.tab_id, ...result } };
       }
       case 'browser.drag': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         const result = await this.pageAgent.drag(
           request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
           request.args.source_element_id,
           request.args.target_element_id,
         );
@@ -347,6 +411,7 @@ export class BrowserToolRuntime {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         const result = await this.pageAgent.waitForElement(
           request.args.tab_id,
+          request.args.frame_id ?? TOP_FRAME_ID,
           request.args.element_id,
           request.args.state,
           request.args.timeout_ms ?? 5_000,
@@ -356,7 +421,7 @@ export class BrowserToolRuntime {
       case 'browser.scroll': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         await this.tabs.get(request.args.tab_id);
-        const result = await this.pageAgent.scroll(request.args.tab_id, request.args.delta_x, request.args.delta_y);
+        const result = await this.pageAgent.scroll(request.args.tab_id, TOP_FRAME_ID, request.args.delta_x, request.args.delta_y);
         return { scroll: { tab_id: request.args.tab_id, ...result } } satisfies ScrollResult;
       }
       case 'browser.screenshot':
@@ -387,12 +452,12 @@ export class BrowserToolRuntime {
 
   private async captureScreenshot(args: ScreenshotArgs): Promise<ScreenshotResult> {
     const tab = await this.tabs.get(args.tab_id);
-    const before = await this.pageAgent.getState(tab.tab_id);
+    const before = await this.pageAgent.getState(tab.tab_id, TOP_FRAME_ID);
     const captured = await this.screenshots.capture(tab, args.image_format ?? 'png', {
       ...(args.full_page === undefined ? {} : { fullPage: args.full_page }),
       ...(args.clip === undefined ? {} : { clip: args.clip }),
     });
-    const after = await this.pageAgent.getState(tab.tab_id);
+    const after = await this.pageAgent.getState(tab.tab_id, TOP_FRAME_ID);
     if (before.page_revision !== after.page_revision) {
       throw new ToolFailure(
         createToolError('screenshot_unavailable', 'The page changed during screenshot capture.', true, {
@@ -421,7 +486,7 @@ export class BrowserToolRuntime {
       page_revision: before.page_revision,
     };
     if (include.has('page_state')) observation.page = before;
-    if (include.has('interactives')) observation.snapshot = (await this.getInteractives(args.tab_id)).snapshot;
+    if (include.has('interactives')) observation.snapshot = (await this.getInteractives(args.tab_id, undefined, undefined)).snapshot;
     if (include.has('accessibility')) {
       const value = await this.requireDebugger().send(args.tab_id, 'Accessibility.getFullAXTree');
       observation.accessibility_nodes = getArray(value, 'nodes');
@@ -437,26 +502,38 @@ export class BrowserToolRuntime {
     return { observation };
   }
 
-  private async getInteractives(tabId?: number, sessionId?: string): Promise<GetInteractivesResult> {
+  private async getFrames(tabId?: number, sessionId?: string): Promise<ToolResults['browser.get_frames']> {
     const tab = tabId === undefined ? await this.tabs.getActive() : await this.tabs.get(tabId);
     await this.assertSessionAccess(sessionId, tab.tab_id);
-    const snapshot = await this.pageAgent.getInteractives(tab.tab_id);
+    return { tab_id: tab.tab_id, frames: await this.requireFrames().list(tab.tab_id) };
+  }
+
+  private async getInteractives(tabId?: number, frameId?: number, sessionId?: string): Promise<GetInteractivesResult> {
+    const tab = tabId === undefined ? await this.tabs.getActive() : await this.tabs.get(tabId);
+    await this.assertSessionAccess(sessionId, tab.tab_id);
+    const resolvedFrameId = frameId ?? TOP_FRAME_ID;
+    const snapshot = await this.pageAgent.getInteractives(tab.tab_id, resolvedFrameId);
     return {
       snapshot: {
         tab_id: tab.tab_id,
+        frame_id: resolvedFrameId,
         ...snapshot,
       },
     };
   }
 
-  private async getPage(tabId?: number, sessionId?: string): Promise<PageState> {
+  private async getPage(tabId?: number, frameId?: number, sessionId?: string): Promise<PageState> {
     const tab = tabId === undefined ? await this.tabs.getActive() : await this.tabs.get(tabId);
     await this.assertSessionAccess(sessionId, tab.tab_id);
-    const agentState = await this.pageAgent.getState(tab.tab_id);
+    const resolvedFrameId = frameId ?? TOP_FRAME_ID;
+    const agentState = await this.pageAgent.getState(tab.tab_id, resolvedFrameId);
+    // A frame owns its own URL and title; only the top document can borrow the tab's metadata.
+    const isTopFrame = resolvedFrameId === TOP_FRAME_ID;
     return {
       tab_id: tab.tab_id,
-      url: tab.url || agentState.url,
-      title: tab.title || agentState.title,
+      frame_id: resolvedFrameId,
+      url: (isTopFrame ? tab.url : '') || agentState.url,
+      title: (isTopFrame ? tab.title : '') || agentState.title,
       loading: tab.status === 'loading' ? 'loading' : agentState.document_ready_state === 'complete' ? 'complete' : 'loading',
       viewport: agentState.viewport,
       page_revision: agentState.page_revision,
@@ -477,30 +554,24 @@ export class BrowserToolRuntime {
     return this.tabs.open(args);
   }
 
-  private async setFiles(tabId: number, elementId: string, files: string[]): Promise<ToolResults['browser.set_files']> {
+  private async setFiles(
+    tabId: number,
+    frameId: number,
+    elementId: string,
+    files: string[],
+  ): Promise<ToolResults['browser.set_files']> {
     await this.tabs.get(tabId);
-    const prepared = await this.pageAgent.prepareFileInput(tabId, elementId);
+    const prepared = await this.pageAgent.prepareFileInput(tabId, frameId, elementId);
     try {
-      const documentResult = await this.requireDebugger().send(tabId, 'DOM.getDocument', { depth: 0, pierce: false });
-      const rootNodeId = getNestedNumber(documentResult, 'root', 'nodeId');
-      if (rootNodeId === undefined) {
-        throw new ToolFailure(createToolError('file_upload_failed', 'CDP did not return the document root.', true));
-      }
-      const queryResult = await this.requireDebugger().send(tabId, 'DOM.querySelector', {
-        nodeId: rootNodeId,
-        selector: `input[type="file"][data-browser-control-file-input="${prepared.marker}"]`,
-      });
-      const fileInputNodeId = getNumber(queryResult, 'nodeId');
-      if (fileInputNodeId === undefined || fileInputNodeId === 0) {
-        throw new ToolFailure(createToolError('stale_element', 'The file input is no longer attached to the page.', true));
-      }
+      const fileInputNodeId = await this.findFileInputNodeId(tabId, frameId, prepared.marker);
       await this.requireDebugger().send(tabId, 'DOM.setFileInputFiles', {
         nodeId: fileInputNodeId,
         files,
       });
-      const state = await this.pageAgent.getState(tabId);
+      const state = await this.pageAgent.getState(tabId, frameId);
       return {
         tab_id: tabId,
+        frame_id: frameId,
         page_revision: state.page_revision,
         file_count: files.length,
         files_set: true as const,
@@ -516,8 +587,40 @@ export class BrowserToolRuntime {
         cause: toToolError(error).message,
       }));
     } finally {
-      await this.pageAgent.clearFileInputMarker(tabId, prepared.marker).catch(() => undefined);
+      await this.pageAgent.clearFileInputMarker(tabId, frameId, prepared.marker).catch(() => undefined);
     }
+  }
+
+  /**
+   * Finds the marked file input. The top document can be queried directly; a frame that is not the
+   * top document needs a pierced node tree, because `DOM.querySelector` does not cross into child
+   * documents.
+   */
+  private async findFileInputNodeId(tabId: number, frameId: number, marker: string): Promise<number> {
+    const selector = `input[type="file"][data-browser-control-file-input="${marker}"]`;
+    if (frameId === TOP_FRAME_ID) {
+      const documentResult = await this.requireDebugger().send(tabId, 'DOM.getDocument', { depth: 0, pierce: false });
+      const rootNodeId = getNestedNumber(documentResult, 'root', 'nodeId');
+      if (rootNodeId === undefined) {
+        throw new ToolFailure(createToolError('file_upload_failed', 'CDP did not return the document root.', true));
+      }
+      const queryResult = await this.requireDebugger().send(tabId, 'DOM.querySelector', { nodeId: rootNodeId, selector });
+      const nodeId = getNumber(queryResult, 'nodeId');
+      if (nodeId === undefined || nodeId === 0) {
+        throw new ToolFailure(createToolError('stale_element', 'The file input is no longer attached to the page.', true));
+      }
+      return nodeId;
+    }
+
+    const documentResult = await this.requireDebugger().send(tabId, 'DOM.getDocument', { depth: -1, pierce: true });
+    const nodeId = findNodeIdByAttribute(documentResult, 'data-browser-control-file-input', marker);
+    if (nodeId === null) {
+      throw new ToolFailure(createToolError('stale_element', 'The file input is no longer attached to the page.', true, {
+        tab_id: tabId,
+        frame_id: frameId,
+      }));
+    }
+    return nodeId;
   }
 
   private requireSessions(): SessionCoordinator {
@@ -534,6 +637,13 @@ export class BrowserToolRuntime {
   private async requireTabAccess(sessionId: string | undefined, tabId: number): Promise<void> {
     await this.tabs.get(tabId);
     await this.assertSessionAccess(sessionId, tabId);
+  }
+
+  private requireFrames(): FrameAdapter {
+    if (this.frames === undefined) {
+      throw new ToolFailure(createToolError('internal_error', 'Frame enumeration is unavailable.', false));
+    }
+    return this.frames;
   }
 
   private requireDebugger(): DebuggerAdapter {
@@ -558,8 +668,49 @@ export class BrowserToolRuntime {
   }
 
   private async showAgentCursor(tabId: number, x: number, y: number): Promise<void> {
-    await this.pageAgent.showAgentCursor(tabId, x, y).catch(() => undefined);
+    await this.pageAgent.showAgentCursor(tabId, TOP_FRAME_ID, x, y).catch(() => undefined);
   }
+}
+
+function findNodeIdByAttribute(value: unknown, attributeName: string, attributeValue: string): number | null {
+  const root = readRecord(value, 'root');
+  if (root === null) return null;
+  const queue: Array<Record<string, unknown>> = [root];
+  while (queue.length > 0) {
+    const node = queue.shift() as Record<string, unknown>;
+    if (hasAttributePair(node, attributeName, attributeValue)) {
+      const nodeId = node['nodeId'];
+      if (typeof nodeId === 'number' && nodeId > 0) return nodeId;
+    }
+    const children = node['children'];
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        const record = readRecordValue(child);
+        if (record !== null) queue.push(record);
+      }
+    }
+    // Pierced node trees keep a frame's document under contentDocument.
+    const contentDocument = readRecord(node, 'contentDocument');
+    if (contentDocument !== null) queue.push(contentDocument);
+  }
+  return null;
+}
+
+function hasAttributePair(node: Record<string, unknown>, attributeName: string, attributeValue: string): boolean {
+  const attributes = node['attributes'];
+  if (!Array.isArray(attributes)) return false;
+  for (let index = 0; index + 1 < attributes.length; index += 2) {
+    if (attributes[index] === attributeName && attributes[index + 1] === attributeValue) return true;
+  }
+  return false;
+}
+
+function readRecord(value: unknown, key: string): Record<string, unknown> | null {
+  return readRecordValue((value as Record<string, unknown> | null)?.[key]);
+}
+
+function readRecordValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
 }
 
 function getArray(value: unknown, key: string): unknown[] {
@@ -577,6 +728,10 @@ function getNumber(value: unknown, key: string): number | undefined {
 function getNestedNumber(value: unknown, objectKey: string, numberKey: string): number | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   return getNumber((value as Record<string, unknown>)[objectKey], numberKey);
+}
+
+function modifierBitmask(modifiers: Array<'Alt' | 'Control' | 'Meta' | 'Shift'> | undefined): number {
+  return (modifiers ?? []).reduce((mask, modifier) => mask | ({ Alt: 1, Control: 2, Meta: 4, Shift: 8 }[modifier] ?? 0), 0);
 }
 
 function interpolatePoints(fromX: number, fromY: number, toX: number, toY: number, steps: number): Array<{ x: number; y: number }> {

@@ -47,7 +47,9 @@
       ],
       "js": ["content/page-console.js"],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true
     },
     {
       "matches": [
@@ -55,7 +57,9 @@
         "https://*/*"
       ],
       "js": ["content/page-agent.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ]
 }

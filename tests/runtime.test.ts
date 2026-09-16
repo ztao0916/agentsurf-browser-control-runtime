@@ -4,6 +4,7 @@ import { createToolError, ToolFailure } from '../src/core/protocol/errors';
 import type { PageAgentClient } from '../src/chrome/scripting-adapter';
 import type { TabsAdapter } from '../src/chrome/tabs-adapter';
 import type { CapturedScreenshot, ScreenshotAdapter } from '../src/chrome/screenshot-adapter';
+import type { FrameAdapter } from '../src/chrome/frames-adapter';
 import type {
   OpenArgs,
   PageAgentInteractiveSnapshot,
@@ -14,6 +15,9 @@ import type {
   ToolRequest,
   ImageFormat,
   ConsoleEntry,
+  KeyModifier,
+  PageAgentSelectTextResult,
+  FrameInfo,
 } from '../src/core/protocol/tool-contract';
 
 const tab: TabInfo = {
@@ -227,6 +231,53 @@ class FakeScreenshotAdapter implements ScreenshotAdapter {
   }
 }
 
+class SelectingPageAgentClient extends FakePageAgentClient {
+  public selectText(): Promise<PageAgentSelectTextResult> {
+    return Promise.resolve({
+      selected: true,
+      selection_type: 'text',
+      page_revision: pageAgentState.page_revision,
+      page_revision_changed: false,
+      needs_interactives_refresh: false,
+    });
+  }
+}
+
+class RecordingPageAgentClient extends FakePageAgentClient {
+  public lastClickModifiers: KeyModifier[] | undefined = undefined;
+  public lastClickFrameId: number | undefined = undefined;
+
+  public override click(
+    _tabId?: number,
+    frameId?: number,
+    _elementId?: string,
+    modifiers?: KeyModifier[],
+  ): Promise<PageAgentElementActionResult & { clicked: true }> {
+    this.lastClickFrameId = frameId;
+    this.lastClickModifiers = modifiers;
+    return Promise.resolve({
+      clicked: true,
+      page_revision: pageAgentState.page_revision,
+      page_revision_changed: false,
+      needs_interactives_refresh: true,
+    });
+  }
+}
+
+const frameList: FrameInfo[] = [
+  { frame_id: 0, parent_frame_id: null, url: 'https://example.com/', is_top: true },
+  { frame_id: 7, parent_frame_id: 0, url: 'about:blank', is_top: false },
+];
+
+class FakeFrameAdapter implements FrameAdapter {
+  public lastTabId: number | undefined = undefined;
+
+  public list(tabId: number): Promise<FrameInfo[]> {
+    this.lastTabId = tabId;
+    return Promise.resolve(frameList);
+  }
+}
+
 class MissingConsolePageAgentClient extends FakePageAgentClient {
   public override getConsoleMessages(): Promise<{ available: boolean; entries: ConsoleEntry[]; dropped: number }> {
     return Promise.resolve({ available: false, entries: [], dropped: 0 });
@@ -335,6 +386,99 @@ describe('BrowserToolRuntime', () => {
       expect(response.result.available).toBe(false);
       expect(response.result.entries).toEqual([]);
     }
+  });
+
+  it('forwards click modifiers to the Page Agent client', async () => {
+    const recording = new RecordingPageAgentClient();
+    const recordingRuntime = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      recording,
+      new FakeScreenshotAdapter(),
+    );
+    const response = await recordingRuntime.handle(
+      request('browser.click', { tab_id: 7, element_id: 'opaque-id', modifiers: ['Control'] }),
+    );
+    expect(response.ok).toBe(true);
+    expect(recording.lastClickModifiers).toEqual(['Control']);
+  });
+
+  it('routes element actions to the requested frame and defaults to the top document', async () => {
+    const recording = new RecordingPageAgentClient();
+    const recordingRuntime = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      recording,
+      new FakeScreenshotAdapter(),
+    );
+
+    await recordingRuntime.handle(request('browser.click', { tab_id: 7, element_id: 'opaque-id', frame_id: 7 }));
+    expect(recording.lastClickFrameId).toBe(7);
+
+    await recordingRuntime.handle(request('browser.click', { tab_id: 7, element_id: 'opaque-id' }));
+    expect(recording.lastClickFrameId).toBe(0);
+  });
+
+  it('reports the frame id on page state and interactive snapshots', async () => {
+    const framePage = await runtime.handle(request('browser.get_page_state', { tab_id: 7, frame_id: 7 }));
+    expect(framePage.ok).toBe(true);
+    if (framePage.ok) expect(framePage.result.page.frame_id).toBe(7);
+
+    const topSnapshot = await runtime.handle(request('browser.get_interactives', { tab_id: 7 }));
+    expect(topSnapshot.ok).toBe(true);
+    if (topSnapshot.ok) expect(topSnapshot.result.snapshot.frame_id).toBe(0);
+
+    const frameSnapshot = await runtime.handle(request('browser.get_interactives', { tab_id: 7, frame_id: 7 }));
+    expect(frameSnapshot.ok).toBe(true);
+    if (frameSnapshot.ok) expect(frameSnapshot.result.snapshot.frame_id).toBe(7);
+  });
+
+  it('lists frames and reports when frame enumeration is unavailable', async () => {
+    const frames = new FakeFrameAdapter();
+    const runtimeWithFrames = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      frames,
+    );
+
+    const response = await runtimeWithFrames.handle(request('browser.get_frames', { tab_id: 7 }));
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.frames.map((frame) => frame.frame_id)).toEqual([0, 7]);
+      expect(response.result.frames[1]?.parent_frame_id).toBe(0);
+      expect(response.result.frames[0]?.is_top).toBe(true);
+    }
+    expect(frames.lastTabId).toBe(7);
+
+    const unavailable = await runtime.handle(request('browser.get_frames', { tab_id: 7 }));
+    expect(unavailable.ok).toBe(false);
+    if (!unavailable.ok) expect(unavailable.error.code).toBe('internal_error');
+  });
+
+  it('routes text selection through the Page Agent client', async () => {
+    const selectingRuntime = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new SelectingPageAgentClient(),
+      new FakeScreenshotAdapter(),
+    );
+    const response = await selectingRuntime.handle(
+      request('browser.select_text', { tab_id: 7, element_id: 'opaque-id', text: 'hello' }),
+    );
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.action).toMatchObject({ tab_id: 7, selected: true, selection_type: 'text' });
+    }
+  });
+
+  it('reports that text selection is unavailable without a Page Agent implementation', async () => {
+    const response = await runtime.handle(
+      request('browser.select_text', { tab_id: 7, element_id: 'opaque-id', text: 'hello' }),
+    );
+    expect(response.ok).toBe(false);
+    if (!response.ok) expect(response.error.code).toBe('invalid_request');
   });
 
   it('rejects unsupported URL protocols', async () => {

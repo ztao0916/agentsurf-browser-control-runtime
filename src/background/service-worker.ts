@@ -5,6 +5,7 @@ import { ChromeBrowserSessionCoordinator } from '../chrome/browser-session-coord
 import { ChromeDebuggerAdapter } from '../chrome/debugger-adapter';
 import { ChromeDownloadAdapter } from '../chrome/download-adapter';
 import { ChromeNetworkAdapter } from '../chrome/network-adapter';
+import { ChromeFrameAdapter } from '../chrome/frames-adapter';
 import { BrowserToolRuntime } from '../core/browser-tool-runtime';
 import { parseToolRequest } from '../core/protocol/schemas';
 import { ToolFailure, toToolError } from '../core/protocol/errors';
@@ -26,6 +27,7 @@ const runtime = new BrowserToolRuntime(
   debuggerAdapter,
   new ChromeDownloadAdapter(),
   new ChromeNetworkAdapter(),
+  new ChromeFrameAdapter(),
 );
 const externalTransport = new NativeMessagingTransport(
   (request) => runtime.handle(request),

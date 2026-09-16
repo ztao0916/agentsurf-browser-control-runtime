@@ -1,7 +1,9 @@
 import { createToolError, ToolFailure } from '../core/protocol/errors';
 import type {
+  KeyModifier,
   PageAgentElementActionResult,
   PageAgentScrollResult,
+  PageAgentSelectTextResult,
   WaitForElementArgs,
 } from '../core/protocol/tool-contract';
 import type { ElementRegistry } from './element-registry';
@@ -24,7 +26,7 @@ export class ActionExecutor {
     private readonly cursor?: AgentCursor,
   ) {}
 
-  public click(elementId: string): PageAgentElementActionResult & { clicked: true } {
+  public click(elementId: string, modifiers: KeyModifier[] = []): PageAgentElementActionResult & { clicked: true } {
     this.flushMutations();
     const element = this.requireHtmlElement(elementId);
     this.requireVisible(element);
@@ -35,7 +37,11 @@ export class ActionExecutor {
     }
 
     const previousRevision = this.registry.pageRevision;
-    element.click();
+    if (modifiers.length === 0) {
+      element.click();
+    } else {
+      dispatchClick(this.pageWindow, element, modifiers, 1);
+    }
     this.flushMutations();
     return {
       clicked: true,
@@ -69,21 +75,30 @@ export class ActionExecutor {
     };
   }
 
-  public doubleClick(elementId: string): PageAgentElementActionResult & { double_clicked: true } {
+  public doubleClick(elementId: string, modifiers: KeyModifier[] = []): PageAgentElementActionResult & { double_clicked: true } {
     this.flushMutations();
     const element = this.requireHtmlElement(elementId);
     this.requireVisible(element);
     this.requireEnabled(element);
     this.cursor?.showForElement(element);
     const previousRevision = this.registry.pageRevision;
-    element.click();
-    element.click();
-    element.dispatchEvent(new this.pageWindow.MouseEvent('dblclick', { bubbles: true, cancelable: true, composed: true }));
+    if (modifiers.length === 0) {
+      element.click();
+      element.click();
+    } else {
+      dispatchClick(this.pageWindow, element, modifiers, 2);
+    }
+    element.dispatchEvent(new this.pageWindow.MouseEvent('dblclick', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      ...mouseModifierInit(modifiers),
+    }));
     this.flushMutations();
     return { double_clicked: true, ...this.actionState(previousRevision) };
   }
 
-  public press(elementId: string, key: string): PageAgentElementActionResult & { pressed: true } {
+  public press(elementId: string, key: string, modifiers: KeyModifier[] = []): PageAgentElementActionResult & { pressed: true } {
     this.flushMutations();
     const element = this.requireHtmlElement(elementId);
     this.requireVisible(element);
@@ -98,6 +113,7 @@ export class ActionExecutor {
       bubbles: true,
       cancelable: true,
       composed: true,
+      ...keyboardModifierInit(modifiers),
     };
     const accepted = element.dispatchEvent(new this.pageWindow.KeyboardEvent('keydown', init));
     element.dispatchEvent(new this.pageWindow.KeyboardEvent('keypress', init));
@@ -117,12 +133,65 @@ export class ActionExecutor {
       return;
     }
     // Enter submits the form a field belongs to, except in a textarea where it inserts a newline.
-    if (descriptor.key !== 'Enter' || element instanceof HTMLTextAreaElement) return;
+    if (descriptor.key !== 'Enter' || element instanceof this.pageWindow.HTMLTextAreaElement) return;
     const form = element.closest('form');
     if (form === null) return;
     // Pass the default submit button so its name and value are included, matching implicit submission.
     const submitter = form.querySelector('button[type=submit], input[type=submit], button:not([type])');
-    form.requestSubmit(submitter instanceof HTMLElement ? submitter : undefined);
+    form.requestSubmit(submitter instanceof this.pageWindow.HTMLElement ? submitter : undefined);
+  }
+
+  public selectText(
+    elementId: string,
+    text: string | undefined,
+    selectionType: 'text' | 'cursor_before' | 'cursor_after',
+  ): PageAgentSelectTextResult {
+    this.flushMutations();
+    const element = this.requireHtmlElement(elementId);
+    this.requireVisible(element);
+    this.requireEnabled(element);
+    this.cursor?.showForElement(element);
+    if (!isEditable(element)) {
+      throw new ToolFailure(createToolError('element_not_editable', 'The element does not support text selection.', false));
+    }
+
+    const previousRevision = this.registry.pageRevision;
+    element.focus();
+    if (element instanceof this.pageWindow.HTMLInputElement || element instanceof this.pageWindow.HTMLTextAreaElement) {
+      const value = element.value;
+      if (selectionType === 'cursor_before') {
+        element.setSelectionRange(0, 0);
+      } else if (selectionType === 'cursor_after') {
+        element.setSelectionRange(value.length, value.length);
+      } else {
+        const selectedText = text ?? value;
+        const start = value.indexOf(selectedText);
+        if (start < 0) {
+          throw new ToolFailure(createToolError('element_not_found', 'The requested text was not found in the editable element.', false));
+        }
+        element.setSelectionRange(start, start + selectedText.length);
+      }
+    } else {
+      const selection = this.pageWindow.getSelection();
+      if (selection === null) throw new ToolFailure(createToolError('element_not_editable', 'The page does not expose a text selection.', false));
+      const range = this.pageDocument.createRange();
+      if (selectionType === 'cursor_before' || selectionType === 'cursor_after') {
+        range.selectNodeContents(element);
+        range.collapse(selectionType === 'cursor_before');
+      } else {
+        const node = findTextNode(element, text ?? '');
+        if (node === null) throw new ToolFailure(createToolError('element_not_found', 'The requested text was not found in the editable element.', false));
+        const selectedText = text ?? node.nodeValue ?? '';
+        const offset = text === undefined ? 0 : node.nodeValue?.indexOf(text) ?? -1;
+        if (offset < 0) throw new ToolFailure(createToolError('element_not_found', 'The requested text was not found in the editable element.', false));
+        range.setStart(node, offset);
+        range.setEnd(node, offset + selectedText.length);
+      }
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    this.flushMutations();
+    return { selected: true, selection_type: selectionType, ...this.actionState(previousRevision) };
   }
 
   public setChecked(elementId: string, checked: boolean): PageAgentElementActionResult & { checked: boolean } {
@@ -328,6 +397,39 @@ function setEditableValue(element: HTMLElement, text: string, pageWindow: Browse
 function isClickableByKeyboard(element: HTMLElement): boolean {
   return element instanceof HTMLButtonElement || element instanceof HTMLAnchorElement ||
     element.getAttribute('role') === 'button' || element.getAttribute('role') === 'link';
+}
+
+function dispatchClick(pageWindow: BrowserWindow, element: HTMLElement, modifiers: KeyModifier[], clickCount: number): void {
+  const init = { bubbles: true, cancelable: true, composed: true, ...mouseModifierInit(modifiers) };
+  for (let index = 1; index <= clickCount; index += 1) {
+    element.dispatchEvent(new pageWindow.MouseEvent('mousedown', { ...init, detail: index }));
+    element.dispatchEvent(new pageWindow.MouseEvent('mouseup', { ...init, detail: index }));
+    element.dispatchEvent(new pageWindow.MouseEvent('click', { ...init, detail: index }));
+  }
+}
+
+function mouseModifierInit(modifiers: KeyModifier[]): Pick<MouseEventInit, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'> {
+  return {
+    altKey: modifiers.includes('Alt'),
+    ctrlKey: modifiers.includes('Control'),
+    metaKey: modifiers.includes('Meta'),
+    shiftKey: modifiers.includes('Shift'),
+  };
+}
+
+function keyboardModifierInit(modifiers: KeyModifier[]): Pick<KeyboardEventInit, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'> {
+  return mouseModifierInit(modifiers);
+}
+
+function findTextNode(root: Node, text: string): Text | null {
+  const walker = root.ownerDocument?.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  if (walker === undefined || walker === null) return null;
+  let node = walker.nextNode();
+  while (node !== null) {
+    if (text === '' || node.nodeValue?.includes(text)) return node as Text;
+    node = walker.nextNode();
+  }
+  return null;
 }
 
 function dispatchDragEvent(

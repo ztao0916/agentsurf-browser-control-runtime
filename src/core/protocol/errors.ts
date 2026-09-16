@@ -2,6 +2,7 @@ export type ToolErrorCode =
   | 'invalid_request'
   | 'invalid_url'
   | 'tab_not_found'
+  | 'frame_not_found'
   | 'tab_in_use'
   | 'session_not_found'
   | 'permission_denied'

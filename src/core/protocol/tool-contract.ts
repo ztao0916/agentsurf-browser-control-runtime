@@ -2,6 +2,9 @@ import type { ToolError } from './errors';
 
 export const PROTOCOL_VERSION = '1' as const;
 
+/** Chrome gives the top document frame ID 0; every other frame is addressed by its own ID. */
+export const TOP_FRAME_ID = 0;
+
 export type ToolName =
   | 'browser.get_capabilities'
   | 'browser.start_session'
@@ -25,12 +28,14 @@ export type ToolName =
   | 'browser.drag_at'
   | 'browser.scroll_at'
   | 'browser.press_key'
+  | 'browser.select_text'
   | 'browser.type_text'
   | 'browser.handle_dialog'
   | 'browser.list_downloads'
   | 'browser.wait_for_download'
   | 'browser.set_files'
   | 'browser.list_tabs'
+  | 'browser.get_frames'
   | 'browser.get_page'
   | 'browser.get_page_state'
   | 'browser.get_interactives'
@@ -70,6 +75,19 @@ export interface TabInfo {
   status: LoadingStatus;
   incognito: boolean;
   group_id: number | null;
+}
+
+/**
+ * A frame inside a tab. `frame_id` is Chrome's frame ID: 0 is the top document, and every other
+ * frame belongs to the document that hosts it. A frame that navigates keeps its ID only while it
+ * stays in the same process, so callers should treat `frame_not_found` as retryable and re-read the
+ * frame list.
+ */
+export interface FrameInfo {
+  frame_id: number;
+  parent_frame_id: number | null;
+  url: string;
+  is_top: boolean;
 }
 
 export interface BrowserSessionInfo {
@@ -131,6 +149,7 @@ export interface GetConsoleMessagesArgs extends TabTargetArgs {
   after_sequence?: number;
   limit?: number;
   levels?: ConsoleLevel[];
+  frame_id?: number;
 }
 
 export interface PointArgs extends TabTargetArgs {
@@ -138,9 +157,12 @@ export interface PointArgs extends TabTargetArgs {
   y: number;
 }
 
+export type KeyModifier = 'Alt' | 'Control' | 'Meta' | 'Shift';
+
 export interface ClickAtArgs extends PointArgs {
   button?: 'left' | 'right' | 'middle';
   click_count?: number;
+  modifiers?: KeyModifier[];
 }
 
 export interface DragAtArgs extends TabTargetArgs {
@@ -157,6 +179,7 @@ export interface ScrollAtArgs extends PointArgs {
 
 export interface PressKeyArgs extends TabTargetArgs {
   key: string;
+  modifiers?: KeyModifier[];
 }
 
 export interface TypeTextArgs extends TabTargetArgs {
@@ -183,6 +206,7 @@ export interface SetFilesArgs extends ClickArgs {
 
 export interface PageState {
   tab_id: number;
+  frame_id: number;
   url: string;
   title: string;
   loading: LoadingStatus;
@@ -218,6 +242,7 @@ export interface InteractiveElement {
 
 export interface InteractiveSnapshot {
   tab_id: number;
+  frame_id: number;
   page_revision: string;
   snapshot_id: string;
   elements: InteractiveElement[];
@@ -229,16 +254,19 @@ export interface ListTabsArgs {
 
 export interface GetPageArgs {
   tab_id?: number;
+  frame_id?: number;
 }
 
 export type GetPageStateArgs = GetPageArgs;
 
 export interface GetInteractivesArgs {
   tab_id?: number;
+  frame_id?: number;
 }
 
 export interface GetPageContentArgs {
   tab_id: number;
+  frame_id?: number;
   include_html?: boolean;
   include_images?: boolean;
   include_frames?: boolean;
@@ -248,6 +276,11 @@ export interface GetPageContentArgs {
 export interface ClickArgs {
   tab_id: number;
   element_id: string;
+  frame_id?: number;
+}
+
+export interface ClickWithModifiersArgs extends ClickArgs {
+  modifiers?: KeyModifier[];
 }
 
 export interface TypeArgs extends ClickArgs {
@@ -256,6 +289,12 @@ export interface TypeArgs extends ClickArgs {
 
 export interface PressArgs extends ClickArgs {
   key: string;
+  modifiers?: KeyModifier[];
+}
+
+export interface SelectTextArgs extends ClickArgs {
+  text?: string;
+  selection_type?: 'text' | 'cursor_before' | 'cursor_after';
 }
 
 export interface SetCheckedArgs extends ClickArgs {
@@ -268,6 +307,7 @@ export interface SelectOptionArgs extends ClickArgs {
 
 export interface DragArgs {
   tab_id: number;
+  frame_id?: number;
   source_element_id: string;
   target_element_id: string;
 }
@@ -337,18 +377,20 @@ export interface ToolArguments {
   'browser.drag_at': DragAtArgs;
   'browser.scroll_at': ScrollAtArgs;
   'browser.press_key': PressKeyArgs;
+  'browser.select_text': SelectTextArgs;
   'browser.type_text': TypeTextArgs;
   'browser.handle_dialog': HandleDialogArgs;
   'browser.list_downloads': ListDownloadsArgs;
   'browser.wait_for_download': WaitForDownloadArgs;
   'browser.set_files': SetFilesArgs;
   'browser.list_tabs': ListTabsArgs;
+  'browser.get_frames': TabTargetArgs;
   'browser.get_page': GetPageArgs;
   'browser.get_page_state': GetPageStateArgs;
   'browser.get_interactives': GetInteractivesArgs;
   'browser.get_page_content': GetPageContentArgs;
-  'browser.click': ClickArgs;
-  'browser.double_click': ClickArgs;
+  'browser.click': ClickWithModifiersArgs;
+  'browser.double_click': ClickWithModifiersArgs;
   'browser.type': TypeArgs;
   'browser.press': PressArgs;
   'browser.set_checked': SetCheckedArgs;
@@ -364,6 +406,11 @@ export interface ToolArguments {
 
 export interface ListTabsResult {
   tabs: TabInfo[];
+}
+
+export interface GetFramesResult {
+  tab_id: number;
+  frames: FrameInfo[];
 }
 
 export interface BrowserSessionResult {
@@ -533,6 +580,13 @@ export interface PressResult {
   action: ElementActionState & { pressed: true };
 }
 
+export interface SelectTextResult {
+  action: ElementActionState & {
+    selected: true;
+    selection_type: NonNullable<SelectTextArgs['selection_type']>;
+  };
+}
+
 export interface SetCheckedResult {
   action: ElementActionState & { checked: boolean };
 }
@@ -599,6 +653,7 @@ export interface ToolResults {
       tab_groups: true;
       tab_leases: true;
       element_ids: true;
+      frames: true;
       accessibility_tree: true;
       screenshots: Array<'viewport' | 'full_page' | 'clip'>;
       cdp: true;
@@ -608,7 +663,7 @@ export interface ToolResults {
       top_level_document: true;
       page_content: true;
       page_images: true;
-      iframes: false;
+      iframes: true;
       shadow_dom: false;
     };
   };
@@ -633,18 +688,21 @@ export interface ToolResults {
   'browser.drag_at': CoordinateActionResult;
   'browser.scroll_at': CoordinateActionResult;
   'browser.press_key': CoordinateActionResult;
+  'browser.select_text': SelectTextResult;
   'browser.type_text': CoordinateActionResult;
   'browser.handle_dialog': CoordinateActionResult;
   'browser.list_downloads': { downloads: DownloadInfo[] };
   'browser.wait_for_download': { download: DownloadInfo };
   'browser.set_files': {
     tab_id: number;
+    frame_id: number;
     page_revision: string;
     file_count: number;
     files_set: true;
     needs_interactives_refresh: true;
   };
   'browser.list_tabs': ListTabsResult;
+  'browser.get_frames': GetFramesResult;
   'browser.get_page': GetPageResult;
   'browser.get_page_state': GetPageStateResult;
   'browser.get_interactives': GetInteractivesResult;
@@ -701,6 +759,7 @@ export type PageAgentAction =
   | 'double-click'
   | 'type'
   | 'press'
+  | 'select-text'
   | 'set-checked'
   | 'select-option'
   | 'drag'
@@ -720,10 +779,11 @@ export type PageAgentRequest =
   | (PageAgentRequestBase & { action: 'get-page-state' | 'get-interactives' })
   | (PageAgentRequestBase & { action: 'get-page-content'; include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number })
   | (PageAgentRequestBase & { action: 'get-console-messages' })
-  | (PageAgentRequestBase & { action: 'click'; element_id: string })
-  | (PageAgentRequestBase & { action: 'double-click'; element_id: string })
+  | (PageAgentRequestBase & { action: 'click'; element_id: string; modifiers?: KeyModifier[] })
+  | (PageAgentRequestBase & { action: 'double-click'; element_id: string; modifiers?: KeyModifier[] })
   | (PageAgentRequestBase & { action: 'type'; element_id: string; text: string })
-  | (PageAgentRequestBase & { action: 'press'; element_id: string; key: string })
+  | (PageAgentRequestBase & { action: 'press'; element_id: string; key: string; modifiers?: KeyModifier[] })
+  | (PageAgentRequestBase & { action: 'select-text'; element_id: string; text?: string; selection_type: NonNullable<SelectTextArgs['selection_type']> })
   | (PageAgentRequestBase & { action: 'set-checked'; element_id: string; checked: boolean })
   | (PageAgentRequestBase & { action: 'select-option'; element_id: string; values: string[] })
   | (PageAgentRequestBase & { action: 'drag'; source_element_id: string; target_element_id: string })
@@ -757,6 +817,11 @@ export interface PageAgentElementActionResult {
   page_revision: string;
   page_revision_changed: boolean;
   needs_interactives_refresh: boolean;
+}
+
+export interface PageAgentSelectTextResult extends PageAgentElementActionResult {
+  selected: true;
+  selection_type: NonNullable<SelectTextArgs['selection_type']>;
 }
 
 export interface PageAgentScrollResult extends PageAgentElementActionResult {
@@ -830,6 +895,14 @@ export type PageAgentSuccessResponse =
       ok: true;
       action: 'press';
       result: PageAgentElementActionResult & { pressed: true };
+    }
+  | {
+      kind: 'page-agent-response';
+      protocol_version: typeof PROTOCOL_VERSION;
+      request_id: string;
+      ok: true;
+      action: 'select-text';
+      result: PageAgentSelectTextResult;
     }
   | {
       kind: 'page-agent-response';

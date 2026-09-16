@@ -14,6 +14,7 @@ import {
   type PageContentResult,
   type ConsoleEntry,
   type ConsoleLevel,
+  type KeyModifier,
   type RuntimeMessage,
   type ObservationContent,
   type ScreenshotArgs,
@@ -49,12 +50,14 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'browser.drag_at',
   'browser.scroll_at',
   'browser.press_key',
+  'browser.select_text',
   'browser.type_text',
   'browser.handle_dialog',
   'browser.list_downloads',
   'browser.wait_for_download',
   'browser.set_files',
   'browser.list_tabs',
+  'browser.get_frames',
   'browser.get_page',
   'browser.get_page_state',
   'browser.get_interactives',
@@ -119,6 +122,13 @@ function optionalPositiveInteger(value: unknown, field: string): number | undefi
   return parsed;
 }
 
+/** Chrome frame IDs start at 0 for the top document, so 0 must stay valid. */
+function optionalFrameId(value: unknown, field: string): number | undefined {
+  const parsed = optionalInteger(value, field);
+  if (parsed !== undefined && parsed < 0) throw invalid(field, 'must be a non-negative integer');
+  return parsed;
+}
+
 function optionalStringArray(value: unknown, field: string): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || !value.every((item) => typeof item === 'string' && item.length > 0)) {
@@ -128,6 +138,15 @@ function optionalStringArray(value: unknown, field: string): string[] | undefine
 }
 
 const CONSOLE_LEVELS: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
+const KEY_MODIFIERS: readonly KeyModifier[] = ['Alt', 'Control', 'Meta', 'Shift'];
+
+function optionalKeyModifiers(value: unknown, field: string): KeyModifier[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.every((item) => KEY_MODIFIERS.includes(item as KeyModifier))) {
+    throw invalid(field, 'must be an array of Alt, Control, Meta, or Shift');
+  }
+  return value as KeyModifier[];
+}
 
 function optionalConsoleLevels(value: unknown): ConsoleLevel[] | undefined {
   if (value === undefined) return undefined;
@@ -262,11 +281,13 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
       if (afterSequence !== undefined && afterSequence < 0) throw invalid('args.after_sequence', 'must be non-negative');
       const limit = optionalPositiveInteger(args.limit, 'args.limit');
       const levels = optionalConsoleLevels(args.levels);
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         ...(afterSequence === undefined ? {} : { after_sequence: afterSequence }),
         ...(limit === undefined ? {} : { limit }),
         ...(levels === undefined ? {} : { levels }),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
       };
     }
     case 'browser.click_at': {
@@ -281,6 +302,9 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         ...(button === undefined ? {} : { button }),
         ...(args.click_count === undefined ? {} : {
           click_count: optionalPositiveInteger(args.click_count, 'args.click_count'),
+        }),
+        ...(args.modifiers === undefined ? {} : {
+          modifiers: optionalKeyModifiers(args.modifiers, 'args.modifiers'),
         }),
       };
     }
@@ -300,8 +324,14 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         delta_x: requireFiniteNumber(args.delta_x, 'args.delta_x'),
         delta_y: requireFiniteNumber(args.delta_y, 'args.delta_y'),
       };
-    case 'browser.press_key':
-      return { tab_id: requireInteger(args.tab_id, 'args.tab_id'), key: requireString(args.key, 'args.key') };
+    case 'browser.press_key': {
+      const modifiers = optionalKeyModifiers(args.modifiers, 'args.modifiers');
+      return {
+        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
+        key: requireString(args.key, 'args.key'),
+        ...(modifiers === undefined ? {} : { modifiers }),
+      };
+    }
     case 'browser.type_text':
       if (typeof args.text !== 'string') throw invalid('args.text', 'must be a string');
       return { tab_id: requireInteger(args.tab_id, 'args.tab_id'), text: args.text };
@@ -329,26 +359,36 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
     case 'browser.set_files': {
       const files = optionalStringArray(args.files, 'args.files');
       if (files === undefined || files.length === 0) throw invalid('args.files', 'must not be empty');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         element_id: requireString(args.element_id, 'args.element_id'),
         files,
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
       };
     }
     case 'browser.list_tabs': {
       const windowId = optionalInteger(args.window_id, 'args.window_id');
       return windowId === undefined ? {} : { window_id: windowId };
     }
+    case 'browser.get_frames':
+      return { tab_id: requireInteger(args.tab_id, 'args.tab_id') };
     case 'browser.get_page':
     case 'browser.get_page_state':
     case 'browser.get_interactives': {
       const tabId = optionalInteger(args.tab_id, 'args.tab_id');
-      return tabId === undefined ? {} : { tab_id: tabId };
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
+      return {
+        ...(tabId === undefined ? {} : { tab_id: tabId }),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
+      };
     }
     case 'browser.get_page_content': {
       const max = optionalPositiveInteger(args.max_text_length, 'args.max_text_length');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
         include_html: args.include_html === true,
         include_images: args.include_images !== false,
         include_frames: args.include_frames !== false,
@@ -358,49 +398,94 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
     case 'browser.click':
     case 'browser.double_click': {
       const tabId = requireInteger(args.tab_id, 'args.tab_id');
-      return { tab_id: tabId, element_id: requireString(args.element_id, 'args.element_id') };
+      const modifiers = optionalKeyModifiers(args.modifiers, 'args.modifiers');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
+      return {
+        tab_id: tabId,
+        element_id: requireString(args.element_id, 'args.element_id'),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
+        ...(modifiers === undefined ? {} : { modifiers }),
+      };
     }
     case 'browser.type': {
       const tabId = requireInteger(args.tab_id, 'args.tab_id');
       if (typeof args.text !== 'string') throw invalid('args.text', 'must be a string');
-      return { tab_id: tabId, element_id: requireString(args.element_id, 'args.element_id'), text: args.text };
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
+      return {
+        tab_id: tabId,
+        element_id: requireString(args.element_id, 'args.element_id'),
+        text: args.text,
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
+      };
     }
-    case 'browser.press':
+    case 'browser.press': {
+      const modifiers = optionalKeyModifiers(args.modifiers, 'args.modifiers');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         element_id: requireString(args.element_id, 'args.element_id'),
         key: requireString(args.key, 'args.key'),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
+        ...(modifiers === undefined ? {} : { modifiers }),
       };
-    case 'browser.set_checked':
+    }
+    case 'browser.select_text': {
+      const selectionType = args.selection_type;
+      if (selectionType !== undefined && selectionType !== 'text' && selectionType !== 'cursor_before' && selectionType !== 'cursor_after') {
+        throw invalid('args.selection_type', 'must be text, cursor_before, or cursor_after');
+      }
+      const normalizedSelectionType = selectionType ?? 'text';
+      const text = args.text === undefined ? undefined : typeof args.text === 'string' ? args.text : (() => { throw invalid('args.text', 'must be a string'); })();
+      if (normalizedSelectionType === 'text' && text === undefined) throw invalid('args.text', 'is required when selection_type is text');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
+      return {
+        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
+        element_id: requireString(args.element_id, 'args.element_id'),
+        ...(text === undefined ? {} : { text }),
+        selection_type: normalizedSelectionType,
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
+      };
+    }
+    case 'browser.set_checked': {
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         element_id: requireString(args.element_id, 'args.element_id'),
         checked: requireBoolean(args.checked, 'args.checked'),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
       };
+    }
     case 'browser.select_option': {
       const values = optionalStringArray(args.values, 'args.values');
       if (values === undefined || values.length === 0) throw invalid('args.values', 'must not be empty');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         element_id: requireString(args.element_id, 'args.element_id'),
         values,
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
       };
     }
-    case 'browser.drag':
+    case 'browser.drag': {
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         source_element_id: requireString(args.source_element_id, 'args.source_element_id'),
         target_element_id: requireString(args.target_element_id, 'args.target_element_id'),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
       };
+    }
     case 'browser.wait_for_element': {
       const state = args.state;
       if (state !== 'attached' && state !== 'detached' && state !== 'visible' && state !== 'hidden') {
         throw invalid('args.state', 'must be attached, detached, visible, or hidden');
       }
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         element_id: requireString(args.element_id, 'args.element_id'),
         state,
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
         ...(args.timeout_ms === undefined ? {} : {
           timeout_ms: optionalPositiveInteger(args.timeout_ms, 'args.timeout_ms'),
         }),
@@ -499,18 +584,42 @@ export function parsePageAgentRequest(value: unknown): PageAgentRequest {
     case 'get-console-messages':
       return { ...base, action: 'get-console-messages' };
     case 'click':
-    case 'double-click':
-      return { ...base, action: input.action, element_id: requireString(input.element_id, 'element_id') };
+    case 'double-click': {
+      const modifiers = optionalKeyModifiers(input.modifiers, 'modifiers');
+      return {
+        ...base,
+        action: input.action,
+        element_id: requireString(input.element_id, 'element_id'),
+        ...(modifiers === undefined ? {} : { modifiers }),
+      };
+    }
     case 'type':
       if (typeof input.text !== 'string') throw invalid('text', 'must be a string');
       return { ...base, action: 'type', element_id: requireString(input.element_id, 'element_id'), text: input.text };
-    case 'press':
+    case 'press': {
+      const modifiers = optionalKeyModifiers(input.modifiers, 'modifiers') ?? [];
       return {
         ...base,
         action: 'press',
         element_id: requireString(input.element_id, 'element_id'),
         key: requireString(input.key, 'key'),
+        modifiers,
       };
+    }
+    case 'select-text': {
+      const selectionType = input.selection_type;
+      if (selectionType !== 'text' && selectionType !== 'cursor_before' && selectionType !== 'cursor_after') {
+        throw invalid('selection_type', 'must be text, cursor_before, or cursor_after');
+      }
+      const text = input.text === undefined ? undefined : typeof input.text === 'string' ? input.text : (() => { throw invalid('text', 'must be a string'); })();
+      return {
+        ...base,
+        action: 'select-text',
+        element_id: requireString(input.element_id, 'element_id'),
+        ...(text === undefined ? {} : { text }),
+        selection_type: selectionType,
+      };
+    }
     case 'set-checked':
       return {
         ...base,
@@ -667,6 +776,16 @@ export function parsePageAgentResponse(value: unknown, expectedAction: PageAgent
     if (!isRecord(input.result) || input.result.pressed !== true) throw pageAgentError('Invalid press result.');
     return { kind: 'page-agent-response', protocol_version: protocolVersion, request_id: requestId, ok: true,
       action: 'press', result: { ...result, pressed: true } };
+  }
+  if (expectedAction === 'select-text') {
+    const result = parseElementActionResult(input.result);
+    if (!isRecord(input.result) || input.result.selected !== true) throw pageAgentError('Invalid select-text result.');
+    const selectionType = input.result.selection_type;
+    if (selectionType !== 'text' && selectionType !== 'cursor_before' && selectionType !== 'cursor_after') {
+      throw pageAgentError('Invalid selection type.');
+    }
+    return { kind: 'page-agent-response', protocol_version: protocolVersion, request_id: requestId, ok: true,
+      action: 'select-text', result: { ...result, selected: true, selection_type: selectionType } };
   }
   if (expectedAction === 'set-checked') {
     const result = parseElementActionResult(input.result);

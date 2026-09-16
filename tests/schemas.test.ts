@@ -118,4 +118,107 @@ describe('tool contract schemas', () => {
 
     expect(request.args).toEqual({ url: 'javascript:alert(1)' });
   });
+
+  it('parses modifier keys and rejects unsupported modifiers', () => {
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'press',
+      tool: 'browser.press',
+      args: { tab_id: 1, element_id: 'opaque', key: 'a', modifiers: ['Control'] },
+    }).args).toEqual({ tab_id: 1, element_id: 'opaque', key: 'a', modifiers: ['Control'] });
+
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'press-key',
+      tool: 'browser.press_key',
+      args: { tab_id: 1, key: 'Enter' },
+    }).args).toEqual({ tab_id: 1, key: 'Enter' });
+
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'click-at',
+      tool: 'browser.click_at',
+      args: { tab_id: 1, x: 10, y: 20, modifiers: ['Shift'] },
+    }).args).toEqual({ tab_id: 1, x: 10, y: 20, modifiers: ['Shift'] });
+
+    expect(() => parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'click',
+      tool: 'browser.click',
+      args: { tab_id: 1, element_id: 'opaque', modifiers: ['Hyper'] },
+    })).toThrow(ToolFailure);
+  });
+
+  it('parses select_text and requires text for a text selection', () => {
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'select-text',
+      tool: 'browser.select_text',
+      args: { tab_id: 1, element_id: 'opaque', text: 'hello' },
+    }).args).toEqual({ tab_id: 1, element_id: 'opaque', text: 'hello', selection_type: 'text' });
+
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'cursor',
+      tool: 'browser.select_text',
+      args: { tab_id: 1, element_id: 'opaque', selection_type: 'cursor_after' },
+    }).args).toEqual({ tab_id: 1, element_id: 'opaque', selection_type: 'cursor_after' });
+
+    expect(() => parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'missing-text',
+      tool: 'browser.select_text',
+      args: { tab_id: 1, element_id: 'opaque' },
+    })).toThrow(ToolFailure);
+  });
+
+  it('parses frame targeting and omits frame_id when it is not given', () => {
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'frames',
+      tool: 'browser.get_frames',
+      args: { tab_id: 3 },
+    }).args).toEqual({ tab_id: 3 });
+
+    // Frame 0 is the top document, so it must survive parsing as an explicit value.
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'frame-zero',
+      tool: 'browser.get_interactives',
+      args: { tab_id: 3, frame_id: 0 },
+    }).args).toEqual({ tab_id: 3, frame_id: 0 });
+
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'frame-iframe',
+      tool: 'browser.click',
+      args: { tab_id: 3, element_id: 'opaque', frame_id: 9 },
+    }).args).toEqual({ tab_id: 3, element_id: 'opaque', frame_id: 9 });
+
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'frame-default',
+      tool: 'browser.get_interactives',
+      args: { tab_id: 3 },
+    }).args).toEqual({ tab_id: 3 });
+
+    expect(() => parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'frame-negative',
+      tool: 'browser.get_interactives',
+      args: { tab_id: 3, frame_id: -1 },
+    })).toThrow(ToolFailure);
+  });
 });

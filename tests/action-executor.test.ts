@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionExecutor } from '../src/content/action-executor';
 import { ElementRegistry } from '../src/content/element-registry';
 import { ToolFailure } from '../src/core/protocol/errors';
+import type { KeyModifier } from '../src/core/protocol/tool-contract';
 
 function setVisible(element: Element): void {
   element.getBoundingClientRect = () => ({
@@ -265,5 +266,66 @@ describe('ActionExecutor key handling', () => {
     executor.press(elementId, 'Enter');
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('reports modifier keys on the synthetic key events', () => {
+    const { elementId, executor } = setupElement('<input id="q">', '#q');
+    const seen: Array<{ key: string; ctrlKey: boolean; shiftKey: boolean }> = [];
+    document.querySelector('#q')?.addEventListener('keydown', (event) => {
+      const keyboard = event as KeyboardEvent;
+      seen.push({ key: keyboard.key, ctrlKey: keyboard.ctrlKey, shiftKey: keyboard.shiftKey });
+    });
+    const modifiers: KeyModifier[] = ['Control', 'Shift'];
+
+    executor.press(elementId, 'a', modifiers);
+
+    expect(seen).toEqual([{ key: 'a', ctrlKey: true, shiftKey: true }]);
+  });
+});
+
+describe('ActionExecutor click modifiers', () => {
+  it('carries modifier flags on the synthetic mouse events', () => {
+    const { element, elementId, executor } = setupElement('<button>Open</button>');
+    const seen: boolean[] = [];
+    element.addEventListener('mousedown', (event) => seen.push(event.metaKey));
+    element.addEventListener('click', (event) => seen.push(event.metaKey));
+
+    const modifiers: KeyModifier[] = ['Meta'];
+    executor.click(elementId, modifiers);
+
+    expect(seen).toEqual([true, true]);
+  });
+});
+
+describe('ActionExecutor selectText', () => {
+  it('selects matching text inside an input', () => {
+    const { element, elementId, executor } = setupElement('<input value="hello world">');
+
+    executor.selectText(elementId, 'world', 'text');
+
+    const input = element as HTMLInputElement;
+    expect(input.selectionStart).toBe(6);
+    expect(input.selectionEnd).toBe(11);
+  });
+
+  it('places the cursor after the existing value', () => {
+    const { element, elementId, executor } = setupElement('<input value="abcd">');
+
+    const result = executor.selectText(elementId, undefined, 'cursor_after');
+
+    const input = element as HTMLInputElement;
+    expect(input.selectionStart).toBe(4);
+    expect(input.selectionEnd).toBe(4);
+    expect(result).toMatchObject({ selected: true, selection_type: 'cursor_after' });
+  });
+
+  it('reports element_not_found when the requested text is missing', () => {
+    const { elementId, executor } = setupElement('<input value="hello">');
+    expectToolError(() => executor.selectText(elementId, 'absent', 'text'), 'element_not_found');
+  });
+
+  it('rejects elements that do not support text selection', () => {
+    const { elementId, executor } = setupElement('<button>Not editable</button>');
+    expectToolError(() => executor.selectText(elementId, 'x', 'text'), 'element_not_editable');
   });
 });

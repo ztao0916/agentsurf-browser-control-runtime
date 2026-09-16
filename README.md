@@ -35,7 +35,7 @@ Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host
 
 当前提供 Windows 和 macOS（Google Chrome 稳定版、当前用户）Native Host 安装脚本。macOS 适配已提供代码，但尚未在真实 Mac 上验证完整链路。Linux 的 Native Host 安装脚本和连接教程尚未提供。
 
-当前未提供 OCR 及 iframe / Shadow DOM 专门支持。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。项目提供本地 MCP Server，供支持 MCP 的 Agent 使用。
+当前未提供 OCR 及 Shadow DOM 专门支持；iframe 通过 `browser.get_frames` 加 `frame_id` 参数显式寻址（默认只作用于顶层文档）。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。项目提供本地 MCP Server，供支持 MCP 的 Agent 使用。
 
 ## 公开 MCP 安装
 
@@ -352,6 +352,7 @@ Get-NetTCPConnection -LocalPort 8765 -State Listen |
 | --- | --- |
 | 查询能力 | `browser.get_capabilities` |
 | 标签页管理 | `browser.list_tabs` / `browser.open` / `browser.switch_tab` / `browser.close_tab` |
+| 子框架（iframe） | `browser.get_frames`，再用 `frame_id` 指定（页面读取与元素操作都支持） |
 | 前进、后退、刷新 | `browser.back` / `browser.forward` / `browser.reload` |
 | 页面元信息 | `browser.get_page` / `browser.get_page_state` |
 | 可访问文本与结构 | `browser.get_accessibility_tree` |
@@ -362,10 +363,12 @@ Get-NetTCPConnection -LocalPort 8765 -State Listen |
 | 元素拖动与等待 | `browser.drag` / `browser.wait_for_element` |
 | 滚动 | `browser.scroll` / `browser.scroll_at` |
 | 坐标操作 | `browser.mouse_move` / `browser.click_at` / `browser.drag_at` |
-| 键盘、文本、对话框 | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
+| 键盘、文本、对话框 | `browser.press_key` / `browser.type_text` / `browser.select_text` / `browser.handle_dialog` |
 | 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
 | 会话与标签页归属 | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` |
 | 调试器与 CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
+
+`browser.press`、`browser.press_key`、`browser.click`、`browser.double_click` 和 `browser.click_at` 支持可选 `modifiers`，取值为 `Alt` / `Control` / `Meta` / `Shift`。
 
 具体参数以 `src/core/protocol/tool-contract.ts` 和 `src/core/protocol/schemas.ts` 为准。工具名和参数不可仅凭其他浏览器工具的命名习惯猜测。
 

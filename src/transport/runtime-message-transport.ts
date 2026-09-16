@@ -13,8 +13,10 @@ export function sendRuntimeMessage(message: unknown): Promise<unknown> {
   return chrome.runtime.sendMessage(message);
 }
 
-export function sendPageAgentRequest(tabId: number, request: unknown): Promise<unknown> {
-  return chrome.tabs.sendMessage(tabId, request);
+export function sendPageAgentRequest(tabId: number, request: unknown, frameId = 0): Promise<unknown> {
+  // Always target one frame explicitly: content scripts run in every frame, so a broadcast would
+  // race several Page Agents for the same response.
+  return chrome.tabs.sendMessage(tabId, request, { frameId });
 }
 
 export function registerRuntimeMessageHandler(handler: RuntimeMessageHandler): void {
