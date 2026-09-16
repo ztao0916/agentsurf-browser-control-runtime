@@ -298,6 +298,12 @@ interface ClaimCall {
 class FakeSessionCoordinator implements SessionCoordinator {
   public readonly claims: ClaimCall[] = [];
   public resetCount = 0;
+  /** tab_id → owning session_id, as the runtime sees it when filtering list_tabs. */
+  public owners = new Map<number, string>();
+
+  public listLeases(): Promise<Map<number, string>> {
+    return Promise.resolve(new Map(this.owners));
+  }
 
   public start(sessionId?: string): Promise<BrowserSessionInfo> {
     return Promise.resolve(sessionInfo(sessionId ?? 'session_default'));
@@ -628,6 +634,44 @@ describe('BrowserToolRuntime', () => {
       expect(response.result).toEqual({ released_tab_ids: [42], session_count: 2 });
     }
     expect(sessions.resetCount).toBe(1);
+  });
+
+  it('hides tabs another session holds, unless include_all is set', async () => {
+    const sessions = new FakeSessionCoordinator();
+    const runtimeWithSessions = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      sessions,
+    );
+
+    // The fake tabs adapter only knows tab 7, so make it another session's tab.
+    sessions.owners.set(7, 'other_session');
+
+    const hidden = await runtimeWithSessions.handle(request('browser.list_tabs', {}, 'this_session'));
+    expect(hidden.ok).toBe(true);
+    if (hidden.ok) {
+      expect(hidden.result.tabs).toEqual([]);
+      expect(hidden.result.other_session_tabs).toBe(1);
+    }
+
+    const included = await runtimeWithSessions.handle(request('browser.list_tabs', { include_all: true }, 'this_session'));
+    expect(included.ok).toBe(true);
+    if (included.ok) {
+      expect(included.result.tabs.map((tab) => tab.tab_id)).toEqual([7]);
+      expect(included.result.other_session_tabs).toBeUndefined();
+    }
+
+    // The owning session sees its own tab, and an unclaimed tab is visible to everyone.
+    sessions.owners.set(7, 'this_session');
+    const own = await runtimeWithSessions.handle(request('browser.list_tabs', {}, 'this_session'));
+    expect(own.ok).toBe(true);
+    if (own.ok) expect(own.result.tabs.map((tab) => tab.tab_id)).toEqual([7]);
+
+    sessions.owners.clear();
+    const unclaimed = await runtimeWithSessions.handle(request('browser.list_tabs', {}, 'this_session'));
+    expect(unclaimed.ok).toBe(true);
+    if (unclaimed.ok) expect(unclaimed.result.tabs.map((tab) => tab.tab_id)).toEqual([7]);
   });
 
   it('rejects unsupported URL protocols', async () => {

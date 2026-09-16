@@ -303,8 +303,19 @@ export class BrowserToolRuntime {
           request.args.element_id,
           request.args.files,
         );
-      case 'browser.list_tabs':
-        return { tabs: await this.tabs.list(request.args.window_id) };
+      case 'browser.list_tabs': {
+        const tabs = await this.tabs.list(request.args.window_id);
+        // A conversation only sees its own tabs plus unclaimed ones, so it cannot even aim at another
+        // conversation's page by accident. include_all is the deliberate escape for scripts.
+        if (request.args.include_all === true || this.sessions === undefined) return { tabs };
+        const owners = await this.sessions.listLeases();
+        const visible = tabs.filter((tab) => {
+          const owner = owners.get(tab.tab_id);
+          return owner === undefined || owner === request.session_id;
+        });
+        const otherSessionTabs = tabs.length - visible.length;
+        return { tabs: visible, ...(otherSessionTabs === 0 ? {} : { other_session_tabs: otherSessionTabs }) };
+      }
       case 'browser.get_frames':
         return this.getFrames(request.args.tab_id, request.session_id);
       case 'browser.get_page':

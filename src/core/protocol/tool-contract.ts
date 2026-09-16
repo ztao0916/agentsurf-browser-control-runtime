@@ -260,6 +260,8 @@ export interface InteractiveSnapshot {
 
 export interface ListTabsArgs {
   window_id?: number;
+  /** Include tabs another session holds. Default false, so a conversation only sees its own. */
+  include_all?: boolean;
 }
 
 export interface GetPageArgs {
@@ -439,6 +441,8 @@ export interface ToolArguments {
 
 export interface ListTabsResult {
   tabs: TabInfo[];
+  /** How many tabs were left out because another session holds them. */
+  other_session_tabs?: number;
 }
 
 export interface GetFramesResult {

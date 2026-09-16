@@ -374,7 +374,11 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
     }
     case 'browser.list_tabs': {
       const windowId = optionalInteger(args.window_id, 'args.window_id');
-      return windowId === undefined ? {} : { window_id: windowId };
+      const includeAll = optionalBoolean(args.include_all, 'args.include_all');
+      return {
+        ...(windowId === undefined ? {} : { window_id: windowId }),
+        ...(includeAll === undefined ? {} : { include_all: includeAll }),
+      };
     }
     case 'browser.get_frames':
       return { tab_id: requireInteger(args.tab_id, 'args.tab_id') };

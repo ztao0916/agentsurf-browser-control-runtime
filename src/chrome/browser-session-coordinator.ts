@@ -175,23 +175,41 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
 
   public async assertAccess(sessionId: string | undefined, tabId: number): Promise<void> {
     await this.ensureInitialized();
-    if (sessionId === undefined) return;
     const lease = this.leases.get(tabId);
     if (lease === undefined) return;
-    if (lease.session_id === sessionId) {
+    if (sessionId !== undefined && lease.session_id === sessionId) {
       await this.touchLease(lease);
       return;
     }
     if (!isLeaseIdle(lease, Date.now())) {
+      // A caller without a session (a script, a CLI) does not get to bypass a conversation's
+      // ownership: leases are authoritative for everyone.
       throw new ToolFailure(createToolError(
         'tab_in_use',
-        `Tab ${tabId} is not leased to session ${sessionId}. Claim it before use.`,
+        sessionId === undefined
+          ? `Tab ${tabId} is held by session ${lease.session_id}. Open a session and claim it first.`
+          : `Tab ${tabId} is not leased to session ${sessionId}. Claim it before use.`,
         false,
         { tab_id: tabId, owning_session_id: lease.session_id },
       ));
     }
     // The owner went away without releasing, so free the tab instead of blocking it forever.
     await this.enqueue(() => this.dropLease(tabId, lease.session_id));
+  }
+
+  /**
+   * Live leases as tab_id → owning session_id, dropping any that went idle. Tabs owned by nobody are
+   * absent, which is how callers tell "free" from "taken".
+   */
+  public async listLeases(): Promise<Map<number, string>> {
+    await this.ensureInitialized();
+    const expired = [...this.leases].filter(([, lease]) => isLeaseIdle(lease, Date.now()));
+    if (expired.length > 0) {
+      await this.enqueue(async () => {
+        for (const [tabId, lease] of expired) await this.dropLease(tabId, lease.session_id);
+      });
+    }
+    return new Map([...this.leases].map(([tabId, lease]) => [tabId, lease.session_id]));
   }
 
   /**

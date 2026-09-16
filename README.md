@@ -342,6 +342,8 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 返回你当前 Chrome 的标签页列表（`ok: true`）就说明：
 **Bridge → Native Host → 扩展 → Chrome API** 全链路打通。
 
+> 这一步不带会话，所以列表里只会有“未归属”的页签：被别的对话占用的会少显示，并以 `other_session_tabs` 告诉你数量；加 `include_all: true` 可以看全部。这只是可见范围，链路验证不受影响。
+
 这一步与 MCP 客户端无关，是排查“到底是链路问题还是 MCP 配置问题”的分水岭：
 
 | 现象 | 结论 |
@@ -441,7 +443,8 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查�
 - 自己 `browser.open` 打开的页签会**自动建立归属并归入本会话的 Chrome 分组**；组名默认是 `AI · <4位ID>`，可用 `browser.name_session` 改成有意义的名字（例如“禅道排查”）；
 - 另一个对话再想操作这些页签会被拒绝（`tab_in_use`），两个对话不会互相踩；
 - 需要接管用户**已经打开**的页签时用 `browser.claim_tab`：它会建立归属并**默认归组**（传 `group: false` 可只归属、不把页签拉进分组）；
-- `browser.list_tabs` 仍然列出全部页签（方便确认目标），但操作别人已认领的页签会失败；
+- `browser.list_tabs` 默认只列出**本对话的页签 + 尚未归属的页签**，并用 `other_session_tabs` 告诉你隐藏了几个；传 `include_all: true` 可以看到全部（脚本、排查用）；
+- **租约对所有调用都生效**：不带 `session_id` 的调用（脚本、CLI）碰到别人已占用的页签同样报 `tab_in_use`，不会再静默放行；脚本要接管就先 `start_session` + `claim_tab`；
 - `browser.end_session`（可带 `close_tabs`）会释放会话并解除分组。
 
 边界与注意：
@@ -450,7 +453,7 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查�
 - 主动 `browser.open` 一个已有 `tab_id`（即导航已有页签）会建立归属但**不**动你的标签栏；
 - 租约存在扩展的 `storage.session` 里（**Chrome 重启即清空**），会话记录在 `storage.local` 里是持久的；
 - **空闲自动回收**：某个对话被直接关掉（没调 `end_session`）时，它占用过的页签在**空闲 30 分钟**后自动释放，别的对话即可接管；正在使用的页签会续租，不会被误抢；
-- **手动兑底**：`browser.reset_sessions` 一次性释放所有会话与租约并解除分组，用于页签被一个已经消失的对话卡住的情况。
+- **手动兜底**：`browser.reset_sessions` 一次性释放所有会话与租约并解除分组，用于页签被一个已经消失的对话卡住的情况。
 
 ## 8. 更新、移动目录、卸载
 
@@ -1102,6 +1105,8 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 Getting your real tab list back (`ok: true`) proves the whole path
 **bridge → native host → extension → Chrome APIs**.
 
+> This step carries no session, so the list only shows unclaimed tabs: anything another conversation holds is hidden and counted in `other_session_tabs`; add `include_all: true` to see everything. That is only the visible scope — the link check itself is unaffected.
+
 This step is the dividing line for troubleshooting:
 
 | Result | Conclusion |
@@ -1191,7 +1196,8 @@ Each conversation's MCP server process owns a session, so **the agent does not h
 - tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**, titled `AI · <4 chars>` by default and renameable with `browser_name_session`;
 - another conversation is refused those tabs (`tab_in_use`), so conversations stop stepping on each other;
 - use `browser_claim_tab` to take over a tab the user already had open: it claims and, by default, groups it (pass `group: false` to claim without moving it);
-- `browser_list_tabs` still lists every tab so you can find your target, but driving a tab owned by another session fails;
+- `browser_list_tabs` returns this conversation's tabs plus unclaimed ones and reports the rest in `other_session_tabs`; pass `include_all: true` to see every tab (for scripts and troubleshooting);
+- **leases apply to every caller**: a session-less call (a script, the CLI) is refused with `tab_in_use` on a tab another conversation holds instead of silently bypassing the check — a script that wants such a tab starts a session and claims it;
 - `browser_end_session` (optionally with `close_tabs`) releases the session and ungroups its tabs.
 
 Caveats:
