@@ -35,12 +35,17 @@ export function isLeaseIdle(lease: TabLease, now: number): boolean {
   return now - (lease.last_used_at ?? lease.claimed_at) >= LEASE_IDLE_TIMEOUT_MS;
 }
 
+export interface SessionTitleSource {
+  session_id: string;
+  name: string | null;
+}
+
 /**
  * An unnamed session still needs a group title the user can tell apart from the other conversations,
  * so the last four characters of its ID are appended (`AI · 9A12`). Sessions created by the MCP
  * layer use a random id, which makes this stable per conversation.
  */
-function groupTitleFor(session: StoredSession): string {
+export function groupTitleFor(session: SessionTitleSource): string {
   if (session.name !== null) return session.name;
   const tail = session.session_id.replace(/[^0-9a-zA-Z]/gu, '').slice(-4).toUpperCase();
   return tail.length === 0 ? DEFAULT_GROUP_TITLE : `AI · ${tail}`;
