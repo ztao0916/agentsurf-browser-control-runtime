@@ -142,7 +142,9 @@ const startedSessions = new Set<string>();
 async function ensureSession(sessionId: string): Promise<void> {
   if (startedSessions.has(sessionId)) return;
   try {
-    await callLocalBridge('browser.start_session', {}, sessionId);
+    // The id has to travel in args as well as at the request root: browser.start_session reads it
+    // from args and would otherwise create a session under a different generated id.
+    await callLocalBridge('browser.start_session', { session_id: sessionId }, sessionId);
     startedSessions.add(sessionId);
   } catch {
     // Ignored on purpose: the request that follows returns the actionable error.

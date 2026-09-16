@@ -445,15 +445,22 @@ export class BrowserToolRuntime {
         if (request.args.tab_id !== undefined) await this.assertSessionAccess(request.session_id, request.args.tab_id);
         const tab = await this.open(request.args);
         if (request.session_id !== undefined) {
-          // New tabs always join the group. A tab this call merely navigated is claimed without being
-          // grouped, so driving an existing page does not rearrange the user's tab bar.
-          await this.requireSessions().claim(
-            request.session_id,
-            request.turn_id,
-            tab.tab_id,
-            'agent',
-            request.args.tab_id === undefined,
-          );
+          try {
+            // New tabs always join the group. A tab this call merely navigated is claimed without being
+            // grouped, so driving an existing page does not rearrange the user's tab bar.
+            await this.requireSessions().claim(
+              request.session_id,
+              request.turn_id,
+              tab.tab_id,
+              'agent',
+              request.args.tab_id === undefined,
+            );
+          } catch (error: unknown) {
+            // The ownership step can fail (a session that no longer exists, a tab already leased), and
+            // it must not leave a tab behind. Only close what this call created.
+            if (request.args.tab_id === undefined) await this.tabs.close(tab.tab_id).catch(() => undefined);
+            throw error;
+          }
         }
         return { tab } satisfies OpenResult;
       }
