@@ -1,91 +1,110 @@
 # AgentSurf
 
-AgentSurf 是一个供 AI Agent 控制本机 Chrome 的浏览器运行时。它复用 Chrome 的现有登录态，通过统一的 `browser.*` 工具提供页面观察、点击、输入、截图等能力，不绑定特定 AI 模型。
+**中文** ｜ [English](#english)
 
-已提供面向通用 MCP 客户端的本地 **MCP Server**。项目自身不内置模型调用、任务规划或业务自动化流程。
+AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器运行时。它复用你当前 Chrome 的登录态，把页面观察、点击、输入、截图、iframe、Console/Network 观测等能力统一成 `browser.*` 工具，通过本地 MCP Server 暴露给任意支持 MCP 的 Agent。它不内置模型调用、任务规划，也不绑定特定 AI 产品。
+
+AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console/network inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls, no task planning, and no vendor lock-in.
+
+> 本项目**不通过 Chrome 应用商店分发**，也没有发布公开 npm 包。接入方式是从源码构建、以「未打包扩展」加载到 Chrome，再在本机注册 Native Host。
+>
+> This project is **not distributed through the Chrome Web Store** and publishes no public npm package. The supported path is: build from source, load the extension as an unpacked extension, and register the native host locally.
+
+---
+
+<a id="中文"></a>
+
+# 中文文档
 
 ## 目录
 
-- [工作原理与支持范围](#工作原理与支持范围)
-- [公开 MCP 安装](#公开-mcp-安装)
-- [Windows 安装](#windows-安装)
-- [macOS 安装](#macos-安装)
-- [第一次使用](#第一次使用)
-- [更新重启与移动目录](#更新重启与移动目录)
-- [常见问题与排障](#常见问题与排障)
-- [工具速查](#工具速查)
-- [安全使用边界](#安全使用边界)
-- [开发与调试](#开发与调试)
-- [外部调用协议](#外部调用协议)
-- [项目结构与实现说明](#项目结构与实现说明)
+- [1. 它是什么](#1-它是什么)
+- [2. 工作原理](#2-工作原理)
+- [3. 接入方案选择](#3-接入方案选择)
+- [4. 接入步骤（Windows）](#4-接入步骤windows)
+- [5. 接入步骤（macOS）](#5-接入步骤macos)
+- [6. 验证接入是否成功](#6-验证接入是否成功)
+- [7. 在 Agent 里怎么用](#7-在-agent-里怎么用)
+- [8. 更新、移动目录、卸载](#8-更新移动目录卸载)
+- [9. 排障](#9-排障)
+- [10. 工具速查](#10-工具速查)
+- [11. 错误码与重试语义](#11-错误码与重试语义)
+- [12. 安全边界](#12-安全边界)
+- [13. 开发与调试](#13-开发与调试)
+- [14. 外部调用协议](#14-外部调用协议)
+- [15. 实现细节](#15-实现细节)
+- [16. 当前限制](#16-当前限制)
 
-## 工作原理与支持范围
+## 1. 它是什么
 
-```text
-MCP Client
-  ↕ AgentSurf MCP Server
-本机 Browser Bridge（WebSocket，仅监听 127.0.0.1）
-  ↕ Native Host（通过 Native Messaging 与扩展通信）
-Chrome 扩展（Manifest V3）
-  ↕ Chrome API / Page Agent
-网页
-```
+一句话：**你的 Agent 想操作网页时，不用自己开一个干净浏览器，而是直接借用你正在用的那个 Chrome。**
 
-Chrome 扩展通过 `chrome.runtime.connectNative` 启动 Native Host，由 Host 启动 Bridge。**正常使用不需要手动运行 `npm run bridge`。** 扩展自身不监听 HTTP 或 WebSocket 端口。
+它做什么：
 
-当前提供 Windows 和 macOS（Google Chrome 稳定版、当前用户）Native Host 安装脚本。macOS 适配已提供代码，但尚未在真实 Mac 上验证完整链路。Linux 的 Native Host 安装脚本和连接教程尚未提供。
+- 复用你现有的 Chrome 登录态和标签页，不需要重新登录、不需要导出 Cookie；
+- 提供 **47 个 `browser.*` 工具**：标签页、页面读取、元素点击/输入、表单、滚动、拖拽、截图、iframe、Console、Network、下载、文件上传、CDP；
+- 元素定位使用**不透明 `element_id`**（不暴露 CSS Selector），动作前会校验元素仍可见、可用、且属于当前页面版本；
+- 通过本机 MCP Server 接入，Agent 侧只需要一个 stdio MCP 配置。
 
-当前未提供 OCR 及 Shadow DOM 专门支持；iframe 通过 `browser.get_frames` 加 `frame_id` 参数显式寻址（默认只作用于顶层文档）。受 Chrome 保护的页面（如 `chrome://` 页面和 Chrome Web Store）不能注入 Page Agent。文件上传使用本机绝对路径，下载查询仅返回 Chrome Downloads API 能提供的元数据。项目提供本地 MCP Server，供支持 MCP 的 Agent 使用。
+它不做什么：
 
-## 公开 MCP 安装
+- 不内置任何大模型、不负责规划任务；
+- 不提供云端浏览器，所有通信都在 `127.0.0.1`；
+- 不绕过验证码、不做反爬对抗。
 
-AgentSurf 按“公开分发、用户本地运行”设计：Chrome 扩展负责控制浏览器，公开 npm 包负责 MCP 接入，不需要账号、云端服务或固定项目路径。MCP Server 通过本机配置连接 `127.0.0.1` 上的 Bridge，认证 token 不需要粘贴到 Agent 对话中。
-
-当前仓库已经包含 MCP Server 的发布结构；npm 包和 Chrome Web Store 扩展仍需由项目维护者完成首次发布与审核，下面的配置示例应在发布后使用。
-
-### 三步安装
+## 2. 工作原理
 
 ```text
-安装 Chrome 扩展
-用一条命令安装 Native Host
-在 Agent 中添加 AgentSurf MCP
+        MCP 客户端（你的 Agent）
+              │  stdio
+              ▼
+        AgentSurf MCP Server
+              │  WebSocket + token，仅监听 127.0.0.1
+              ▼
+        本机 Browser Bridge
+              │  Native Messaging（stdin/stdout 二进制分帧）
+              ▼
+        Native Host（native-host.exe / native-host.sh）
+              │  chrome.runtime.connectNative
+              ▼
+        Chrome 扩展（Manifest V3）
+              │  chrome.tabs.sendMessage / chrome.debugger / chrome.webRequest
+              ▼
+        网页（Page Agent Content Script，注入所有 frame）
 ```
 
-先从 Chrome Web Store 安装 AgentSurf 扩展，然后在终端执行下面的命令完成 Native Host 安装：
+几个关键点：
 
-```powershell
-npx -y @agentsurf/mcp-server install-native-host --extension-id <Chrome扩展ID>
-```
+- **扩展是主动方**：它启动时通过 `connectNative` 拉起 Native Host，Host 再启动 Bridge。所以正常使用**不需要手动运行 `npm run bridge`**。
+- **扩展自己不监听任何端口**，Bridge 只监听 `127.0.0.1`，并要求 token 认证（token 由安装脚本随机生成，保存在本机 `config.json`，不需要你复制粘贴到对话里）。
+- **MCP Server 与 Native Host 共用同一份本机配置**，所以 MCP 侧不需要手工填 token。
+- 只有在“协议开发”场景才需要独立 Bridge，见[第 13 节](#13-开发与调试)。
 
-该命令支持 Windows (PowerShell) 和 macOS；Linux 安装脚本尚未提供。安装完成后，在支持 stdio MCP 的客户端中添加 AgentSurf MCP：
+## 3. 接入方案选择
 
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "npx",
-      "args": ["-y", "@agentsurf/mcp-server"]
-    }
-  }
-}
-```
+一共有两条接入路径，按需选一条即可。
 
-MCP Server 会自动读取 Windows 的 `%LOCALAPPDATA%\\BrowserControlRuntime\\config.json` 或 macOS 的 `~/Library/Application Support/BrowserControlRuntime/config.json`。如需覆盖连接配置，可设置 `BROWSER_BRIDGE_URL`、`BROWSER_BRIDGE_TOKEN` 或 `BROWSER_BRIDGE_CONFIG` 环境变量。
+### 方案 A：MCP Server（推荐，适用绝大多数 Agent）
 
-MCP 工具名称使用下划线形式，例如 `browser_list_tabs`、`browser_get_page_content`、`browser_click`。首次使用建议先调用 `browser_list_tabs`；元素操作前调用 `browser_get_interactives`，只使用返回的 `element_id`。
+Agent ↔ `dist/mcp/cli.js`（stdio MCP Server）↔ Bridge ↔ 扩展。
 
-## Windows 安装
+优点：Agent 侧零协议负担，工具与参数由 MCP 自动暴露。
 
-以下命令在 **PowerShell** 中执行。
+### 方案 B：自研客户端直接连 Bridge
 
-### 1. 准备环境
+你的程序 ↔ 本机 WebSocket Bridge（自行完成 `auth` 握手与请求封装）。
 
-- Git
-- Node.js 20 或更高版本、npm 10 或更高版本
-- Chrome 116 或更高版本
-- 支持 stdio MCP 的 Agent
+适用：非 MCP 的运行环境、自己写调度器、或需要精细控制超时与并发。协议见[第 14 节](#14-外部调用协议)。
 
-可用以下命令确认环境：
+> 两种方案都需要先完成下面第 4/5 节的**扩展 + Native Host** 安装，那是所有能力的地基。
+
+## 4. 接入步骤（Windows）
+
+以下命令全部在 **PowerShell** 中执行，并且**在项目根目录**执行。
+
+### 4.1 检查环境
+
+需要：Git、Node.js 20+、npm 10+、Chrome 116+、支持 stdio MCP 的 Agent。
 
 ```powershell
 git --version
@@ -93,7 +112,7 @@ node --version
 npm --version
 ```
 
-### 2. 获取代码并构建
+### 4.2 获取代码并构建
 
 ```powershell
 cd ~/Desktop
@@ -103,75 +122,121 @@ npm install
 npm run build
 ```
 
-仓库访问需要相应 GitHub 权限；如提示登录，在 GitHub 授权流程中完成。后续命令均在项目根目录执行。
+约定：
 
-构建产物位于 `dist/`，不提交到 Git，每台电脑都需要本地构建。**Chrome 加载的是 `dist/`，不是源码目录。**
+- 构建产物在 `dist/`，**不提交到 Git**，每台电脑都要本地构建一次；
+- **Chrome 加载的是 `dist/`，不是 `src/`**；
+- 只改源码不会自动更新 `dist/`，必须重新 `npm run build`。
 
-### 3. 加载 Chrome 扩展
+### 4.3 加载扩展并拿到扩展 ID
 
-1. 打开 `chrome://extensions`，开启“开发者模式”。
-2. 点击“加载已解压的扩展程序”，选择项目中的 `dist/`。
-3. 在扩展详情中复制 AgentSurf 的扩展 ID。
+1. Chrome 地址栏打开 `chrome://extensions`；
+2. 右上角开启 **开发者模式**；
+3. 点击 **加载已解压的扩展程序**，选择项目里的 `dist` 目录；
+4. 在 AgentSurf 卡片上记下 **扩展 ID**（形如 `hpageihlnphdohcplmimhmghljpilbpa`，32 位小写字母）。
 
-首次加载时尚未注册 Native Host，暂时无法连接属于预期情况。未打包扩展在不同电脑或加载路径下可能获得不同 ID，以当前 Chrome 显示的 ID 为准。
+此时扩展还连不上属于**正常现象**：Native Host 还没注册。
 
-### 4. 安装 Native Host
+> ⚠️ 更换电脑、更换项目路径、或删除后重新加载，扩展 ID 都可能变化。**永远以 `chrome://extensions` 当前显示的 ID 为准**，不要沿用旧文档或旧记录里的 ID。
 
-先将下面的字符串替换为实际扩展 ID，再执行：
+### 4.4 安装 Native Host
+
+把 `<扩展ID>` 换成上一步记录的值：
 
 ```powershell
-$extensionId = "替换为Chrome显示的扩展ID"
+$extensionId = "<扩展ID>"
 npm run native-host:install -- -ExtensionId $extensionId
 ```
 
-安装脚本会：
+脚本会做四件事：
 
-- 在 `%LOCALAPPDATA%\BrowserControlRuntime` 创建配置、Native Messaging manifest 和 `native-host.exe` 启动器；
-- 首次生成随机认证 token，重新安装时保留已有有效 token；
-- 注册 `com.browsercontrol.runtime`，只允许指定扩展连接；
-- 默认将 Bridge 配置为 `127.0.0.1:8765`。
+| 动作 | 说明 |
+| --- | --- |
+| 写配置 | `%LOCALAPPDATA%\BrowserControlRuntime\config.json`，含 `port`(默认 8765) 与随机 64 位 `token` |
+| 生成启动器 | `%LOCALAPPDATA%\BrowserControlRuntime\native-host.exe`，内部固定项目 `dist/native-host/host.js` 的绝对路径和 Node 绝对路径 |
+| 写 Native Messaging manifest | `%LOCALAPPDATA%\BrowserControlRuntime\com.browsercontrol.runtime.json`，`allowed_origins` 只允许你填的这个扩展 ID |
+| 注册表登记 | `HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime` |
 
-安装后回到 `chrome://extensions`，重新加载 AgentSurf。
+重新安装时会**复用已有的有效 token**，不需要重新配置 MCP；只用新扩展 ID 重注册时也不会影响其他项目。
 
-### 5. 确认连接
+> 也可以直接用打包好的 CLI：`node dist/mcp/cli.js install-native-host --extension-id <扩展ID> [--port <端口>]`。
 
-扩展启动时会自动尝试连接。用实际扩展 ID 替换下面的占位符，在 Chrome 中打开：
+### 4.5 让扩展重新连接
+
+安装完成后回到 `chrome://extensions`，点 AgentSurf 卡片上的 **重新加载**（🔄）。
+
+扩展重新加载后会自动 `connectNative`，拉起 Native Host 与 Bridge。
+
+### 4.6 用调试页确认链路
+
+Chrome 打开：
 
 ```text
 chrome-extension://<扩展ID>/debug.html
 ```
 
-正常状态为：
+期望看到：
 
 ```text
 Connection: connected
 Agent endpoint: ws://127.0.0.1:8765
 ```
 
-已经连接时无需再点击 Connect。如果未连接，点击一次 **Disconnect**，等待一秒，再点击 **Connect native host**；不要连续点击 Reconnect。仍失败时参见[排障说明](#常见问题与排障)。
+如果显示未连接：
 
-### 6. 配置 MCP
+1. 点一次 **Disconnect**，等 1 秒；
+2. 再点 **Connect native host**；
+3. 不要连续点 Reconnect（会造成重连风暴）。
 
-在 Agent 的 MCP 配置中加入：
+### 4.7 配置 MCP 客户端
+
+在 Agent 的 MCP 配置里加入（以 pi 的 `~/.pi/agent/mcp.json` 为例，其他客户端同理，只是文件位置不同）：
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "npx",
-      "args": ["-y", "@agentsurf/mcp-server"]
+      "command": "C:/Program Files/nodejs/node.exe",
+      "args": ["C:/Users/<用户名>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
     }
   }
 }
 ```
 
-MCP Server 会自动读取本机配置并连接 Bridge。
+把两条路径换成你自己的实际路径：
 
-## macOS 安装
+```powershell
+# Node 可执行文件路径
+(Get-Command node).Source
+# MCP Server 入口路径
+(Resolve-Path dist/mcp/cli.js).Path
+```
 
-需要 Git、Node.js 20+、npm 10+、Chrome 116+ 和支持 stdio MCP 的 Agent。以下命令在 Mac 终端执行，无需 `sudo`，适用于当前用户的 Google Chrome 稳定版，不自动注册 Chromium、Chrome Beta 或其他浏览器。
+注意事项：
 
-### 1. 构建并加载扩展
+- **用绝对路径**。MCP 客户端常常是 GUI 应用，它的 `PATH` 不一定包含 nvm/Node 的安装目录；
+- 路径写正斜杠 `/` 或双反斜杠 `\\` 都可以，不要写单个反斜杠；
+- 修改 MCP 配置后需要**重启 MCP 客户端**（或它的会话），配置只在启动时读取；
+- 该项目不需要任何环境变量，MCP Server 会自动读取第 4.4 步生成的 `config.json`；
+- 如需覆盖连接目标，可设置 `BROWSER_BRIDGE_URL`、`BROWSER_BRIDGE_TOKEN` 或 `BROWSER_BRIDGE_CONFIG`。
+
+### 4.8 在 Agent 里确认工具可用
+
+对 Agent 说：
+
+```text
+调用 browser_get_capabilities 看看有哪些工具。
+```
+
+应返回 47 个工具，并包含 `browser_get_frames`、`browser_select_text`、`browser_get_console_messages`、`browser_get_network_requests`。
+
+## 5. 接入步骤（macOS）
+
+> ⚠️ macOS 安装脚本已随仓库提供，但**尚未在真实 Mac 上完整验证链路**。脚本可用 ≠ 兼容性已验证通过。
+
+前置条件同上（Git / Node 20+ / npm 10+ / Chrome 116+）。
+
+### 5.1 构建并加载扩展
 
 ```sh
 cd ~/Desktop
@@ -181,243 +246,393 @@ npm install
 npm run build
 ```
 
-在 `chrome://extensions` 开启开发者模式，加载项目的 `dist/`，复制扩展 ID。
+在 `chrome://extensions` 开启开发者模式，加载项目的 `dist/`，记录扩展 ID。
 
-### 2. 安装 Native Host
-
-将字符串替换为实际扩展 ID：
+### 5.2 安装 Native Host
 
 ```sh
-npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
+npm run native-host:install:macos -- "<扩展ID>"
 ```
 
-默认端口为 8765，可通过末尾额外参数指定端口。安装会保留已有有效 token，创建以下文件：
+默认端口 8765，可用末尾额外参数指定。创建的文件：
 
 | 文件 | 路径 |
 | --- | --- |
-| 配置（仅当前用户读写） | `~/Library/Application Support/BrowserControlRuntime/config.json` |
+| 配置（仅当前用户可读写） | `~/Library/Application Support/BrowserControlRuntime/config.json` |
 | 可执行启动脚本 | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
-| Chrome Native Messaging manifest | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
+| Native Messaging manifest | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
 
-启动器记录安装时 Node 的绝对路径，不依赖从桌面启动 Chrome 时的 `PATH`。使用 nvm、Homebrew 等方式更换 Node 路径后，需要重新运行安装命令。项目路径含空格也会进行 shell 引号处理。
+要点：
 
-### 3. 配置 MCP
+- 启动脚本记录安装时的 Node 绝对路径，不依赖桌面启动 Chrome 时的 `PATH`；用 nvm / Homebrew 换过 Node 后要重新安装；
+- 不需要 `sudo`，也不要混用 `sudo`，否则 manifest 会落到错误的用户目录；
+- 只针对当前用户的 Google Chrome 稳定版，不会自动注册 Chromium / Chrome Beta。
 
-重新加载 AgentSurf，在 `chrome-extension://<扩展ID>/debug.html` 确认 `connected`。然后在 Agent 的 MCP 配置中加入公开包：
+### 5.3 重新加载扩展并确认连接
+
+重新加载 AgentSurf，然后打开 `chrome-extension://<扩展ID>/debug.html`，确认 `connected`。
+
+### 5.4 配置 MCP 客户端
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "npx",
-      "args": ["-y", "@agentsurf/mcp-server"]
+      "command": "/usr/local/bin/node",
+      "args": ["/Users/<用户名>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
     }
   }
 }
 ```
 
-MCP Server 与 Native Host 使用同一份本机配置，不需要手工复制 token。
+取真实路径：`which node` 与 `realpath dist/mcp/cli.js`。
 
-### 4. 更新、重启与卸载
+## 6. 验证接入是否成功
 
-完整更新时先在 Chrome 禁用 AgentSurf，等待旧 Host 退出，再执行：
+按“从里到外”的顺序验证，出问题时最容易定位。
 
-```sh
-git pull
-npm install
-npm run build
-npm run native-host:install:macos -- "替换为Chrome显示的扩展ID"
-```
-
-每一步成功后再继续；之后重新启用扩展并重新连接 MCP 客户端。移动项目目录或更换扩展 ID、Node 路径后同样需要重新安装 Native Host。
-
-卸载前先禁用扩展：
-
-```sh
-npm run native-host:uninstall:macos
-```
-
-卸载仅移除 Native Host 注册和启动脚本，保留配置，不删除 Chrome 扩展或 MCP 包。该流程尚未经过真实 Mac 验证，不应将安装脚本提供等同于兼容性验证通过。
-
-## 第一次使用
-
-向 MCP 客户端发送：
-
-```text
-使用 AgentSurf 打开 https://example.com，读取页面正文，并告诉我页面标题和链接。
-```
-
-推荐的只读调用流程：
-
-1. `browser.list_tabs`：了解当前标签页，避免覆盖用户正在使用的网页。
-2. `browser.open`，参数 `{"url":"https://example.com","activate":true}`：新建页面，取得返回的 `tab_id`。
-3. `browser.get_page_state`，传入该 `tab_id`：确认页面 URL 和加载状态；如果仍在加载，稍后再读取。
-4. `browser.get_accessibility_tree`，传入同一 `tab_id`：读取页面可访问文本和链接结构。
-
-**`browser.get_page` / `browser.get_page_state` 返回页面元信息，不是网页正文抓取工具。打开网址用 `browser.open`，没有 `browser.navigate`。**
-
-其他示例：
-
-```text
-使用 AgentSurf 列出当前 Chrome 的标签页。
-使用 AgentSurf 查看当前页面有哪些可交互元素，先不要点击。
-使用 AgentSurf 截取当前页面并描述页面状态。
-```
-
-元素操作前先调用 `browser.get_interactives`，点击和填写使用它返回的 `element_id`，不得自行编造 CSS Selector、XPath 或元素 ID。页面更新导致 ID 失效时，重新获取交互元素。
-
-## 更新重启与移动目录
-
-### 按修改范围更新
-
-| 修改范围 | 生效步骤 |
-| --- | --- |
-| Chrome 扩展代码或 Native Host JS | 重新构建，再重新加载扩展，让新 Host 启动 |
-| Native Host 安装脚本或启动器 | 禁用扩展，构建并重新安装 Native Host，再启用扩展 |
-| MCP Server 或扩展代码 | 更新 MCP 包或扩展，并按对应平台流程重新加载 |
-| 项目路径或扩展 ID | 重新注册 Native Host |
-
-只改源码不会更新 `dist/`；只执行构建不会重新生成已安装的 `native-host.exe`；已经启动的 Host 也不会自动加载新的 JS。
-
-### 完整更新流程（Windows）
-
-macOS 使用上方 Mac 章节中的更新命令。以下 Windows 流程中，不确定本次更新涉及哪一层时，使用以下流程：
-
-1. 在 `chrome://extensions` 暂时禁用 AgentSurf，等待旧 Native Host 退出。
-2. 在项目实际目录执行：
-
-   ```powershell
-   git pull
-   npm install
-   npm run build
-   $extensionId = "替换为Chrome显示的扩展ID"
-   npm run native-host:install -- -ExtensionId $extensionId
-   ```
-
-   每一步成功后再继续。如存在本地未提交修改，先妥善处理，不要用强制重置覆盖它们。
-
-3. 重新启用 AgentSurf，在 `debug.html` 确认连接状态。
-4. 如 MCP 包有更新，重新启动 MCP 客户端以获取新版本。
-5. 用“第一次使用”中的只读流程检查连接和页面读取。
-
-如果只是连接临时异常、没有更新代码，可以先在调试页 Disconnect / Connect，或重新加载扩展，无需每次重新构建安装。
-
-### 移动目录或更换扩展 ID
-
-以下 `native-host:install` 在 macOS 对应 `native-host:install:macos`，参数形式见 Mac 安装章节。
-
-Native Host 启动器引用项目中的 `dist/native-host/host.js`。移动或重命名项目后：
-
-1. 禁用旧扩展，在新目录安装依赖并构建。
-2. 在 Chrome 中加载新目录的 `dist/`，取得当前扩展 ID。
-3. 在新目录重新执行 `native-host:install`。
-4. 重新加载扩展并重新启动 MCP 客户端。
-
-仅扩展 ID 变化时，也必须使用新 ID 重新注册 Native Host。
-
-## 常见问题与排障
-
-| 现象 | 含义与处理方向 |
-| --- | --- |
-| `Chrome Extension is not connected` | Bridge 能响应，但没有可用扩展连接。检查调试页状态、Native Host 握手，以及源码、构建产物、已安装启动器是否同步。 |
-| 连接被拒绝 / `ECONNREFUSED` | 目标端口没有可用监听。确认扩展已启用、Native Host 已安装并启动。 |
-| `EADDRINUSE` | Bridge 端口被占用。排查误启动的独立 Bridge、旧 Host 或其他 Chrome 配置中的扩展实例。 |
-| `tool is unsupported` | 工具名不受当前运行时支持。对照工具列表或 `browser.get_capabilities`，不要直接重装扩展。 |
-| 安装时 `native-host.exe` 被占用 | 先禁用扩展并等待旧 Host 退出，再安装。不要结束所有 `node.exe`，以免影响其他项目。 |
-| Native Host 找不到或禁止访问 | 检查 Native Host 注册、启动器路径，以及安装时填写的扩展 ID 是否与当前一致。 |
-| `unsupported_page` | Chrome 不允许在该页面注入 Page Agent。换普通 HTTP/HTTPS 页面。 |
-| `screenshot_unavailable` | 默认可视区域截图要求目标是所在窗口的活动标签页；截图期间也不能切换目标或改变 revision。 |
-
-定位顺序：
-
-1. 查看 `chrome://extensions` 中的启用状态和扩展错误。
-2. 查看 `debug.html` 的连接状态及连接、请求、响应事件。
-3. 必要时打开扩展 Service Worker 检查窗口查看 Native Messaging 错误。
-4. 检查端口对应进程，区分 Native Host 和独立 Bridge。不要仅因端口有监听就认定 Chrome 已连接。
-
-Mac 额外检查：manifest 是否安装在当前用户的 Google Chrome 目录、`native-host.sh` 是否可执行，以及其中引用的 Node 和 Host 路径是否仍存在。安装脚本设置执行权限；Node 路径变化时重新安装，不要用 `sudo` 混用用户目录。
-
-Mac 默认端口可用 `lsof -nP -iTCP:8765 -sTCP:LISTEN` 查看。Windows 默认端口可用以下只读 PowerShell 命令检查：
+### 6.1 Bridge 是否在监听
 
 ```powershell
+# Windows
 Get-NetTCPConnection -LocalPort 8765 -State Listen |
   Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
-一次成功列出标签页只能证明当时链路可用，不能证明长时间运行和重连都稳定。分享日志前移除认证信息和敏感页面数据。
+```sh
+# macOS
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+```
 
-## 工具速查
+有监听 = Bridge 已启动（Chrome 扩展成功拉起了 Host）。
+
+### 6.2 全链路是否通（不经过 MCP 客户端）
+
+仓库自带一个模拟外部 Agent 的脚本，直接连 Bridge 发一个请求：
+
+```powershell
+node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
+```
+
+> PowerShell 与 bash / zsh 都直接用单引号包住整段 JSON。JSON 里不要放空格，否则 PowerShell 会把参数拆开。
+
+返回你当前 Chrome 的标签页列表（`ok: true`）就说明：
+**Bridge → Native Host → 扩展 → Chrome API** 全链路打通。
+
+这一步与 MCP 客户端无关，是排查“到底是链路问题还是 MCP 配置问题”的分水岭：
+
+| 现象 | 结论 |
+| --- | --- |
+| 这里失败 | 链路问题，看[第 9 节](#9-排障) |
+| 这里成功、MCP 里失败 | MCP 配置问题（路径、Node、是否重启客户端） |
+
+### 6.3 端到端冒烟
+
+在 Agent 里依次让它做：
+
+1. `browser_list_tabs` —— 能列出标签页；
+2. `browser_get_page_content`（带某个普通网页的 `tab_id`）—— 能读到正文；
+3. `browser_screenshot` —— 能拿到图片，且页面上**没有**“Chrome 正在被调试”横幅残留（用完记得 `browser_detach_debugger`）。
+
+## 7. 在 Agent 里怎么用
+
+### 7.1 只读流程（推荐先跑一遍）
+
+```text
+1. browser_list_tabs                      # 先看清有哪些标签页，避免动到用户正在用的页面
+2. browser_open {"url":"https://example.com","activate":true}
+                                          # 打开页面拿到 tab_id
+3. browser_get_page_state {"tab_id":...}  # 确认 URL / 加载状态 / revision
+4. browser_get_page_content {"tab_id":...}
+                                          # 读正文；SPA 或外壳页可能要配合 frames
+```
+
+注意：**`browser_get_page` / `browser_get_page_state` 只返回页面元信息，不是正文抓取工具**；打开网址用 `browser_open`（**没有** `browser_navigate`）。
+
+### 7.2 元素操作流程（element_id 模式）
+
+```text
+1. browser_get_interactives {"tab_id":...}     # 拿到元素快照
+2. browser_click {"tab_id":..., "element_id":"el_..."}
+```
+
+规则：
+
+- **只能使用 `browser_get_interactives` 返回的 `element_id`**，不允许自行编造 CSS Selector、XPath 或元素 ID；
+- `element_id` 与「文档 + 页面 revision + frame」绑定，页面变化后会失效并返回 `stale_element`，此时**重新获取交互元素再重试**；
+- 需要组合键（Ctrl+A、Cmd+Enter、Shift+Tab）时用 `modifiers`：
+
+```json
+{"tab_id": 123, "element_id": "el_...", "key": "a", "modifiers": ["Control"]}
+```
+
+- 需要在输入框里选中文字或移动光标时用 `browser_select_text`：
+
+```json
+{"tab_id": 123, "element_id": "el_...", "text": "要选中的文字"}
+{"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
+```
+
+### 7.3 iframe / 子框架（重要）
+
+很多后台系统（禅道、旧版管理台、嵌入式支付页）把**真正的正文放在 iframe 里**，外层只是一个导航外壳。此时：
+
+- 默认只作用于**顶层文档**（`frame_id = 0`），你会只看到导航栏；
+- 先列框架，再带 `frame_id` 去读和操作。
+
+```text
+1. browser_get_frames {"tab_id": 123}
+   → frames: [{frame_id: 0, is_top: true, url: "...", parent_frame_id: null},
+              {frame_id: 561, is_top: false, url: "about:blank", parent_frame_id: 0}]
+
+2. browser_get_interactives {"tab_id": 123, "frame_id": 561}   # 框架内的元素
+3. browser_get_page_content {"tab_id": 123, "frame_id": 561}   # 框架内的正文
+4. browser_click {"tab_id": 123, "frame_id": 561, "element_id": "el_..."}
+```
+
+要点：
+
+- **`element_id` 只在其所属 frame 内有效**。从 `frame_id: 561` 拿到的 `element_id`，后续动作必须同样带 `frame_id: 561`；
+- 忘带 `frame_id` 时请求会打到顶层文档，通常报 `stale_element`（顶层不认识这个 ID）；
+- `frame_id` 可能因为框架导航而失效，此时返回可重试的 `frame_not_found`，重新 `browser_get_frames` 即可；
+- 支持的框架包括 `about:blank` / `srcdoc` 这类**无 src 的同源框架**——外壳型系统几乎都是这种；
+- 跨域框架：能列出、能报告 URL，但通常无法注入 Page Agent 操作其内容。
+
+### 7.4 观测与排错
+
+```text
+browser_get_console_messages {"tab_id": 123}          # console.log/error、未捕获异常、未处理 rejection
+browser_get_console_messages {"tab_id": 123, "frame_id": 561}
+browser_get_network_requests {"tab_id": 123}          # 请求元数据：method/type/status/耗时/失败
+browser_get_accessibility_tree {"tab_id": 123}        # 结构与可访问文本
+browser_observe {"tab_id": 123}                       # 一次拿 状态+交互元素+AX+截图
+```
+
+Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查询结果里 **`available: false` 表示当时采集器不在场，不能当成“页面没有报错”**。
+
+### 7.5 多对话 / 多任务并行
+
+```text
+1. browser_start_session {"name":"对话A"}       # 一次即可
+2. 之后每次调用都带同一个 session_id，并先 claim 你要用的标签页
+```
+
+要点：
+
+- 隔离是**协作式**的：**必须在每次调用都传 `session_id` 才生效**；不传就跳过归属检查（单 Agent 模式）；
+- 认领后，另一个 session 对该标签页的读写会被拒绝（`tab_in_use`）；
+- 从已认领标签页打开的 `target=_blank` 新页面会自动继承归属；
+- 单 Agent 场景可以完全不用 session，直接传 `tab_id`。
+
+## 8. 更新、移动目录、卸载
+
+### 8.1 按改动范围决定动作
+
+| 你改了什么 | 需要做什么 |
+| --- | --- |
+| 扩展代码、Page Agent、Content Script | `npm run build` → 重新加载扩展 |
+| **manifest.json（content_scripts 等）** | `npm run build` → **必须**重新加载扩展；刷新页面无效 |
+| Native Host 源码或安装脚本 | 先禁用扩展 → 构建 → 重新安装 Native Host → 再启用 |
+| MCP Server 代码 | 构建 → 重启 MCP 客户端 |
+| 项目路径 / 扩展 ID / Node 路径 | 重新注册 Native Host |
+
+已经启动的 Host 不会自动加载新 JS，必须让它重启（禁用/启用扩展，或重新加载扩展）。
+
+### 8.2 完整更新流程（Windows）
+
+```powershell
+# 1. 先在 chrome://extensions 禁用 AgentSurf，等旧 Host 退出
+# 2. 在项目目录
+git pull
+npm install
+npm run build
+$extensionId = "<当前扩展ID>"
+npm run native-host:install -- -ExtensionId $extensionId
+# 3. 回到 chrome://extensions 重新启用，并在 debug.html 确认 connected
+# 4. 重启 MCP 客户端
+```
+
+macOS 把第 2 步换成 `npm run native-host:install:macos -- "<扩展ID>"`。
+
+只是连接临时异常、没改代码时，**不需要**重新构建安装：在 `debug.html` 里 Disconnect / Connect，或重新加载扩展即可。
+
+### 8.3 移动目录
+
+启动器里写死的是**安装时**的项目路径（`<项目>/dist/native-host/host.js`）。移动或重命名项目后：
+
+1. 禁用旧扩展；
+2. 在新目录 `npm install && npm run build`；
+3. 在 Chrome 加载新目录的 `dist/`，记录新的扩展 ID；
+4. 在新目录重新执行 `native-host:install`；
+5. 重新加载扩展，重启 MCP 客户端。
+
+> 补充一个实测结论：`%LOCALAPPDATA%\BrowserControlRuntime\` 下的 `host.js` 是**历史遗留副本，没有任何东西引用它**（启动器指向仓库 `dist/` 里的那份）。排查问题时不要被它误导。
+
+### 8.4 卸载
+
+```powershell
+# Windows
+npm run native-host:uninstall
+```
+
+```sh
+# macOS
+npm run native-host:uninstall:macos
+```
+
+卸载只移除 Native Host 注册与启动器，**保留配置**；不会删除 Chrome 扩展，也不会删除项目目录。要彻底清理：先在 `chrome://extensions` 移除扩展，再删除项目目录与 `%LOCALAPPDATA%\BrowserControlRuntime`（macOS 为 `~/Library/Application Support/BrowserControlRuntime`）。
+
+## 9. 排障
+
+### 9.1 常见现象对照
+
+| 现象 | 含义与处理 |
+| --- | --- |
+| `ECONNREFUSED 127.0.0.1:8765` | 没有任何进程在监听。扩展未启用、Host 未安装，或扩展还没完成连接。**先看 `debug.html` 状态** |
+| `Chrome Extension is not connected` | Bridge 活着，但没有扩展接进来。检查 `debug.html`、Host 握手，以及 `dist` 是否是当前构建 |
+| `EADDRINUSE` | 8765 被占用：排查误启动的独立 Bridge、上个未退出的 Host、或另一个 Chrome 配置里的同名扩展 |
+| `frame_not_found` | 目标框架已不存在（框架导航/重建）。可重试：重新 `browser_get_frames` |
+| `stale_element` | 元素 ID 过期（页面变更），或**你在错的地方找它**（例如忘了带 `frame_id`）。重新 `browser_get_interactives` |
+| `element_not_visible` / `element_disabled` / `element_not_editable` | 元素存在但不满足操作前提。不要强行点，先看页面实际状态 |
+| `unsupported_page` | Chrome 不允许在该页面注入 Page Agent（`chrome://`、应用商店页等）。换普通 HTTP/HTTPS 页面 |
+| `screenshot_unavailable` | 截图期间页面 revision 变化；或降级路径下目标不是活动标签页 |
+| `tool is unsupported` | 工具名不被当前运行时支持。对照 `browser_get_capabilities`，不要急着重装 |
+| 安装时报 `native-host.exe` 被占用 | 先禁用扩展、等旧 Host 退出再安装。**不要**批量结束 `node.exe` |
+
+### 9.2 定位顺序
+
+1. `chrome://extensions`：扩展是否启用？有没有报错？
+2. `debug.html`：连接状态与事件日志（Connect / 请求 / 响应）；
+3. 端口是否有监听（见 6.1）；
+4. `node scripts/call-tool.mjs ...`（见 6.2）区分链路问题与 MCP 配置问题；
+5. 必要时打开扩展的 **Service Worker 检查窗口**看 Native Messaging 报错。
+
+### 9.3 三个最容易踩的坑
+
+1. **改了 manifest 只刷新页面** → 不生效。`content_scripts`、权限这类改动**必须重新加载扩展**。
+2. **用旧扩展 ID** → Host 注册的 `allowed_origins` 不匹配，连接会被 Chrome 拒绝。以 `chrome://extensions` 当前显示为准。
+3. **切过 Node 版本（nvm）** → 启动器里记录的 Node 绝对路径失效，重新跑一次安装命令。
+
+分享日志前请移除 token 与敏感页面数据。
+
+## 10. 工具速查
+
+共 **47** 个工具。
 
 | 目的 | 工具 |
 | --- | --- |
 | 查询能力 | `browser.get_capabilities` |
 | 标签页管理 | `browser.list_tabs` / `browser.open` / `browser.switch_tab` / `browser.close_tab` |
-| 子框架（iframe） | `browser.get_frames`，再用 `frame_id` 指定（页面读取与元素操作都支持） |
-| 前进、后退、刷新 | `browser.back` / `browser.forward` / `browser.reload` |
+| 子框架 | `browser.get_frames`（配合各工具的 `frame_id`） |
+| 导航 | `browser.back` / `browser.forward` / `browser.reload` |
 | 页面元信息 | `browser.get_page` / `browser.get_page_state` |
-| 可访问文本与结构 | `browser.get_accessibility_tree` |
-| 交互元素快照 | `browser.get_interactives` |
-| 组合观察、截图 | `browser.observe` / `browser.screenshot` |
+| 正文与结构 | `browser.get_page_content` / `browser.get_accessibility_tree` |
+| 交互元素 | `browser.get_interactives` |
+| 组合观察 / 截图 | `browser.observe` / `browser.screenshot` |
 | 元素点击与输入 | `browser.click` / `browser.double_click` / `browser.type` / `browser.press` |
-| 表单状态 | `browser.set_checked` / `browser.select_option` |
-| 元素拖动与等待 | `browser.drag` / `browser.wait_for_element` |
+| 文本选择 | `browser.select_text` |
+| 表单 | `browser.set_checked` / `browser.select_option` |
+| 元素拖拽与等待 | `browser.drag` / `browser.wait_for_element` |
 | 滚动 | `browser.scroll` / `browser.scroll_at` |
 | 坐标操作 | `browser.mouse_move` / `browser.click_at` / `browser.drag_at` |
-| 键盘、文本、对话框 | `browser.press_key` / `browser.type_text` / `browser.select_text` / `browser.handle_dialog` |
+| 键盘 / 文本 / 对话框 | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
 | 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
+| Console / Network | `browser.get_console_messages` / `browser.get_network_requests` |
 | 会话与标签页归属 | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` |
 | 调试器与 CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
 
-`browser.press`、`browser.press_key`、`browser.click`、`browser.double_click` 和 `browser.click_at` 支持可选 `modifiers`，取值为 `Alt` / `Control` / `Meta` / `Shift`。
+补充说明：
 
-具体参数以 `src/core/protocol/tool-contract.ts` 和 `src/core/protocol/schemas.ts` 为准。工具名和参数不可仅凭其他浏览器工具的命名习惯猜测。
+- 支持 `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` 的工具：`browser.press`、`browser.press_key`、`browser.click`、`browser.double_click`、`browser.click_at`；
+- 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_page_state`、`browser.get_interactives`、`browser.get_page_content`、`browser.get_console_messages`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
+- **元素级工具优先于坐标级工具**：前者会校验元素仍可见、可用且 revision 未变，后者只是发坐标；
+- 参数以 `src/core/protocol/tool-contract.ts` 与 `src/core/protocol/schemas.ts` 为准。工具名与参数**不可**按其他浏览器工具的命名习惯猜测。
 
-## 安全使用边界
+## 11. 错误码与重试语义
 
-AgentSurf 可以操作当前 Chrome 登录态中的页面，CDP、上传等工具具有较强能力。建议在 Agent 的使用规则中明确：
+失败响应统一为结构化错误（MCP 层会把同一对象原样放进结果文本）：
 
-- 默认只读；提交、保存、删除、发布、上传或发送消息等修改线上数据的操作，先取得用户明确授权。
-- 登录由用户自行完成；不索取密码、验证码，不读取或输出 Cookie、Token 等认证信息。
-- 不将本机 `config.json`、认证 token 或敏感页面数据提交到仓库或粘贴到聊天中。
-- 不向外网暴露 Bridge，不将认证 token 当作普通调试文本传播。
+```json
+{
+  "code": "stale_element",
+  "message": "The element_id belongs to an older page revision.",
+  "retryable": true,
+  "details": { "element_id": "el_...", "page_revision": "rev_..._1" }
+}
+```
 
-以上是 **Agent 使用约束**，不表示运行时已经实现所有操作的人工审批。调用方仍需管理授权边界。
+Agent 应据此决策，而不是把失败一律当成“重试”：
 
-## 开发与调试
+| code | retryable | 建议动作 |
+| --- | --- | --- |
+| `stale_element` | ✅ | 重新 `browser_get_interactives` 后重试；若来自 frame，检查 `frame_id` |
+| `element_not_found` | ❌ | 元素不存在/选择错误，重新观察页面 |
+| `element_not_visible` / `element_disabled` / `element_not_editable` | ✅/❌ | 先滚动或等待元素可用，不要强行操作 |
+| `frame_not_found` | ✅ | 重新 `browser_get_frames` 取新 `frame_id` |
+| `tab_not_found` | ✅ | 标签页已关闭，重新 `browser_list_tabs` |
+| `tab_in_use` | ❌ | 该标签页被其他 session 占用：换标签页或先 `release_tab` |
+| `request_timeout` | ✅ | 操作太慢或页面阻塞，必要时增大 `timeout_ms` |
+| `unsupported_page` | ❌ | 受保护页面，换普通网页 |
+| `screenshot_unavailable` | ✅ | 页面在截图期间变化，重试 |
+| `bridge_unavailable` / `transport_disconnected` | ✅ | 扩展未连接或通道断开，看[第 9 节](#9-排障) |
+| `authentication_failed` | ❌ | token 不匹配：重新安装 Native Host（会复用 token）或检查 `config.json` |
 
-### 构建和验证命令
+## 12. 安全边界
+
+AgentSurf 能操作你登录态下的页面，`browser.cdp`、文件上传等能力很强。建议在 Agent 的使用规则里写死：
+
+- **默认只读**；提交、保存、删除、发布、上传、发送消息等会修改线上数据的操作，先取得用户明确授权；
+- 登录由用户自行完成：不索取密码/验证码，不读取或输出 Cookie、Token、LocalStorage 等认证信息；
+- 不把本机 `config.json`、token、敏感页面数据提交进仓库或粘贴到聊天里；
+- 不把 Bridge 暴露到外网；
+- CDP 会弹“Chrome 正在被调试”横幅，并与用户自己的 DevTools 冲突，用完及时 `browser.detach_debugger`。
+
+以上是**给 Agent 的使用约束**，不代表运行时已实现人工审批；调用方仍需自己管理授权边界。
+
+## 13. 开发与调试
+
+### 13.1 命令
 
 | 命令 | 用途 |
 | --- | --- |
 | `npm install` | 安装依赖 |
-| `npm run build` | 生成 Chrome 扩展及 Native Host 构建产物 |
-| `npm run lint` | ESLint 检查 |
+| `npm run build` | 构建扩展到 `dist/`（含 Native Host bundle） |
 | `npm run typecheck` | TypeScript 类型检查 |
+| `npm run lint` | ESLint |
 | `npm test` | Vitest 单元测试 |
+| `npm run bridge:call` | 用一个 JSON 请求直连 Bridge（见 6.2） |
 
-### 扩展调试页
+`npm run build` 由两部分组成：`scripts/generate-icons.mjs`（图标）与 `scripts/build.mjs`（esbuild 打包扩展、Bridge、MCP Server，以及**自包含**的 Native Host bundle）。
 
-打开 `chrome-extension://<扩展ID>/debug.html`。调试页使用与 MCP Server 相同的 `browser.*` Tool Protocol，支持查询标签页、页面状态、交互元素、点击、输入、滚动和截图。
+### 13.2 扩展调试页
 
-- 先在下拉框选择普通 HTTP/HTTPS 页面；工具会显式传入目标 `tab_id`，读取页面无需切换离开调试页。
-- 元素操作先 Get interactives，再使用返回的 `element_id`。
-- 默认截图要求目标标签页在其窗口中处于活动状态。可把调试页移到第二个 Chrome 窗口，避免调试页占用目标的活动位置。
-- 截图输出会缩略展示 Data URL，不要把完整图像数据写入常规日志。
+`chrome-extension://<扩展ID>/debug.html`，用的是与 MCP 相同的 `browser.*` 协议，可以直接查询标签页、页面状态、交互元素，并执行点击/输入/滚动/截图。
 
-### 独立 Bridge（仅协议开发）
+- 先在下拉框选择普通 HTTP/HTTPS 页面；
+- 元素操作先 Get interactives，再用返回的 `element_id`；
+- 截图结果里的 Data URL 只做缩略展示，不要把完整图像数据写进日志。
 
-`npm run bridge` 启动的是独立 Bridge，**不会自动获得当前 Native Messaging 扩展的控制能力**，需要兼容的扩展 WebSocket 客户端。不要用它替代正常的 Native Host 启动流程，也不要与 Native Host 占用同一端口。
+### 13.3 独立 Bridge（仅协议开发）
 
-`npm run bridge:dev` 会先构建再启动独立 Bridge。可通过 `BROWSER_BRIDGE_PORT` 和 `BROWSER_BRIDGE_TOKEN` 设置端口和认证 token；未设置 token 时会生成随机值并输出到终端，注意不要分享该输出。
+```powershell
+npm run bridge        # 启动独立 Bridge
+npm run bridge:dev    # 先构建再启动
+```
 
-## 外部调用协议
+注意：
 
-这一节面向自行开发 MCP 客户端或其他协议客户端的调用方。普通 MCP 客户端无需手工处理认证和消息封装。
+- 独立 Bridge **不会**自动获得当前 Native Messaging 扩展的控制能力，需要兼容的扩展 WebSocket 客户端；
+- 不要用它替代正常的 Native Host 流程，也不要与 Native Host 抢同一个端口；
+- 可用 `BROWSER_BRIDGE_PORT` / `BROWSER_BRIDGE_TOKEN` 指定；未指定 token 时会随机生成并打印到终端，**不要分享该输出**。
 
-Agent 连接 Native Host 启动的本机 Bridge，第一条 WebSocket 消息为认证握手：
+## 14. 外部调用协议
+
+面向自己写客户端的场景。普通 MCP 用户无需手工处理认证与封装。
+
+第一条 WebSocket 消息必须是认证握手：
 
 ```json
-{"type":"auth","role":"agent","token":"<本机配置中的token>"}
+{"type":"auth","role":"agent","token":"<本机 config.json 中的 token>"}
 ```
 
 认证成功：
@@ -426,24 +641,24 @@ Agent 连接 Native Host 启动的本机 Bridge，第一条 WebSocket 消息为�
 {"type":"auth_result","ok":true,"role":"agent"}
 ```
 
-随后发送工具请求；外部协议不包含扩展内部使用的 `kind` 字段：
+随后发送工具请求（外部协议**不带**扩展内部使用的 `kind` 字段）：
 
 ```json
 {
   "protocol_version": "1",
   "request_id": "req_123",
   "tool": "browser.get_page_state",
-  "args": { "tab_id": 123 }
+  "args": { "tab_id": 123, "frame_id": 0 }
 }
 ```
 
-成功响应结构：
+成功响应：
 
 ```json
 {"request_id":"req_123","ok":true,"result":{}}
 ```
 
-失败响应结构：
+失败响应：
 
 ```json
 {
@@ -457,41 +672,751 @@ Agent 连接 Native Host 启动的本机 Bridge，第一条 WebSocket 消息为�
 }
 ```
 
-Bridge 按 `request_id` 转发响应；超时、扩展断开或 Bridge 停止时会清理待处理请求并返回结构化错误。未认证消息或错误认证不会执行浏览器工具。MCP Server 会把同一个错误对象原样放进工具结果文本，调用方仍能读到 `code`、`retryable` 和 `details`，据此区分「重新获取交互元素后重试」和「放弃」。Native Host 与扩展之间使用 Chrome Native Messaging framing，由 Chrome 校验 `allowed_origins`，不再重复发送 Bridge token。
+行为约定：
 
-开发脚本 `scripts/call-tool.mjs`（`npm run bridge:call`）可模拟外部 Agent，通过 `BROWSER_BRIDGE_URL` 和 `BROWSER_BRIDGE_TOKEN` 配置连接。调用方应在本机安全加载凭据，不要将实际 token 写进文档、命令示例或提交记录。
+- Bridge 按 `request_id` 转发响应；超时、扩展断开、Bridge 停止都会清理待处理请求并返回结构化错误；
+- 未认证或认证失败的消息不会执行任何浏览器工具；
+- 根级 `session_id` 用于标签页归属（工具自有的 `session_id` 参数按各自 schema 处理）；
+- 与扩展之间使用 Chrome Native Messaging framing，由 Chrome 校验 `allowed_origins`，不再重复传 Bridge token。
 
-## 项目结构与实现说明
+开发脚本 `scripts/call-tool.mjs`（`npm run bridge:call`）即按此协议实现，可直接当作参考客户端；它通过 `BROWSER_BRIDGE_URL` / `BROWSER_BRIDGE_TOKEN` 覆盖配置，未设置时自动读本机 `config.json`。
+
+## 15. 实现细节
+
+### 15.1 目录结构
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/core/` | 与 Chrome API 无关的工具契约、参数校验和 Runtime 调度 |
-| `src/chrome/` | Chrome API、CDP、下载与会话协调 |
-| `src/content/` | Page Agent、元素注册与可视化 Agent 光标 |
-| `src/transport/` | Native Messaging 和工具传输协议 |
+| `src/core/` | 与 Chrome API 无关的工具契约、参数校验、Runtime 调度 |
+| `src/chrome/` | Chrome API 适配：标签页、CDP、截图、下载、网络、**框架枚举**、会话协调 |
+| `src/content/` | Page Agent、元素注册与 revision 追踪、动作执行、Console 采集、Agent 光标 |
+| `src/transport/` | Native Messaging、Runtime Message 与工具传输协议 |
 | `src/bridge/` | 本机 WebSocket Bridge |
-| `src/mcp/` | 面向公开分发的本地 MCP Server 与 Bridge 客户端 |
-| `src/native-host/` | Native Host、配置和消息 framing |
+| `src/mcp/` | MCP Server、Bridge 客户端、Native Host 安装 CLI |
+| `src/native-host/` | Native Host 入口、配置与 framing |
 | `src/debug/` | 扩展调试页 |
 | `scripts/` | 构建、安装与开发调用脚本 |
-| `tests/` | 测试代码 |
+| `tests/` | 单元测试 |
+| `docs/` | 改造与验证报告 |
 
-### 页面 revision 与元素 ID
+### 15.2 页面 revision 与 element_id
 
-Page Agent 为每个 Document 生成独立 revision。导航、刷新以及重要 DOM 变化会更新 revision；`browser.get_page_state` 的 `revision_reason` 返回 `navigation`、`refresh` 或 `important_dom`。
+Page Agent 为**每个 Document（含每个 frame）**维护独立 revision。导航、刷新与“重要 DOM 变化”会推进 revision，`browser.get_page_state` 的 `revision_reason` 会说明原因（`navigation` / `refresh` / `important_dom`）。
 
-MutationObserver 不监听所有文本变化，只筛选交互元素增删、已注册元素关键属性变化和单批大型结构变化，单批至多推进一次 revision。普通文本或少量非交互节点变化不会更新 revision。
+MutationObserver 只筛选：交互元素增删、已注册元素关键属性变化、单批大型结构变化（每批最多推进一次）。普通文本改动不会推进 revision。
 
-`browser.get_interactives` 返回 `tab_id`、`page_revision`、`snapshot_id` 和元素数组，包含角色、标签、可访问名称、状态及坐标等信息，不返回 CSS Selector 或 XPath。密码输入仅返回 `value_state: "redacted"`。
+`browser.get_interactives` 返回 `tab_id`、`frame_id`、`page_revision`、`snapshot_id` 与元素数组（角色、标签、可访问名称、状态、坐标），**不返回 selector**；密码输入只返回 `value_state: "redacted"`。
 
-`element_id` 是不透明标识，仅能在生成它的标签页和 revision 内使用；DOM 引用只保存在 Content Script 中。元素操作会检查 ID、revision、连接状态、可见性以及 disabled/editable 状态。动作结果会提示是否建议重新获取交互元素。
+`element_id` 是不透明标识，DOM 引用只存在于 Content Script 内；动作执行前会校验 ID、revision、连接状态、可见性、disabled/editable。因为 documentToken 每个文档不同，**跨 frame 用错 ID 会表现为 `stale_element`**。
 
-### 截图、光标与文件
+### 15.3 frame 路由
 
-默认可视区域截图使用 `chrome.tabs.captureVisibleTab`，支持 PNG/JPEG；目标必须是所在窗口的活动标签页，截图过程中活动目标或 revision 变化会导致失败。高级截图参数见工具契约。运行时不会为了默认截图自动切换标签页。
+- Content Script 以 `all_frames: true` + `match_about_blank: true` 注入，因此 `about:blank` / `srcdoc` 这类同源框架也有 Page Agent；
+- 请求通过 `chrome.tabs.sendMessage(tabId, msg, { frameId })` **定向**发送（广播会让多个 Agent 抢答同一响应）；
+- 按需注入也用 `scripting.executeScript({ target: { tabId, frameIds: [frameId] } })` 定向；
+- MAIN world 的 Console 采集是**尽力而为**：页面 CSP 可能拦掉它，但不会连带让 Page Agent 失效（此时 `available: false`）。
 
-坐标操作和元素级操作会在目标页面显示短暂的 `AI` 光标标记。标记不参与页面交互，不会被 `get_interactives` 返回，也不会改变 revision。
+### 15.4 截图、光标、文件
 
-`browser.set_files` 接收目标 `tab_id`、文件输入的 `element_id` 及本机绝对路径数组，通过临时内部标记和 CDP `DOM.setFileInputFiles` 设置文件，随后清理标记。
+- 截图默认走 CDP `Page.captureScreenshot`，**后台标签页也能截**；只有降级到 `captureVisibleTab` 才要求目标处于活动状态；
+- `full_page: true` 取的是**文档**内容尺寸；像外壳型应用那样把滚动放在容器内的页面，返回值可能就等于视口；
+- 坐标操作与元素操作会在页面显示短暂的 `AI` 光标标记：不参与交互、不被 `get_interactives` 返回、不改变 revision；
+- `browser.set_files` 用临时标记 + CDP `DOM.setFileInputFiles` 设置文件，之后清理标记；非顶层 frame 会在 `pierce` 的节点树里查找该标记。
 
-`browser.list_downloads` 使用 Chrome Downloads API。Chrome 不提供历史下载的来源标签页，无法可靠关联的记录返回 `tab_id: null`。
+## 16. 当前限制
+
+- **无 OCR**：图片里的文字需要靠截图 + 模型自身视觉能力；
+- **无 Shadow DOM 专门支持**：`browser.get_capabilities` 中 `shadow_dom: false`；开放 Shadow Root 的文本会并入页面正文，但元素不会进入 `get_interactives`；
+- **iframe 需显式寻址**：默认只作用于顶层文档，必须配合 `browser.get_frames`；跨域框架通常无法注入；
+- **受保护页面不可注入**：`chrome://`、Chrome 应用商店等；
+- **CDP 与 DevTools 互斥**：同一标签页已开 DevTools 时 `attach` 会失败；attach 期间会有调试横幅；
+- **Console 跨导航丢失**：缓冲在页面内，刷新/跳转后清空；且只能看到采集器在场之后的输出；
+- **Network 是元数据**：没有响应体；且缓冲在 Service Worker 内，Host 重启即清空；
+- **CDP 事件缓冲上限 1000 条/标签页**，且只记录 attach 之后的事件；
+- **会话隔离是协作式的**：必须每次调用都带 `session_id` 才生效；
+- **文件上传/下载限制**：上传需本机绝对路径；下载只能拿到 Chrome Downloads API 提供的元数据，且无法可靠关联来源标签页；
+- **平台覆盖**：Windows 已实测；**macOS 脚本已提供但未在真机验证**；Linux 未提供安装脚本；
+- 单元测试覆盖协议与调度逻辑，真机链路（注入、截图、CDP、iframe）依赖手工验证，见 `docs/`。
+
+---
+
+<a id="english"></a>
+
+# English
+
+[中文](#中文)
+
+## Table of contents
+
+- [1. What it is](#1-what-it-is)
+- [2. How it works](#2-how-it-works)
+- [3. Choosing an integration path](#3-choosing-an-integration-path)
+- [4. Setup on Windows](#4-setup-on-windows)
+- [5. Setup on macOS](#5-setup-on-macos)
+- [6. Verifying the setup](#6-verifying-the-setup)
+- [7. Driving it from an agent](#7-driving-it-from-an-agent)
+- [8. Updating, moving, uninstalling](#8-updating-moving-uninstalling)
+- [9. Troubleshooting](#9-troubleshooting)
+- [10. Tool reference](#10-tool-reference)
+- [11. Error codes and retry semantics](#11-error-codes-and-retry-semantics)
+- [12. Safety boundaries](#12-safety-boundaries)
+- [13. Development and debugging](#13-development-and-debugging)
+- [14. External protocol](#14-external-protocol)
+- [15. Implementation notes](#15-implementation-notes)
+- [16. Current limitations](#16-current-limitations)
+
+## 1. What it is
+
+In one sentence: **when your agent needs to operate a web page, it borrows the Chrome you are already using instead of launching a clean browser profile.**
+
+What it gives you:
+
+- your existing Chrome sessions and tabs — no re-login, no cookie export;
+- **47 `browser.*` tools**: tabs, page reading, element clicks and typing, forms, scrolling, drag, screenshots, iframes, console, network, downloads, file upload, raw CDP;
+- an **opaque `element_id`** model instead of CSS selectors, with every action re-checked for visibility, enabled state, and page revision;
+- a local MCP server, so the agent side is just one stdio MCP entry.
+
+What it does not do:
+
+- no built-in model, no task planning;
+- no cloud browser: everything talks over `127.0.0.1`;
+- no CAPTCHA solving or anti-bot evasion.
+
+## 2. How it works
+
+```text
+        MCP client (your agent)
+              │  stdio
+              ▼
+        AgentSurf MCP Server
+              │  WebSocket + token, bound to 127.0.0.1 only
+              ▼
+        local Browser Bridge
+              │  Chrome Native Messaging (length-prefixed frames over stdin/stdout)
+              ▼
+        Native Host (native-host.exe / native-host.sh)
+              │  chrome.runtime.connectNative
+              ▼
+        Chrome extension (Manifest V3)
+              │  chrome.tabs.sendMessage / chrome.debugger / chrome.webRequest
+              ▼
+        the page (Page Agent content script, injected into every frame)
+```
+
+Key consequences:
+
+- **The extension is the initiator.** It calls `connectNative` on startup, which starts the native host, which starts the bridge. You never need to run `npm run bridge` for normal use.
+- The extension **listens on no port at all**; the bridge only binds `127.0.0.1` and requires a token (generated by the installer, stored on disk, never pasted into a chat).
+- The MCP server and the native host **share the same local config**, so you do not copy tokens between them.
+- A standalone bridge exists only for protocol development — see [section 13](#13-development-and-debugging).
+
+## 3. Choosing an integration path
+
+### Option A: MCP server (recommended)
+
+Agent ↔ `dist/mcp/cli.js` (stdio MCP server) ↔ Bridge ↔ extension. The agent gets every tool and its schema for free.
+
+### Option B: your own client against the Bridge
+
+Your program ↔ the local WebSocket bridge, doing the `auth` handshake and request framing itself. Use this for non-MCP runtimes or when you need fine control over timeouts and concurrency. Protocol: [section 14](#14-external-protocol).
+
+Both options still require the extension + native host from section 4 or 5 — that is the foundation.
+
+## 4. Setup on Windows
+
+All commands run in **PowerShell**, from the project root.
+
+### 4.1 Check prerequisites
+
+Git, Node.js 20+, npm 10+, Chrome 116+, and an agent that speaks stdio MCP.
+
+```powershell
+git --version
+node --version
+npm --version
+```
+
+### 4.2 Clone and build
+
+```powershell
+cd ~/Desktop
+git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+cd agentsurf-browser-control-runtime
+npm install
+npm run build
+```
+
+- build output lives in `dist/`, is **gitignored**, and must be produced on each machine;
+- **Chrome loads `dist/`, never `src/`**;
+- editing source does not update `dist/` — run `npm run build` again.
+
+### 4.3 Load the extension and copy its ID
+
+1. Open `chrome://extensions`;
+2. enable **Developer mode** (top right);
+3. click **Load unpacked** and select the project's `dist` folder;
+4. copy the **extension ID** from the AgentSurf card (32 lowercase letters, e.g. `hpageihlnphdohcplmimhmghljpilbpa`).
+
+The extension cannot connect yet — that is expected, the native host is not registered.
+
+> ⚠️ The ID changes when you move the project, load it on another machine, or re-add it after removal. **Always use the ID currently shown in `chrome://extensions`.**
+
+### 4.4 Install the native host
+
+Replace `<EXTENSION_ID>` with the value you just copied:
+
+```powershell
+$extensionId = "<EXTENSION_ID>"
+npm run native-host:install -- -ExtensionId $extensionId
+```
+
+What the installer does:
+
+| Action | Detail |
+| --- | --- |
+| Writes config | `%LOCALAPPDATA%\BrowserControlRuntime\config.json` with `port` (8765 by default) and a random 64-char `token` |
+| Builds launcher | `%LOCALAPPDATA%\BrowserControlRuntime\native-host.exe`, holding absolute paths to `dist/native-host/host.js` and to Node |
+| Writes the manifest | `%LOCALAPPDATA%\BrowserControlRuntime\com.browsercontrol.runtime.json`, with `allowed_origins` limited to your extension ID |
+| Registers it | `HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime` |
+
+Re-running keeps the existing valid token, so your MCP config stays valid when you only re-register with a new extension ID.
+
+> Equivalent CLI entry point: `node dist/mcp/cli.js install-native-host --extension-id <ID> [--port <PORT>]`.
+
+### 4.5 Reload the extension
+
+Back in `chrome://extensions`, press **Reload** (🔄) on the AgentSurf card. The extension then calls `connectNative`, which starts the native host and the bridge.
+
+### 4.6 Confirm the link in the debug page
+
+Open:
+
+```text
+chrome-extension://<EXTENSION_ID>/debug.html
+```
+
+Expected:
+
+```text
+Connection: connected
+Agent endpoint: ws://127.0.0.1:8765
+```
+
+If it is not connected: click **Disconnect**, wait a second, then **Connect native host**. Do not hammer Reconnect.
+
+### 4.7 Configure the MCP client
+
+Add this to your agent's MCP config (example is pi's `~/.pi/agent/mcp.json`; other clients use the same shape in their own file):
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "C:/Program Files/nodejs/node.exe",
+      "args": ["C:/Users/<user>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
+    }
+  }
+}
+```
+
+Resolve both paths on your machine:
+
+```powershell
+(Get-Command node).Source              # node executable
+(Resolve-Path dist/mcp/cli.js).Path    # MCP server entry point
+```
+
+Notes:
+
+- **Use absolute paths.** MCP clients are often GUI apps whose `PATH` does not include nvm or a Node install;
+- forward slashes `/` or escaped `\\` both work — a single backslash does not;
+- **restart the MCP client** after editing its config; it is read at startup;
+- no environment variables are required: the server reads the `config.json` written in 4.4;
+- to override the connection, set `BROWSER_BRIDGE_URL`, `BROWSER_BRIDGE_TOKEN`, or `BROWSER_BRIDGE_CONFIG`.
+
+### 4.8 Confirm the tools
+
+Ask the agent:
+
+```text
+Call browser_get_capabilities and list the tools.
+```
+
+You should see 47 tools, including `browser_get_frames`, `browser_select_text`, `browser_get_console_messages`, and `browser_get_network_requests`.
+
+## 5. Setup on macOS
+
+> ⚠️ The macOS installer ships with the repo but the full link has **not been verified on a real Mac**. Shipping a script is not the same as declaring support.
+
+Prerequisites are the same (Git / Node 20+ / npm 10+ / Chrome 116+).
+
+### 5.1 Build and load the extension
+
+```sh
+cd ~/Desktop
+git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+cd agentsurf-browser-control-runtime
+npm install
+npm run build
+```
+
+Enable developer mode in `chrome://extensions`, load the project's `dist/`, and copy the extension ID.
+
+### 5.2 Install the native host
+
+```sh
+npm run native-host:install:macos -- "<EXTENSION_ID>"
+```
+
+Port 8765 by default; append another port to override. Files created:
+
+| File | Path |
+| --- | --- |
+| Config (user-only) | `~/Library/Application Support/BrowserControlRuntime/config.json` |
+| Launcher script | `~/Library/Application Support/BrowserControlRuntime/native-host.sh` |
+| Native messaging manifest | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
+
+Notes:
+
+- the launcher records Node's absolute path, so it does not depend on the `PATH` Chrome sees; re-run the installer after switching Node with nvm or Homebrew;
+- do not use `sudo` — the manifest would land in the wrong user directory;
+- it targets the current user's Google Chrome (stable) only.
+
+### 5.3 Reload and confirm
+
+Reload AgentSurf, then open `chrome-extension://<EXTENSION_ID>/debug.html` and check for `connected`.
+
+### 5.4 Configure the MCP client
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "/usr/local/bin/node",
+      "args": ["/Users/<user>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
+    }
+  }
+}
+```
+
+Get the real paths with `which node` and `realpath dist/mcp/cli.js`.
+
+## 6. Verifying the setup
+
+Verify from the inside out; this is what makes failures easy to localize.
+
+### 6.1 Is the bridge listening?
+
+```powershell
+# Windows
+Get-NetTCPConnection -LocalPort 8765 -State Listen |
+  Select-Object LocalAddress, LocalPort, OwningProcess
+```
+
+```sh
+# macOS
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+```
+
+A listener means the bridge is up (the extension successfully spawned the host).
+
+### 6.2 Does the whole link work without the MCP client?
+
+The repo ships a script that acts as a minimal external agent:
+
+```powershell
+node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
+```
+
+> Single quotes work in both PowerShell and bash/zsh. Keep the JSON free of spaces, or PowerShell will split the argument.
+
+Getting your real tab list back (`ok: true`) proves the whole path
+**bridge → native host → extension → Chrome APIs**.
+
+This step is the dividing line for troubleshooting:
+
+| Result | Conclusion |
+| --- | --- |
+| Fails here | link problem — see [section 9](#9-troubleshooting) |
+| Works here, fails in MCP | MCP config problem (paths, Node, client not restarted) |
+
+### 6.3 End-to-end smoke test
+
+In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on a normal page, then `browser_screenshot`. Confirm no leftover "Chrome is being debugged" banner afterwards (call `browser_detach_debugger` if you used CDP).
+
+## 7. Driving it from an agent
+
+### 7.1 Read-only pass first
+
+```text
+1. browser_list_tabs                                  # see what exists before touching anything
+2. browser_open {"url":"https://example.com","activate":true}
+3. browser_get_page_state {"tab_id":...}              # URL, load state, revision
+4. browser_get_page_content {"tab_id":...}            # body text
+```
+
+`browser_get_page` / `browser_get_page_state` return **metadata, not article text**. To open a URL use `browser_open`; there is **no** `browser_navigate`.
+
+### 7.2 Element actions (the `element_id` model)
+
+```text
+1. browser_get_interactives {"tab_id":...}            # snapshot
+2. browser_click {"tab_id":..., "element_id":"el_..."}
+```
+
+Rules:
+
+- **Only use `element_id` values returned by `browser_get_interactives`.** Never invent selectors or IDs.
+- An `element_id` is bound to a document, a page revision, and a frame. When the page changes it goes stale (`stale_element`) — call `get_interactives` again and retry.
+- Modifier keys:
+
+```json
+{"tab_id": 123, "element_id": "el_...", "key": "a", "modifiers": ["Control"]}
+```
+
+- Text selection inside an editable element:
+
+```json
+{"tab_id": 123, "element_id": "el_...", "text": "text to select"}
+{"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
+```
+
+### 7.3 iframes (important)
+
+Many admin systems (ZenTao, legacy consoles, embedded payment pages) render the real content **inside an iframe**, with the outer document being just navigation chrome. Without a frame target you will only see that chrome.
+
+```text
+1. browser_get_frames {"tab_id": 123}
+   → [{frame_id: 0, is_top: true, ...},
+      {frame_id: 561, is_top: false, url: "about:blank", parent_frame_id: 0}]
+
+2. browser_get_interactives {"tab_id": 123, "frame_id": 561}
+3. browser_get_page_content  {"tab_id": 123, "frame_id": 561}
+4. browser_click {"tab_id": 123, "frame_id": 561, "element_id": "el_..."}
+```
+
+Rules and behaviours:
+
+- **An `element_id` is only valid inside the frame that produced it.** Always pass the same `frame_id` on the follow-up action.
+- Omitting `frame_id` targets the top document, so the request usually fails with `stale_element`.
+- A frame that navigated away is gone: you get a retryable `frame_not_found`; call `browser_get_frames` again.
+- `about:blank` / `srcdoc` frames are supported (that is how app shells work), which is why the content scripts run in `all_frames` with `match_about_blank`.
+- Cross-origin frames can be listed and their URL reported, but their content cannot be driven.
+
+### 7.4 Observability
+
+```text
+browser_get_console_messages {"tab_id": 123}                 # console output, exceptions, rejections
+browser_get_console_messages {"tab_id": 123, "frame_id": 561}
+browser_get_network_requests {"tab_id": 123}                 # method/type/status/duration/failure
+browser_get_accessibility_tree {"tab_id": 123}
+browser_observe {"tab_id": 123}                              # state + interactives + AX + screenshot
+```
+
+Console collection runs in the page's MAIN world so it sees the page's own output. `available: false` means **the collector was not present — an empty list is not proof of silence**.
+
+### 7.5 Parallel conversations
+
+```text
+1. browser_start_session {"name":"thread A"}   # once
+2. pass the same session_id on every later call, and claim the tabs you did not open
+```
+
+Isolation is **cooperative**: it only applies when every call carries the `session_id`. Without it, ownership checks are skipped (single-agent mode). A claimed tab rejects other sessions with `tab_in_use`; pages opened via `target=_blank` from a claimed tab inherit ownership.
+
+## 8. Updating, moving, uninstalling
+
+### 8.1 What to do for each kind of change
+
+| Change | Action |
+| --- | --- |
+| extension / content script / page agent code | `npm run build` → reload the extension |
+| **manifest.json (e.g. content_scripts)** | `npm run build` → **must** reload the extension; refreshing a page is not enough |
+| native host source or installer | disable extension → build → reinstall native host → re-enable |
+| MCP server code | build → restart the MCP client |
+| project path / extension ID / Node path | re-register the native host |
+
+A running host never picks up new JS on its own; restart it by reloading the extension.
+
+### 8.2 Full update (Windows)
+
+```powershell
+# 1. disable AgentSurf in chrome://extensions and let the old host exit
+# 2. in the project
+git pull
+npm install
+npm run build
+$extensionId = "<current extension id>"
+npm run native-host:install -- -ExtensionId $extensionId
+# 3. re-enable in chrome://extensions, confirm connected in debug.html
+# 4. restart the MCP client
+```
+
+On macOS, replace step 2's last command with `npm run native-host:install:macos -- "<EXTENSION_ID>"`.
+
+For a transient connection problem with no code change, skip all of this: use Disconnect / Connect in `debug.html` or reload the extension.
+
+### 8.3 Moving the project
+
+The launcher hard-codes the project path recorded at install time (`<project>/dist/native-host/host.js`). After moving or renaming:
+
+1. disable the old extension;
+2. in the new location: `npm install && npm run build`;
+3. load the new `dist/` in Chrome and copy the new extension ID;
+4. run `native-host:install` from the new location;
+5. reload the extension and restart the MCP client.
+
+> Verified detail: the `host.js` copy in `%LOCALAPPDATA%\BrowserControlRuntime\` is a **stale leftover that nothing references** (the launcher points at the repo's `dist/`). Do not let it mislead you while debugging.
+
+### 8.4 Uninstalling
+
+```powershell
+npm run native-host:uninstall              # Windows
+npm run native-host:uninstall:macos        # macOS
+```
+
+This removes the native host registration and launcher, **keeps the config**, and touches neither the Chrome extension nor the project. To clean up fully: remove the extension in `chrome://extensions`, then delete the project directory and `%LOCALAPPDATA%\BrowserControlRuntime` (`~/Library/Application Support/BrowserControlRuntime` on macOS).
+
+## 9. Troubleshooting
+
+### 9.1 Symptom table
+
+| Symptom | Meaning and fix |
+| --- | --- |
+| `ECONNREFUSED 127.0.0.1:8765` | Nothing is listening: extension disabled, host not installed, or the extension has not finished connecting. **Check `debug.html` first.** |
+| `Chrome Extension is not connected` | The bridge is alive but no extension is attached. Check `debug.html`, the host handshake, and whether `dist` is current. |
+| `EADDRINUSE` | Port 8765 is taken: a stray standalone bridge, an old host, or another profile's copy of the extension. |
+| `frame_not_found` | The target frame no longer exists (navigation/rebuild). Retry after `browser_get_frames`. |
+| `stale_element` | The element ID is outdated **or you are looking in the wrong place** (e.g. missing `frame_id`). Re-run `browser_get_interactives`. |
+| `element_not_visible` / `element_disabled` / `element_not_editable` | The element exists but cannot be acted on yet. Inspect the real page state. |
+| `unsupported_page` | Chrome forbids injecting a Page Agent there (`chrome://`, Web Store). Use a normal HTTP/HTTPS page. |
+| `screenshot_unavailable` | The page changed during capture, or the fallback path needed an active tab. |
+| `tool is unsupported` | That tool does not exist in this runtime. Compare against `browser_get_capabilities`. |
+| `native-host.exe` in use during install | Disable the extension, let the old host exit, then install. Do **not** kill every `node.exe`. |
+
+### 9.2 Order of investigation
+
+1. `chrome://extensions` — enabled? any error?
+2. `debug.html` — connection state and event log;
+3. is anything listening on the port (6.1);
+4. `node scripts/call-tool.mjs ...` (6.2) to separate a link problem from an MCP config problem;
+5. the extension's **Service Worker inspector** for native messaging errors.
+
+### 9.3 The three most common mistakes
+
+1. **Editing `manifest.json` and only refreshing the page** — reload the extension instead.
+2. **Using a stale extension ID** — the host's `allowed_origins` will not match and Chrome refuses the connection.
+3. **Switching Node versions (nvm)** — the launcher's recorded Node path goes stale; re-run the installer.
+
+Redact the token and any sensitive page data before sharing logs.
+
+## 10. Tool reference
+
+47 tools in total.
+
+| Goal | Tools |
+| --- | --- |
+| Capabilities | `browser.get_capabilities` |
+| Tabs | `browser.list_tabs` / `browser.open` / `browser.switch_tab` / `browser.close_tab` |
+| Frames | `browser.get_frames` (plus `frame_id` on the tools below) |
+| Navigation | `browser.back` / `browser.forward` / `browser.reload` |
+| Page metadata | `browser.get_page` / `browser.get_page_state` |
+| Text and structure | `browser.get_page_content` / `browser.get_accessibility_tree` |
+| Interactive elements | `browser.get_interactives` |
+| Combined read / screenshot | `browser.observe` / `browser.screenshot` |
+| Element click and input | `browser.click` / `browser.double_click` / `browser.type` / `browser.press` |
+| Text selection | `browser.select_text` |
+| Form state | `browser.set_checked` / `browser.select_option` |
+| Element drag and wait | `browser.drag` / `browser.wait_for_element` |
+| Scrolling | `browser.scroll` / `browser.scroll_at` |
+| Raw coordinates | `browser.mouse_move` / `browser.click_at` / `browser.drag_at` |
+| Keyboard / text / dialogs | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
+| Files | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
+| Console / Network | `browser.get_console_messages` / `browser.get_network_requests` |
+| Sessions and tab ownership | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` |
+| Debugger and CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
+
+- `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.press_key`, `browser.click`, `browser.double_click`, `browser.click_at`.
+- `frame_id` is accepted by `browser.get_page`, `browser.get_page_state`, `browser.get_interactives`, `browser.get_page_content`, `browser.get_console_messages`, and every element action.
+- **Prefer element-level tools over coordinate-level ones**: element tools verify visibility, enabled state, and revision; coordinate tools just send input.
+- Authoritative parameters live in `src/core/protocol/tool-contract.ts` and `src/core/protocol/schemas.ts`. Do not guess names or arguments from other browser tools.
+
+## 11. Error codes and retry semantics
+
+Every failure is structured (the MCP layer puts the same object into the tool result text):
+
+```json
+{
+  "code": "stale_element",
+  "message": "The element_id belongs to an older page revision.",
+  "retryable": true,
+  "details": { "element_id": "el_...", "page_revision": "rev_..._1" }
+}
+```
+
+| code | retryable | Suggested action |
+| --- | --- | --- |
+| `stale_element` | yes | re-read interactives; if framed, check `frame_id` |
+| `element_not_found` | no | the element is gone or wrong; re-observe the page |
+| `element_not_visible` / `element_disabled` / `element_not_editable` | mixed | scroll or wait; do not force the action |
+| `frame_not_found` | yes | re-read frames and use the new `frame_id` |
+| `tab_not_found` | yes | the tab closed; re-read tabs |
+| `tab_in_use` | no | another session owns the tab: pick another or release it |
+| `request_timeout` | yes | raise `timeout_ms` if the operation is legitimately slow |
+| `unsupported_page` | no | protected page; use a normal one |
+| `screenshot_unavailable` | yes | the page changed during capture; retry |
+| `bridge_unavailable` / `transport_disconnected` | yes | extension not connected / channel dropped |
+| `authentication_failed` | no | token mismatch: reinstall the native host or check `config.json` |
+
+## 12. Safety boundaries
+
+AgentSurf acts on your logged-in pages, and `browser.cdp` plus file upload are powerful. Encode these rules in your agent's instructions:
+
+- **read-only by default**; ask the user before submitting, saving, deleting, publishing, uploading, or sending anything;
+- the user logs in themselves: never request passwords or codes, never read or print cookies, tokens, or local storage;
+- never commit `config.json` or the token, and never paste them into a chat;
+- never expose the bridge beyond localhost;
+- CDP shows a "Chrome is being debugged" banner and conflicts with the user's own DevTools; detach when done.
+
+These are **instructions for the agent**, not an enforced approval layer. The caller still owns the authorization boundary.
+
+## 13. Development and debugging
+
+### 13.1 Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm install` | install dependencies |
+| `npm run build` | build the extension into `dist/` (includes the native host bundle) |
+| `npm run typecheck` | TypeScript check |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest unit tests |
+| `npm run bridge:call` | send one JSON request straight to the bridge |
+
+`npm run build` runs `scripts/generate-icons.mjs` and `scripts/build.mjs` (esbuild bundling for the extension, the bridge, the MCP server, and a fully self-contained native host bundle).
+
+### 13.2 Extension debug page
+
+`chrome-extension://<EXTENSION_ID>/debug.html` speaks the same `browser.*` protocol as MCP: list tabs, read page state, read interactive elements, click, type, scroll, screenshot.
+
+Element actions need a `get_interactives` call first. Screenshot Data URLs are shown as thumbnails — do not log the full payload.
+
+### 13.3 Standalone bridge (protocol work only)
+
+```powershell
+npm run bridge        # start a standalone bridge
+npm run bridge:dev    # build first, then start
+```
+
+It does **not** inherit control from the extension connected over native messaging, needs a compatible WebSocket client, and must not compete with the native host for the same port. Use `BROWSER_BRIDGE_PORT` / `BROWSER_BRIDGE_TOKEN` to control it; without a token it prints a random one — do not share that output.
+
+## 14. External protocol
+
+For your own clients. Normal MCP users never touch this.
+
+First WebSocket message must authenticate:
+
+```json
+{"type":"auth","role":"agent","token":"<token from local config.json>"}
+```
+
+Success:
+
+```json
+{"type":"auth_result","ok":true,"role":"agent"}
+```
+
+Then send tool requests (the external protocol omits the extension's internal `kind` field):
+
+```json
+{
+  "protocol_version": "1",
+  "request_id": "req_123",
+  "tool": "browser.get_page_state",
+  "args": { "tab_id": 123, "frame_id": 0 }
+}
+```
+
+Success response:
+
+```json
+{"request_id":"req_123","ok":true,"result":{}}
+```
+
+Failure response:
+
+```json
+{
+  "request_id": "req_123",
+  "ok": false,
+  "error": {
+    "code": "bridge_unavailable",
+    "message": "Chrome Extension is not connected.",
+    "retryable": true
+  }
+}
+```
+
+Behaviour:
+
+- responses are matched by `request_id`; timeouts, extension disconnects, and bridge shutdown all clean up pending requests and return structured errors;
+- unauthenticated messages never execute browser tools;
+- a root-level `session_id` carries tab ownership (session tools additionally read it from their own args);
+- native messaging framing is handled by Chrome, which validates `allowed_origins`, so the bridge token is not repeated there.
+
+`scripts/call-tool.mjs` (`npm run bridge:call`) is a working reference client: it reads the local config automatically and accepts `BROWSER_BRIDGE_URL` / `BROWSER_BRIDGE_TOKEN` overrides.
+
+## 15. Implementation notes
+
+### 15.1 Layout
+
+| Path | Responsibility |
+| --- | --- |
+| `src/core/` | Chrome-independent tool contract, argument validation, runtime dispatch |
+| `src/chrome/` | Chrome adapters: tabs, CDP, screenshots, downloads, network, **frame enumeration**, session coordination |
+| `src/content/` | Page Agent, element registry, revision tracking, action executor, console collector, agent cursor |
+| `src/transport/` | Native messaging, runtime messages, tool transport |
+| `src/bridge/` | local WebSocket bridge |
+| `src/mcp/` | MCP server, bridge client, native host install CLI |
+| `src/native-host/` | native host entry, config, framing |
+| `src/debug/` | extension debug page |
+| `scripts/` | build, install, and dev call scripts |
+| `tests/` | unit tests |
+| `docs/` | change and verification reports |
+
+### 15.2 Page revision and element IDs
+
+Each Document — including each frame — keeps its own revision. Navigation, reload, and "important DOM changes" advance it; `revision_reason` reports which (`navigation` / `refresh` / `important_dom`). The observer only reacts to added/removed interactive elements, semantic attribute changes on registered elements, and large structural batches (at most one advance per batch), so ordinary text edits do not invalidate IDs.
+
+`browser.get_interactives` returns `tab_id`, `frame_id`, `page_revision`, `snapshot_id`, and elements with role, tag, accessible name, state, and bounds — **never selectors**. Password fields report `value_state: "redacted"`.
+
+An `element_id` is opaque; the DOM reference lives only in the content script. Because every document gets its own token, **using an ID in the wrong frame surfaces as `stale_element`**.
+
+### 15.3 Frame routing
+
+- content scripts run with `all_frames: true` + `match_about_blank: true`, so `about:blank` / `srcdoc` frames get a Page Agent too;
+- requests are addressed with `chrome.tabs.sendMessage(tabId, msg, { frameId })` — without a frame ID the message would race multiple agents for one response;
+- on-demand injection targets one frame with `scripting.executeScript({ target: { tabId, frameIds: [frameId] } })`;
+- MAIN-world console collection is best effort: a page CSP may block it without taking the Page Agent down (the result then reports `available: false`).
+
+### 15.4 Screenshots, cursor, files
+
+- screenshots go through CDP `Page.captureScreenshot`, so **background tabs work**; only the `captureVisibleTab` fallback needs an active tab;
+- `full_page: true` uses the document's content size, so an app shell that scrolls inside a container can return viewport-sized output;
+- coordinate and element actions briefly draw an `AI` cursor: it does not receive events, is never returned by `get_interactives`, and does not change the revision;
+- `browser.set_files` marks the input temporarily, sets files via CDP `DOM.setFileInputFiles`, then cleans up; for non-top frames the lookup walks a `pierce`d node tree.
+
+## 16. Current limitations
+
+- **No OCR**: text inside images needs screenshots plus the model's own vision.
+- **No Shadow DOM support**: `shadow_dom: false`; open shadow roots contribute text to page content, but their elements do not appear in `get_interactives`.
+- **Frames are explicit**: the top document is the default; use `browser.get_frames`. Cross-origin frames cannot be driven.
+- **Protected pages cannot be injected**: `chrome://`, the Chrome Web Store, and similar.
+- **CDP conflicts with DevTools**: attaching fails if DevTools is already open on that tab, and shows a debug banner.
+- **Console buffers are per document and lost on navigation**, and only cover the period after the collector started.
+- **Network gives metadata only** (no response bodies), buffered in the service worker.
+- **CDP event buffer**: 1000 events per tab, recorded only after attach.
+- **Session isolation is cooperative**: it requires `session_id` on every call for that session.
+- **Files and downloads**: uploads need absolute local paths; downloads expose only Chrome Downloads API metadata and cannot be reliably tied to a source tab.
+- **Platform coverage**: verified on Windows; macOS scripts exist but are unverified on real hardware; no Linux installer.
+- Unit tests cover protocol and dispatch logic; real-browser behaviour (injection, screenshots, CDP, iframes) was verified manually — see `docs/`.
