@@ -3,6 +3,7 @@ import type {
   ClickResult,
   GetPageResult,
   GetInteractivesResult,
+  InteractiveFilterArgs,
   OpenArgs,
   OpenResult,
   PageState,
@@ -305,7 +306,7 @@ export class BrowserToolRuntime {
       case 'browser.get_page_state':
         return { page: await this.getPage(request.args.tab_id, request.args.frame_id, request.session_id) } satisfies GetPageResult;
       case 'browser.get_interactives':
-        return this.getInteractives(request.args.tab_id, request.args.frame_id, request.session_id);
+        return this.getInteractives(request.args.tab_id, request.args.frame_id, request.args, request.session_id);
       case 'browser.get_page_content': {
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         if (!this.pageAgent.getPageContent) throw new ToolFailure(createToolError('invalid_request', 'Page content extraction is unavailable.', false));
@@ -486,7 +487,7 @@ export class BrowserToolRuntime {
       page_revision: before.page_revision,
     };
     if (include.has('page_state')) observation.page = before;
-    if (include.has('interactives')) observation.snapshot = (await this.getInteractives(args.tab_id, undefined, undefined)).snapshot;
+    if (include.has('interactives')) observation.snapshot = (await this.getInteractives(args.tab_id, undefined, {}, undefined)).snapshot;
     if (include.has('accessibility')) {
       const value = await this.requireDebugger().send(args.tab_id, 'Accessibility.getFullAXTree');
       observation.accessibility_nodes = getArray(value, 'nodes');
@@ -508,16 +509,22 @@ export class BrowserToolRuntime {
     return { tab_id: tab.tab_id, frames: await this.requireFrames().list(tab.tab_id) };
   }
 
-  private async getInteractives(tabId?: number, frameId?: number, sessionId?: string): Promise<GetInteractivesResult> {
+  private async getInteractives(
+    tabId?: number,
+    frameId?: number,
+    filter: InteractiveFilterArgs = {},
+    sessionId?: string,
+  ): Promise<GetInteractivesResult> {
     const tab = tabId === undefined ? await this.tabs.getActive() : await this.tabs.get(tabId);
     await this.assertSessionAccess(sessionId, tab.tab_id);
     const resolvedFrameId = frameId ?? TOP_FRAME_ID;
-    const snapshot = await this.pageAgent.getInteractives(tab.tab_id, resolvedFrameId);
+    const snapshot = await this.pageAgent.getInteractives(tab.tab_id, resolvedFrameId, filter);
     return {
       snapshot: {
         tab_id: tab.tab_id,
         frame_id: resolvedFrameId,
         ...snapshot,
+        truncated: snapshot.elements.length < snapshot.total,
       },
     };
   }

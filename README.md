@@ -362,6 +362,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 
 - **只能使用 `browser_get_interactives` 返回的 `element_id`**，不允许自行编造 CSS Selector、XPath 或元素 ID；
 - `element_id` 与「文档 + 页面 revision + frame」绑定，页面变化后会失效并返回 `stale_element`，此时**重新获取交互元素再重试**；
+- 快照默认最多 150 个元素（见工具速查），重页面请用过滤器缩小范围，不要拉全量；
 - 需要组合键（Ctrl+A、Cmd+Enter、Shift+Tab）时用 `modifiers`：
 
 ```json
@@ -547,6 +548,9 @@ npm run native-host:uninstall:macos
 
 - 支持 `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` 的工具：`browser.press`、`browser.press_key`、`browser.click`、`browser.double_click`、`browser.click_at`；
 - 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_page_state`、`browser.get_interactives`、`browser.get_page_content`、`browser.get_console_messages`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
+- `browser.get_interactives` 支持 `limit`（默认 **150**）、`visible_only`、`tag`、`role`、`name_contains`。**过滤与截断在页面内完成**，结果里始终给出 `total` 与 `truncated`。实测：某重页面 665 个元素，仅靠默认上限就从 ~66,800 tokens 降到 ~15,100，用 `visible_only: true` 降到 ~380；
+- **`truncated: true` 意味着列表不完整**，不能据此判定「页面上没有这个元素」，应该用过滤器缩小范围（而不是把 limit 调大）；
+- **`visible_only` 默认 `false` 是故意的**：折叠面板、未激活 tab、以及**悬停才显形（`opacity: 0`）的按钮**都属于不可见，但 Agent 必须先能发现它们；真去点时仍会由可见性检查把关（先 `browser.mouse_move` 悬停使其显形，再点击）；
 - **元素级工具优先于坐标级工具**：前者会校验元素仍可见、可用且 revision 未变，后者只是发坐标；
 - 参数以 `src/core/protocol/tool-contract.ts` 与 `src/core/protocol/schemas.ts` 为准。工具名与参数**不可**按其他浏览器工具的命名习惯猜测。
 
@@ -1255,6 +1259,9 @@ Redact the token and any sensitive page data before sharing logs.
 
 - `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.press_key`, `browser.click`, `browser.double_click`, `browser.click_at`.
 - `frame_id` is accepted by `browser.get_page`, `browser.get_page_state`, `browser.get_interactives`, `browser.get_page_content`, `browser.get_console_messages`, and every element action.
+- `browser.get_interactives` accepts `limit` (default **150**), `visible_only`, `tag`, `role`, `name_contains`. Filtering and truncation happen inside the page, and the result reports `total` plus `truncated`. Measured: a 665-element page fell from ~66,800 tokens to ~15,100 by the cap alone, and to ~380 tokens with `visible_only: true`.
+- **`truncated: true` means the list is incomplete** — do not conclude the element is missing; narrow with a filter instead.
+- **`visible_only: false` is the deliberate default**: collapsed panels, inactive tabs, and hover-revealed buttons (`opacity: 0`) are invisible, yet the agent must be able to discover them. Actions still refuse invisible elements, so hover first (`browser.mouse_move`), then click.
 - **Prefer element-level tools over coordinate-level ones**: element tools verify visibility, enabled state, and revision; coordinate tools just send input.
 - Authoritative parameters live in `src/core/protocol/tool-contract.ts` and `src/core/protocol/schemas.ts`. Do not guess names or arguments from other browser tools.
 

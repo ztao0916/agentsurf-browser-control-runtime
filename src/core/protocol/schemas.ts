@@ -1,6 +1,7 @@
 import { createToolError, ToolFailure, type ToolError } from './errors';
 import {
   PROTOCOL_VERSION,
+  DEFAULT_INTERACTIVE_LIMIT,
   type ElementBounds,
   type InteractiveElement,
   type ImageFormat,
@@ -14,6 +15,7 @@ import {
   type PageContentResult,
   type ConsoleEntry,
   type ConsoleLevel,
+  type InteractiveFilterArgs,
   type KeyModifier,
   type RuntimeMessage,
   type ObservationContent,
@@ -374,13 +376,21 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
     case 'browser.get_frames':
       return { tab_id: requireInteger(args.tab_id, 'args.tab_id') };
     case 'browser.get_page':
-    case 'browser.get_page_state':
+    case 'browser.get_page_state': {
+      const tabId = optionalInteger(args.tab_id, 'args.tab_id');
+      const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
+      return {
+        ...(tabId === undefined ? {} : { tab_id: tabId }),
+        ...(frameId === undefined ? {} : { frame_id: frameId }),
+      };
+    }
     case 'browser.get_interactives': {
       const tabId = optionalInteger(args.tab_id, 'args.tab_id');
       const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {
         ...(tabId === undefined ? {} : { tab_id: tabId }),
         ...(frameId === undefined ? {} : { frame_id: frameId }),
+        ...parseInteractiveFilter(args),
       };
     }
     case 'browser.get_page_content': {
@@ -537,6 +547,22 @@ function parseImageFormat(value: unknown): ImageFormat | undefined {
   return value;
 }
 
+/** Shared by the tool arguments and the Page Agent request so both accept the same filters. */
+function parseInteractiveFilter(args: UnknownRecord): InteractiveFilterArgs {
+  const limit = optionalPositiveInteger(args.limit, 'limit');
+  const visibleOnly = optionalBoolean(args.visible_only, 'visible_only');
+  const tag = optionalString(args.tag, 'tag');
+  const role = optionalString(args.role, 'role');
+  const nameContains = optionalString(args.name_contains, 'name_contains');
+  return {
+    ...(limit === undefined ? {} : { limit }),
+    ...(visibleOnly === undefined ? {} : { visible_only: visibleOnly }),
+    ...(tag === undefined ? {} : { tag }),
+    ...(role === undefined ? {} : { role }),
+    ...(nameContains === undefined ? {} : { name_contains: nameContains }),
+  };
+}
+
 function requireInteger(value: unknown, field: string): number {
   const parsed = optionalInteger(value, field);
   if (parsed === undefined) throw invalid(field, 'is required');
@@ -577,8 +603,19 @@ export function parsePageAgentRequest(value: unknown): PageAgentRequest {
   const base = { kind: 'page-agent-request' as const, protocol_version: protocolVersion, request_id: requestId };
   switch (input.action) {
     case 'get-page-state':
-    case 'get-interactives':
-      return { ...base, action: input.action };
+      return { ...base, action: 'get-page-state' };
+    case 'get-interactives': {
+      const filter = parseInteractiveFilter(input);
+      return {
+        ...base,
+        action: 'get-interactives',
+        limit: filter.limit ?? DEFAULT_INTERACTIVE_LIMIT,
+        visible_only: filter.visible_only ?? false,
+        ...(filter.tag === undefined ? {} : { tag: filter.tag }),
+        ...(filter.role === undefined ? {} : { role: filter.role }),
+        ...(filter.name_contains === undefined ? {} : { name_contains: filter.name_contains }),
+      };
+    }
     case 'get-page-content':
       return { ...base, action: 'get-page-content', include_html: input.include_html === true, include_images: input.include_images !== false, include_frames: input.include_frames !== false, max_text_length: optionalPositiveInteger(input.max_text_length, 'max_text_length') ?? 50_000 };
     case 'get-console-messages':
@@ -935,10 +972,13 @@ function parseViewport(value: unknown): ViewportState {
 function parseInteractiveSnapshot(value: unknown): PageAgentInteractiveSnapshot {
   const snapshot = requireRecord(value, 'snapshot');
   if (!Array.isArray(snapshot.elements)) throw pageAgentError('Invalid elements list from Page Agent.');
+  const elements = snapshot.elements.map(parseInteractiveElement);
   return {
     page_revision: requireString(snapshot.page_revision, 'snapshot.page_revision'),
     snapshot_id: requireString(snapshot.snapshot_id, 'snapshot.snapshot_id'),
-    elements: snapshot.elements.map(parseInteractiveElement),
+    // Tolerated when absent so an older injected Page Agent cannot break the caller.
+    total: optionalInteger(snapshot.total, 'snapshot.total') ?? elements.length,
+    elements,
   };
 }
 

@@ -245,6 +245,10 @@ export interface InteractiveSnapshot {
   frame_id: number;
   page_revision: string;
   snapshot_id: string;
+  /** Elements that matched the filters before the limit was applied. */
+  total: number;
+  /** True when the limit hid part of the match, so the caller knows the list is incomplete. */
+  truncated: boolean;
   elements: InteractiveElement[];
 }
 
@@ -259,10 +263,32 @@ export interface GetPageArgs {
 
 export type GetPageStateArgs = GetPageArgs;
 
-export interface GetInteractivesArgs {
+export interface GetInteractivesArgs extends InteractiveFilterArgs {
   tab_id?: number;
   frame_id?: number;
 }
+
+/**
+ * A full snapshot of a heavy application can reach hundreds of elements (measured: 665 elements,
+ * 245 KB of JSON on one page), which costs more context than any model should spend on a lookup.
+ * The filters and the limit are applied inside the page, before anything crosses the message
+ * boundary.
+ */
+export interface InteractiveFilterArgs {
+  /** Maximum elements returned. Defaults to {@link DEFAULT_INTERACTIVE_LIMIT}. */
+  limit?: number;
+  /** Drop elements reported as not visible. */
+  visible_only?: boolean;
+  /** Keep one tag, for example `button` or `input`. */
+  tag?: string;
+  /** Keep one role, for example `tab` or `combobox`. */
+  role?: string;
+  /** Case-insensitive substring of the accessible name or the element text. */
+  name_contains?: string;
+}
+
+/** 150 keeps every measured application page intact while capping the outliers. */
+export const DEFAULT_INTERACTIVE_LIMIT = 150;
 
 export interface GetPageContentArgs {
   tab_id: number;
@@ -776,7 +802,15 @@ interface PageAgentRequestBase {
 }
 
 export type PageAgentRequest =
-  | (PageAgentRequestBase & { action: 'get-page-state' | 'get-interactives' })
+  | (PageAgentRequestBase & { action: 'get-page-state' })
+  | (PageAgentRequestBase & {
+      action: 'get-interactives';
+      limit: number;
+      visible_only: boolean;
+      tag?: string;
+      role?: string;
+      name_contains?: string;
+    })
   | (PageAgentRequestBase & { action: 'get-page-content'; include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number })
   | (PageAgentRequestBase & { action: 'get-console-messages' })
   | (PageAgentRequestBase & { action: 'click'; element_id: string; modifiers?: KeyModifier[] })
@@ -810,6 +844,7 @@ export interface PageAgentState {
 export interface PageAgentInteractiveSnapshot {
   page_revision: string;
   snapshot_id: string;
+  total: number;
   elements: InteractiveElement[];
 }
 

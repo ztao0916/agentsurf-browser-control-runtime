@@ -4,17 +4,24 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ToolFailure } from '../src/core/protocol/errors';
 import { ElementRegistry } from '../src/content/element-registry';
 import { InteractiveExtractor } from '../src/content/interactive-extractor';
+import type { InteractiveElement } from '../src/core/protocol/tool-contract';
 
 function setVisible(element: Element): void {
   element.getBoundingClientRect = () =>
     ({ x: 10, y: 20, width: 100, height: 30, top: 20, right: 110, bottom: 50, left: 10, toJSON: () => ({}) });
 }
 
-function setup(html: string): { registry: ElementRegistry; elements: ReturnType<InteractiveExtractor['extract']> } {
+function extract(html: string): { registry: ElementRegistry; elements: InteractiveElement[]; total: number } {
   document.body.innerHTML = html;
   Array.from(document.body.querySelectorAll('*')).forEach(setVisible);
   const registry = new ElementRegistry();
-  return { registry, elements: new InteractiveExtractor(document, registry).extract() };
+  const result = new InteractiveExtractor(document, registry).extract();
+  return { registry, elements: result.elements, total: result.total };
+}
+
+function setup(html: string): { registry: ElementRegistry; elements: InteractiveElement[] } {
+  const { registry, elements } = extract(html);
+  return { registry, elements };
 }
 
 beforeEach(() => {
@@ -84,6 +91,54 @@ describe('InteractiveExtractor', () => {
     const knownId = elements[0]?.element_id ?? '';
     const unknownId = knownId.replace(/[a-f0-9]{32}$/u, '00000000000000000000000000000000');
     expectToolError(() => registry.resolve(unknownId), 'element_not_found');
+  });
+});
+
+describe('InteractiveExtractor filters', () => {
+  function filtered(html: string, filter: Parameters<InteractiveExtractor['extract']>[0]): {
+    elements: InteractiveElement[];
+    total: number;
+  } {
+    document.body.innerHTML = html;
+    Array.from(document.body.querySelectorAll('*')).forEach(setVisible);
+    return new InteractiveExtractor(document, new ElementRegistry()).extract(filter);
+  }
+
+  it('reports the full match count while honouring the limit', () => {
+    const result = filtered('<button>One</button><button>Two</button><button>Three</button>', { limit: 2 });
+    expect(result.elements).toHaveLength(2);
+    expect(result.total).toBe(3);
+  });
+
+  it('drops invisible elements when asked', () => {
+    const html = '<button>Visible</button><button style="display:none">Hidden</button>';
+    expect(filtered(html, {}).total).toBe(2);
+    const visibleOnly = filtered(html, { visibleOnly: true });
+    expect(visibleOnly.total).toBe(1);
+    expect(visibleOnly.elements[0]?.name).toBe('Visible');
+  });
+
+  it('keeps a single tag or role', () => {
+    const html = '<button>Save</button><a href="/x">Docs</a><input aria-label="Query">';
+    expect(filtered(html, { tag: 'button' }).total).toBe(1);
+    expect(filtered(html, { tag: 'BUTTON' }).total).toBe(1);
+    expect(filtered(html, { role: 'link' }).elements[0]?.name).toBe('Docs');
+    expect(filtered(html, { role: 'LINK' }).total).toBe(1);
+  });
+
+  it('matches a case-insensitive substring of the name or the text', () => {
+    const html = '<button>提交订单</button><button>Cancel</button>';
+    expect(filtered(html, { nameContains: '提交' }).elements[0]?.name).toBe('提交订单');
+    expect(filtered(html, { nameContains: 'cancel' }).total).toBe(1);
+    expect(filtered(html, { nameContains: 'missing' }).total).toBe(0);
+  });
+
+  it('combines filters before applying the limit', () => {
+    const html = '<button>Save</button><button disabled>Save disabled</button><a href="/x">Save docs</a>';
+    const result = filtered(html, { tag: 'button', nameContains: 'save', limit: 1 });
+    expect(result.total).toBe(2);
+    expect(result.elements).toHaveLength(1);
+    expect(result.elements[0]?.disabled).toBe(false);
   });
 });
 

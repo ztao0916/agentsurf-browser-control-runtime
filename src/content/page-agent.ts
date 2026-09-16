@@ -71,15 +71,24 @@ if (!window[INSTALLATION_KEY]) {
           });
         case 'get-console-messages':
           return success(request, { action: 'get-console-messages', result: await queryConsoleCollector() });
-        case 'get-interactives':
+        case 'get-interactives': {
+          const extracted = extractor.extract({
+            limit: request.limit,
+            visibleOnly: request.visible_only,
+            ...(request.tag === undefined ? {} : { tag: request.tag }),
+            ...(request.role === undefined ? {} : { role: request.role }),
+            ...(request.name_contains === undefined ? {} : { nameContains: request.name_contains }),
+          });
           return success(request, {
             action: 'get-interactives',
             snapshot: {
               page_revision: registry.pageRevision,
               snapshot_id: registry.createSnapshotId(),
-              elements: extractor.extract(),
+              total: extracted.total,
+              elements: extracted.elements,
             },
           });
+        }
         case 'click':
           return success(request, { action: 'click', result: executor.click(request.element_id, request.modifiers ?? []) });
         case 'double-click':

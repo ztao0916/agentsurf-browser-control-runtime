@@ -2,7 +2,9 @@ import { createToolError, ToolFailure } from '../core/protocol/errors';
 import { parsePageAgentResponse } from '../core/protocol/schemas';
 import {
   PROTOCOL_VERSION,
+  DEFAULT_INTERACTIVE_LIMIT,
   type ConsoleEntry,
+  type InteractiveFilterArgs,
   type KeyModifier,
   type PageAgentElementActionResult,
   type PageAgentInteractiveSnapshot,
@@ -16,7 +18,7 @@ import { sendPageAgentRequest } from '../transport/runtime-message-transport';
 
 export interface PageAgentClient {
   getState(tabId: number, frameId: number): Promise<PageAgentState>;
-  getInteractives(tabId: number, frameId: number): Promise<PageAgentInteractiveSnapshot>;
+  getInteractives(tabId: number, frameId: number, filter: InteractiveFilterArgs): Promise<PageAgentInteractiveSnapshot>;
   getPageContent?(
     tabId: number,
     frameId: number,
@@ -66,8 +68,21 @@ export class ChromePageAgentClient implements PageAgentClient {
     return response.state;
   }
 
-  public async getInteractives(tabId: number, frameId: number): Promise<PageAgentInteractiveSnapshot> {
-    const response = await this.send(tabId, frameId, { ...createRequestBase(), action: 'get-interactives' });
+  public async getInteractives(
+    tabId: number,
+    frameId: number,
+    filter: InteractiveFilterArgs = {},
+  ): Promise<PageAgentInteractiveSnapshot> {
+    // Defaults are resolved here so the request always carries the full shape the Page Agent expects.
+    const response = await this.send(tabId, frameId, {
+      ...createRequestBase(),
+      action: 'get-interactives',
+      limit: filter.limit ?? DEFAULT_INTERACTIVE_LIMIT,
+      visible_only: filter.visible_only ?? false,
+      ...(filter.tag === undefined ? {} : { tag: filter.tag }),
+      ...(filter.role === undefined ? {} : { role: filter.role }),
+      ...(filter.name_contains === undefined ? {} : { name_contains: filter.name_contains }),
+    });
     if (!response.ok) throw new ToolFailure(response.error);
     if (response.action !== 'get-interactives') throw this.unexpectedResponse();
     return response.snapshot;

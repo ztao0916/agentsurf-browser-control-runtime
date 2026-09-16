@@ -1,4 +1,5 @@
 import type { InteractiveElement, ValueState } from '../core/protocol/tool-contract';
+import { DEFAULT_INTERACTIVE_LIMIT } from '../core/protocol/tool-contract';
 import type { ElementRegistry } from './element-registry';
 import { isElementDisabled, isElementVisible } from './element-state';
 
@@ -29,16 +30,36 @@ export const INTERACTIVE_SELECTOR = [
 
 const MAX_TEXT_LENGTH = 500;
 
+export interface InteractiveFilter {
+  limit: number;
+  visibleOnly: boolean;
+  tag?: string;
+  role?: string;
+  nameContains?: string;
+}
+
+export interface InteractiveExtractResult {
+  elements: InteractiveElement[];
+  /** Matches before the limit, so callers can tell a complete list from a truncated one. */
+  total: number;
+}
+
+const DEFAULT_FILTER: InteractiveFilter = { limit: DEFAULT_INTERACTIVE_LIMIT, visibleOnly: false };
+
 export class InteractiveExtractor {
   public constructor(
     private readonly pageDocument: Document,
     private readonly registry: ElementRegistry,
   ) {}
 
-  public extract(): InteractiveElement[] {
-    return Array.from(this.pageDocument.querySelectorAll(INTERACTIVE_SELECTOR), (element) =>
-      this.describe(element as HTMLElement),
-    );
+  public extract(filter: Partial<InteractiveFilter> = {}): InteractiveExtractResult {
+    const resolved: InteractiveFilter = { ...DEFAULT_FILTER, ...filter };
+    const matched: InteractiveElement[] = [];
+    for (const element of Array.from(this.pageDocument.querySelectorAll(INTERACTIVE_SELECTOR))) {
+      const described = this.describe(element as HTMLElement);
+      if (matchesFilter(described, resolved)) matched.push(described);
+    }
+    return { elements: matched.slice(0, resolved.limit), total: matched.length };
   }
 
   private describe(element: HTMLElement): InteractiveElement {
@@ -71,6 +92,17 @@ export class InteractiveExtractor {
 
 export function isInteractiveCandidate(element: Element): boolean {
   return element.matches(INTERACTIVE_SELECTOR);
+}
+
+function matchesFilter(element: InteractiveElement, filter: InteractiveFilter): boolean {
+  if (filter.visibleOnly && !element.visible) return false;
+  if (filter.tag !== undefined && element.tag !== filter.tag.toLowerCase()) return false;
+  if (filter.role !== undefined && element.role.toLowerCase() !== filter.role.toLowerCase()) return false;
+  if (filter.nameContains !== undefined) {
+    const needle = filter.nameContains.toLowerCase();
+    if (!`${element.name}\n${element.text}`.toLowerCase().includes(needle)) return false;
+  }
+  return true;
 }
 
 function getRole(element: HTMLElement): string {

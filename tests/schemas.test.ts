@@ -221,4 +221,31 @@ describe('tool contract schemas', () => {
       args: { tab_id: 3, frame_id: -1 },
     })).toThrow(ToolFailure);
   });
+
+  it('parses element filters and rejects a non-positive limit', () => {
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'filters',
+      tool: 'browser.get_interactives',
+      args: { tab_id: 3, limit: 20, visible_only: true, tag: 'button', name_contains: 'save' },
+    }).args).toEqual({ tab_id: 3, limit: 20, visible_only: true, tag: 'button', name_contains: 'save' });
+
+    // No filters means the runtime keeps its own default instead of inventing fields.
+    expect(parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'no-filters',
+      tool: 'browser.get_interactives',
+      args: { tab_id: 3 },
+    }).args).toEqual({ tab_id: 3 });
+
+    expect(() => parseToolRequest({
+      kind: 'tool-request',
+      protocol_version: '1',
+      request_id: 'bad-limit',
+      tool: 'browser.get_interactives',
+      args: { tab_id: 3, limit: 0 },
+    })).toThrow(ToolFailure);
+  });
 });

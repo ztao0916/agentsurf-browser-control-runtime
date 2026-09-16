@@ -18,6 +18,7 @@ import type {
   KeyModifier,
   PageAgentSelectTextResult,
   FrameInfo,
+  InteractiveFilterArgs,
 } from '../src/core/protocol/tool-contract';
 
 const tab: TabInfo = {
@@ -49,6 +50,7 @@ const pageAgentState: PageAgentState = {
 const interactiveSnapshot: PageAgentInteractiveSnapshot = {
   page_revision: pageAgentState.page_revision,
   snapshot_id: 'snap_document_0_test',
+  total: 0,
   elements: [],
 };
 
@@ -278,6 +280,20 @@ class FakeFrameAdapter implements FrameAdapter {
   }
 }
 
+class TruncatingPageAgentClient extends FakePageAgentClient {
+  public lastFilter: InteractiveFilterArgs | undefined = undefined;
+
+  public override getInteractives(
+    _tabId?: number,
+    _frameId?: number,
+    filter?: InteractiveFilterArgs,
+  ): Promise<PageAgentInteractiveSnapshot> {
+    this.lastFilter = filter;
+    // A page that holds more elements than the caller asked for.
+    return Promise.resolve({ ...interactiveSnapshot, total: 12 });
+  }
+}
+
 class MissingConsolePageAgentClient extends FakePageAgentClient {
   public override getConsoleMessages(): Promise<{ available: boolean; entries: ConsoleEntry[]; dropped: number }> {
     return Promise.resolve({ available: false, entries: [], dropped: 0 });
@@ -334,7 +350,37 @@ describe('BrowserToolRuntime', () => {
     if (response.ok) {
       expect(response.result.snapshot.tab_id).toBe(7);
       expect(response.result.snapshot.snapshot_id).toBe('snap_document_0_test');
+      expect(response.result.snapshot.truncated).toBe(false);
     }
+  });
+
+  it('forwards the element filters and reports a truncated snapshot', async () => {
+    const truncating = new TruncatingPageAgentClient();
+    const truncatingRuntime = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      truncating,
+      new FakeScreenshotAdapter(),
+    );
+
+    const response = await truncatingRuntime.handle(request('browser.get_interactives', {
+      tab_id: 7,
+      limit: 5,
+      visible_only: true,
+      tag: 'button',
+      name_contains: 'save',
+    }));
+
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.snapshot.total).toBe(12);
+      expect(response.result.snapshot.truncated).toBe(true);
+    }
+    expect(truncating.lastFilter).toMatchObject({
+      limit: 5,
+      visible_only: true,
+      tag: 'button',
+      name_contains: 'save',
+    });
   });
 
   it('returns console messages with pagination metadata', async () => {
