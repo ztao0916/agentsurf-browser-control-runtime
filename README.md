@@ -286,6 +286,7 @@ npm run native-host:install:macos -- "<扩展ID>"
 要点：
 
 - 启动脚本记录安装时的 Node 绝对路径，不依赖桌面启动 Chrome 时的 `PATH`；用 nvm / Homebrew 换过 Node 后要重新安装；
+- 安装时会**自检 MCP 启动器**（跑一次 `agentsurf-mcp.sh help`）；自检在写 Native Messaging manifest **之前**，失败就中止安装，不会留下不一致的注册信息；
 - 不需要 `sudo`，也不要混用 `sudo`，否则 manifest 会落到错误的用户目录；
 - 只针对当前用户的 Google Chrome 稳定版，不会自动注册 Chromium / Chrome Beta。
 
@@ -1040,7 +1041,8 @@ Port 8765 by default; append another port to override. Files created:
 
 Notes:
 
-- the launcher records Node's absolute path, so it does not depend on the `PATH` Chrome sees; re-run the installer after switching Node with nvm or Homebrew;
+- the launchers record Node's absolute path, so they do not depend on the `PATH` Chrome sees; re-run the installer after switching Node with nvm or Homebrew;
+- the install **self-checks the MCP launcher** (`agentsurf-mcp.sh help`) *before* writing the native messaging manifest, so a failure aborts without leaving inconsistent registration;
 - do not use `sudo` — the manifest would land in the wrong user directory;
 - it targets the current user's Google Chrome (stable) only.
 
