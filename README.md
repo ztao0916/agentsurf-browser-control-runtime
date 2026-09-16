@@ -615,7 +615,7 @@ AgentSurf 能操作你登录态下的页面，`browser.cdp`、文件上传等能
 - 连接状态（`connected` / `connecting` / `reconnecting` / `error` / `disconnected`）与最近的错误文本；
 - Host、Endpoint、Pending（含重连次数）；
 - `Connect` / `Disconnect` / `Reconnect` 三个按钮；
-- 最近 30 条连接事件；
+- 最近 5 条**连接状态与错误**事件（工具调用的请求/响应不进这个列表，否则几次调用就把连接历史冲掉了）；
 - `Copy diagnostics`：把状态、扩展版本、浏览器 UA 与最近事件复制到剪贴板，方便直接粘给 Agent 或写进 issue（**不含 token**）。
 
 其余手工工具面板（标签页、元素操作、坐标、截图、文件、CDP、原始报文日志）已经移除：这些都用代码驱动更省事：
@@ -1316,7 +1316,7 @@ These are **instructions for the agent**, not an enforced approval layer. The ca
 
 `chrome-extension://<EXTENSION_ID>/debug.html` is also what the toolbar icon opens. It does **only the one thing code cannot**: show you the link state and let you force a reconnect.
 
-It contains: the connection state (`connected` / `connecting` / `reconnecting` / `error` / `disconnected`) with the last error text, the host name, the endpoint, the pending request count, `Connect` / `Disconnect` / `Reconnect`, the last 30 connection events, and `Copy diagnostics` — which copies the state, extension version, user agent, and recent events (never the token) so you can paste them into a chat or an issue.
+It contains: the connection state (`connected` / `connecting` / `reconnecting` / `error` / `disconnected`) with the last error text, the host name, the endpoint, the pending request count, `Connect` / `Disconnect` / `Reconnect`, the last 5 connection state and error events (tool request/response traffic is excluded — it would flush the history within a dozen calls), and `Copy diagnostics` — which copies the state, extension version, user agent, and recent events (never the token) so you can paste them into a chat or an issue.
 
 The manual tool panels were removed (tabs, element actions, coordinates, screenshots, files, CDP, raw protocol logs). Driving those from code is less work:
 

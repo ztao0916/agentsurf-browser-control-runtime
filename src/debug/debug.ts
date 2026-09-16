@@ -10,8 +10,12 @@ import type { NativeConnectionSnapshot, NativeTransportEvent } from '../transpor
  * The popup is a status card, not a tool playground: browser work is driven from code (MCP or
  * `npm run bridge:call`). What cannot be done from code is seeing whether the native host is
  * connected, forcing a reconnect, and reading the last connection errors.
+ *
+ * Every tool call emits a request and a response event, so keeping those here would flush the
+ * connection history within a dozen calls. Only the connection lifecycle is listed.
  */
-const MAX_EVENTS = 30;
+const MAX_EVENTS = 5;
+const LISTED_CATEGORIES = new Set<NativeTransportEvent['category']>(['state', 'error']);
 
 const stateDot = getElement<HTMLSpanElement>('state-dot');
 const stateText = getElement<HTMLSpanElement>('state-text');
@@ -65,6 +69,7 @@ function createEventRow(event: NativeTransportEvent, extraClass: string): HTMLLI
 }
 
 function addEvent(event: NativeTransportEvent): void {
+  if (!LISTED_CATEGORIES.has(event.category)) return;
   events.unshift(event);
   events.length = Math.min(events.length, MAX_EVENTS);
   renderEvents();
