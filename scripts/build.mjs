@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -61,3 +61,16 @@ await build({
 await cp(resolve(projectRoot, 'manifest.json'), resolve(dist, 'manifest.json'));
 await cp(resolve(projectRoot, 'src/debug/debug.html'), resolve(dist, 'debug.html'));
 await cp(resolve(projectRoot, 'src/icons'), resolve(dist, 'icons'), { recursive: true });
+
+// A wrong relative path in the popup HTML fails silently in Chrome: the page renders its static
+// defaults with no visible error. Fail the build instead of shipping a dead popup.
+const popupHtml = await readFile(resolve(dist, 'debug.html'), 'utf8');
+for (const match of popupHtml.matchAll(/(?:src|href)="([^"]+)"/gu)) {
+  const reference = match[1];
+  if (reference.startsWith('http:') || reference.startsWith('https:') || reference.startsWith('data:')) continue;
+  try {
+    await access(resolve(dist, reference));
+  } catch {
+    throw new Error(`debug.html references "${reference}", which does not exist in dist/.`);
+  }
+}
