@@ -716,14 +716,49 @@ describe('BrowserToolRuntime', () => {
     if (!response.ok) expect(response.error.code).toBe('screenshot_unavailable');
   });
 
-  it('rejects a screenshot when the page revision changes during capture', async () => {
+  it('keeps the screenshot and flags it when the page revision changes during capture', async () => {
     const changingRuntime = new BrowserToolRuntime(
       new FakeTabsAdapter(),
       new ChangingPageAgentClient(),
       new FakeScreenshotAdapter(),
     );
     const response = await changingRuntime.handle(request('browser.screenshot', { tab_id: 7 }));
-    expect(response.ok).toBe(false);
-    if (!response.ok) expect(response.error.code).toBe('screenshot_unavailable');
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.screenshot).toMatchObject({
+        page_revision: 'rev_after',
+        page_changed: true,
+        page_revision_before: 'rev_before',
+        mime_type: 'image/png',
+      });
+    }
+  });
+
+  it('flags an observation taken while the page kept changing instead of failing', async () => {
+    const changingRuntime = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new ChangingPageAgentClient(),
+      new FakeScreenshotAdapter(),
+    );
+    const response = await changingRuntime.handle(
+      request('browser.observe', { tab_id: 7, include: ['page_state'] }),
+    );
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.observation).toMatchObject({
+        page_changed: true,
+        page_revision_after: 'rev_after',
+      });
+      expect(response.result.observation.page_changed).toBe(true);
+    }
+  });
+
+  it('omits the change flags when the page stayed still', async () => {
+    const response = await runtime.handle(request('browser.screenshot', { tab_id: 7 }));
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result.screenshot).not.toHaveProperty('page_changed');
+      expect(response.result.screenshot).not.toHaveProperty('page_revision_before');
+    }
   });
 });

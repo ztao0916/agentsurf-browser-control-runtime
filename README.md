@@ -546,7 +546,7 @@ npm run native-host:uninstall:macos
 | `stale_element` | 元素 ID 过期（页面变更），或**你在错的地方找它**（例如忘了带 `frame_id`）。重新 `browser_get_interactives` |
 | `element_not_visible` / `element_disabled` / `element_not_editable` | 元素存在但不满足操作前提。不要强行点，先看页面实际状态 |
 | `unsupported_page` | Chrome 不允许在该页面注入 Page Agent（`chrome://`、应用商店页等）。换普通 HTTP/HTTPS 页面 |
-| `screenshot_unavailable` | 截图期间页面 revision 变化；或降级路径下目标不是活动标签页 |
+| `screenshot_unavailable` | 截图调用失败：降级路径下目标不是活动标签页，或 Chrome 截图本身报错。**页面在截图期间变化不再算失败**，结果会带 `page_changed: true` |
 | `tool is unsupported` | 工具名不被当前运行时支持。对照 `browser_get_capabilities`，不要急着重装 |
 | 安装时报 `native-host.exe` 被占用 | 先禁用扩展、等旧 Host 退出再安装。**不要**批量结束 `node.exe` |
 

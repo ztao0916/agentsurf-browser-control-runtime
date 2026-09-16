@@ -525,7 +525,7 @@ This removes the native host registration and launcher, **keeps the config**, an
 | `stale_element` | The element ID is outdated **or you are looking in the wrong place** (e.g. missing `frame_id`). Re-run `browser_get_interactives`. |
 | `element_not_visible` / `element_disabled` / `element_not_editable` | The element exists but cannot be acted on yet. Inspect the real page state. |
 | `unsupported_page` | Chrome forbids injecting a Page Agent there (`chrome://`, Web Store). Use a normal HTTP/HTTPS page. |
-| `screenshot_unavailable` | The page changed during capture, or the fallback path needed an active tab. |
+| `screenshot_unavailable` | The capture call failed: the fallback path needs an active tab, or Chrome itself failed. **A page that changes during capture is no longer an error** — the result carries `page_changed: true`. |
 | `tool is unsupported` | That tool does not exist in this runtime. Compare against `browser_get_capabilities`. |
 | `native-host.exe` in use during install | Disable the extension, let the old host exit, then install. Do **not** kill every `node.exe`. |
 

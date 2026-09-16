@@ -660,6 +660,10 @@ export interface ScreenshotResult {
   screenshot: {
     tab_id: number;
     page_revision: string;
+    /** True only when the page changed while the image was captured (any live page does). */
+    page_changed?: boolean;
+    /** Present only with `page_changed`: the revision the capture started from. */
+    page_revision_before?: string;
     width: number;
     height: number;
     mime_type: 'image/png' | 'image/jpeg';
@@ -671,6 +675,10 @@ export interface ObserveResult {
   observation: {
     tab_id: number;
     page_revision: string;
+    /** True only when the page changed while the observation was assembled. */
+    page_changed?: boolean;
+    /** Present only with `page_changed`: the revision the page had moved on to. */
+    page_revision_after?: string;
     page?: PageState;
     snapshot?: InteractiveSnapshot;
     screenshot?: ScreenshotResult['screenshot'];

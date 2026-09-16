@@ -46,6 +46,7 @@
 - **`truncated: true` 意味着列表不完整**，不能据此判定「页面上没有这个元素」，应该用过滤器缩小范围（而不是把 limit 调大）；
 - **`visible_only` 默认 `false` 是故意的**：折叠面板、未激活 tab、以及**悬停才显形（`opacity: 0`）的按钮**都属于不可见，但 Agent 必须先能发现它们；真去点时仍会由可见性检查把关（先 `browser.mouse_move` 悬停使其显形，再点击）；
 - **元素级工具优先于坐标级工具**：前者会校验元素仍可见、可用且 revision 未变，后者只是发坐标；
+- **`browser.screenshot` / `browser.observe` 不再因页面变化而失败**：live 页面（动画、热更新、轮询）上会带 `page_changed: true` 返回 —— 截图另带 `page_revision_before`（截图开始时的版本），观察另带 `page_revision_after`（页面随后走到到的版本）；页面没变时这两个字段不出现。元素操作仍然严格校验 revision；
 - 参数以 `src/core/protocol/tool-contract.ts` 与 `src/core/protocol/schemas.ts` 为准。工具名与参数**不可**按其他浏览器工具的命名习惯猜测。
 
 ## 2. 错误码与重试语义
@@ -73,7 +74,7 @@ Agent 应据此决策，而不是把失败一律当成“重试”：
 | `tab_in_use` | ❌ | 该标签页被其他 session 占用：换标签页或先 `release_tab` |
 | `request_timeout` | ✅ | 操作太慢或页面阻塞，必要时增大 `timeout_ms` |
 | `unsupported_page` | ❌ | 受保护页面，换普通网页 |
-| `screenshot_unavailable` | ✅ | 页面在截图期间变化，重试 |
+| `screenshot_unavailable` | ✅ | 截图调用失败（降级路径要求目标标签页是活动页）。页面在截图期间变化不再失败，改用 `page_changed` 标注 |
 | `bridge_unavailable` / `transport_disconnected` | ✅ | 扩展未连接或通道断开，看 [README 第 8 节](../README.md#8-排障) |
 | `authentication_failed` | ❌ | token 不匹配：重新安装 Native Host（会复用 token）或检查 `config.json` |
 

@@ -44,6 +44,7 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 - **`truncated: true` means the list is incomplete** — do not conclude the element is missing; narrow with a filter instead.
 - **`visible_only: false` is the deliberate default**: collapsed panels, inactive tabs, and hover-revealed buttons (`opacity: 0`) are invisible, yet the agent must be able to discover them. Actions still refuse invisible elements, so hover first (`browser.mouse_move`), then click.
 - **Prefer element-level tools over coordinate-level ones**: element tools verify visibility, enabled state, and revision; coordinate tools just send input.
+- **`browser.screenshot` / `browser.observe` no longer fail when the page changes**: on a live page (animations, hot reload, polling) they return with `page_changed: true` — a screenshot also carries `page_revision_before` (the revision it started from), an observation carries `page_revision_after` (the revision the page moved on to). Neither field appears while the page holds still. Element actions still validate revisions strictly.
 - Authoritative parameters live in `src/core/protocol/tool-contract.ts` and `src/core/protocol/schemas.ts`. Do not guess names or arguments from other browser tools.
 
 ## 2. Error codes and retry semantics
@@ -69,7 +70,7 @@ Every failure is structured (the MCP layer puts the same object into the tool re
 | `tab_in_use` | no | another session owns the tab: pick another or release it |
 | `request_timeout` | yes | raise `timeout_ms` if the operation is legitimately slow |
 | `unsupported_page` | no | protected page; use a normal one |
-| `screenshot_unavailable` | yes | the page changed during capture; retry |
+| `screenshot_unavailable` | yes | the capture call failed (the fallback path needs an active tab). A page changing during capture is no longer an error — that is reported as `page_changed` |
 | `bridge_unavailable` / `transport_disconnected` | yes | extension not connected / channel dropped |
 | `authentication_failed` | no | token mismatch: reinstall the native host or check `config.json` |
 

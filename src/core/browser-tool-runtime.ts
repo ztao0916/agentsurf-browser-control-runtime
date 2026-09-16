@@ -490,18 +490,14 @@ export class BrowserToolRuntime {
       ...(args.clip === undefined ? {} : { clip: args.clip }),
     });
     const after = await this.pageAgent.getState(tab.tab_id, TOP_FRAME_ID);
-    if (before.page_revision !== after.page_revision) {
-      throw new ToolFailure(
-        createToolError('screenshot_unavailable', 'The page changed during screenshot capture.', true, {
-          before_revision: before.page_revision,
-          after_revision: after.page_revision,
-        }),
-      );
-    }
+    // Live pages (animations, clocks, hot reload, polling) change during every capture. Failing there
+    // made the tool unusable, so the image is returned and flagged instead; an unchanged page omits both.
+    const changed = before.page_revision !== after.page_revision;
     return {
       screenshot: {
         tab_id: tab.tab_id,
         page_revision: after.page_revision,
+        ...(changed ? { page_changed: true, page_revision_before: before.page_revision } : {}),
         width: captured.width,
         height: captured.height,
         mime_type: captured.mimeType,
@@ -525,11 +521,10 @@ export class BrowserToolRuntime {
     }
     if (include.has('screenshot')) observation.screenshot = (await this.captureScreenshot(args)).screenshot;
     const after = await this.getPage(args.tab_id);
+    // Same reasoning as captureScreenshot: report a mixed observation instead of discarding it.
     if (after.page_revision !== before.page_revision) {
-      throw new ToolFailure(createToolError('stale_element', 'Page changed while creating the observation.', true, {
-        before_revision: before.page_revision,
-        after_revision: after.page_revision,
-      }));
+      observation.page_changed = true;
+      observation.page_revision_after = after.page_revision;
     }
     return { observation };
   }
