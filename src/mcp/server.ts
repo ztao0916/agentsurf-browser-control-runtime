@@ -138,7 +138,7 @@ export async function startMcpServer(): Promise<void> {
         'Before element actions, call browser_get_interactives and use its returned opaque element_id; never invent selectors or element IDs.',
         'An element_id only works in the frame that produced it: when the snapshot came from a frame_id, pass that same frame_id on the later element action, otherwise the runtime looks in the top document and reports a stale element.',
         'Ask the user before consequential actions such as submitting, purchasing, deleting, uploading, or sending messages.',
-        'If another conversation may drive Chrome at the same time, call browser_start_session once, then pass that session_id on every later call and claim any tab you did not open before using it; otherwise sessions are optional and any tab_id can be driven directly.',
+        'This conversation already owns a browser session: tabs you open are claimed and grouped automatically, and another conversation is refused them. Use browser_claim_tab to take over a tab the user already had open; that claims and groups it too.',
       ].join(' '),
     },
   );
@@ -175,10 +175,10 @@ function descriptionFor(tool: ToolName): string {
   const descriptions: Record<ToolName, string> = {
     'browser.get_capabilities': 'Get AgentSurf capabilities and supported browser tools.',
 
-    'browser.start_session': 'Start a session that owns the right to drive specific tabs. Optional: without a session_id most tools accept any tab_id.',
+    'browser.start_session': 'Start a session that owns the right to drive specific tabs. Usually unnecessary: this conversation already has one and its tabs are claimed and grouped automatically. Use it to create a named session, or to take over a specific session id.',
     'browser.end_session': 'End a session and release every tab it holds. Set close_tabs to close those tabs as well.',
-    'browser.name_session': 'Rename a session so it is easier to recognize.',
-    'browser.claim_tab': 'Give a session exclusive ownership of a tab, so concurrent sessions cannot drive the same page.',
+    'browser.name_session': 'Rename a session so it is easier to recognize. The name becomes the Chrome tab group title.',
+    'browser.claim_tab': 'Take over a tab this session does not own yet, for example a page the user already had open. The tab joins the session group unless you pass group: false, and other sessions are refused it from then on.',
     'browser.release_tab': 'Give up a session ownership of a tab.',
     'browser.list_tabs': 'List Chrome tabs without changing the active tab. Start here to find a tab_id.',
     'browser.get_frames': 'List the frames inside a tab: iframes and blank-src app frames included. Frame 0 is the top document. Pass a returned frame_id to page reads and element actions to work inside that frame.',

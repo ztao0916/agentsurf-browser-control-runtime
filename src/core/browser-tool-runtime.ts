@@ -112,7 +112,9 @@ export class BrowserToolRuntime {
             request.turn_id,
             request.args.tab_id,
             'user',
-            request.args.group ?? false,
+            // Claiming is a handover, so the tab joins the session's group by default: that is how the
+            // user can see which conversation owns which tab. Pass group: false to leave the tab bar alone.
+            request.args.group ?? true,
           ),
         };
       case 'browser.release_tab':
@@ -438,6 +440,8 @@ export class BrowserToolRuntime {
         if (request.args.tab_id !== undefined) await this.assertSessionAccess(request.session_id, request.args.tab_id);
         const tab = await this.open(request.args);
         if (request.session_id !== undefined) {
+          // New tabs always join the group. A tab this call merely navigated is claimed without being
+          // grouped, so driving an existing page does not rearrange the user's tab bar.
           await this.requireSessions().claim(
             request.session_id,
             request.turn_id,

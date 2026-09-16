@@ -5,6 +5,7 @@ import type { PageAgentClient } from '../src/chrome/scripting-adapter';
 import type { TabsAdapter } from '../src/chrome/tabs-adapter';
 import type { CapturedScreenshot, ScreenshotAdapter } from '../src/chrome/screenshot-adapter';
 import type { FrameAdapter } from '../src/chrome/frames-adapter';
+import type { SessionCoordinator, TabClaimOrigin } from '../src/core/session/session-coordinator';
 import type {
   OpenArgs,
   PageAgentInteractiveSnapshot,
@@ -15,6 +16,7 @@ import type {
   ToolRequest,
   ImageFormat,
   ConsoleEntry,
+  BrowserSessionInfo,
   KeyModifier,
   PageAgentSelectTextResult,
   FrameInfo,
@@ -54,11 +56,16 @@ const interactiveSnapshot: PageAgentInteractiveSnapshot = {
   elements: [],
 };
 
-function request<TTool extends ToolRequest['tool']>(tool: TTool, args: ToolRequest<TTool>['args']): ToolRequest<TTool> {
+function request<TTool extends ToolRequest['tool']>(
+  tool: TTool,
+  args: ToolRequest<TTool>['args'],
+  sessionId?: string,
+): ToolRequest<TTool> {
   return {
     kind: 'tool-request',
     protocol_version: '1',
     request_id: 'test-request',
+    ...(sessionId === undefined ? {} : { session_id: sessionId }),
     tool,
     args,
   } as ToolRequest<TTool>;
@@ -82,8 +89,9 @@ class FakeTabsAdapter implements TabsAdapter {
   }
 
   public open(args: OpenArgs): Promise<TabInfo> {
-    void args;
-    return Promise.resolve({ ...tab, tab_id: 8, url: 'https://open.example/' });
+    // Mirrors the real adapter: navigating an existing tab keeps its id, a new tab gets a new one.
+    if (args.tab_id !== undefined) return Promise.resolve({ ...tab, tab_id: args.tab_id, url: args.url });
+    return Promise.resolve({ ...tab, tab_id: 8, url: args.url });
   }
 
   public close(): Promise<void> {
@@ -278,6 +286,52 @@ class FakeFrameAdapter implements FrameAdapter {
     this.lastTabId = tabId;
     return Promise.resolve(frameList);
   }
+}
+
+interface ClaimCall {
+  sessionId: string;
+  tabId: number;
+  origin: string;
+  group: boolean;
+}
+
+class FakeSessionCoordinator implements SessionCoordinator {
+  public readonly claims: ClaimCall[] = [];
+
+  public start(sessionId?: string): Promise<BrowserSessionInfo> {
+    return Promise.resolve(sessionInfo(sessionId ?? 'session_default'));
+  }
+
+  public end(): Promise<{ releasedTabIds: number[] }> {
+    return Promise.resolve({ releasedTabIds: [] });
+  }
+
+  public name(sessionId: string): Promise<BrowserSessionInfo> {
+    return Promise.resolve(sessionInfo(sessionId));
+  }
+
+  public claim(
+    sessionId: string,
+    _turnId: string | undefined,
+    tabId: number,
+    origin: TabClaimOrigin,
+    group: boolean,
+  ): Promise<BrowserSessionInfo> {
+    this.claims.push({ sessionId, tabId, origin, group });
+    return Promise.resolve(sessionInfo(sessionId));
+  }
+
+  public release(sessionId: string): Promise<BrowserSessionInfo> {
+    return Promise.resolve(sessionInfo(sessionId));
+  }
+
+  public assertAccess(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+function sessionInfo(sessionId: string): BrowserSessionInfo {
+  return { session_id: sessionId, name: null, tab_ids: [], group_id: null };
 }
 
 class TruncatingPageAgentClient extends FakePageAgentClient {
@@ -525,6 +579,32 @@ describe('BrowserToolRuntime', () => {
     );
     expect(response.ok).toBe(false);
     if (!response.ok) expect(response.error.code).toBe('invalid_request');
+  });
+
+  it('groups a tab a session takes over, and an opened tab, but not a merely navigated one', async () => {
+    const sessions = new FakeSessionCoordinator();
+    const runtimeWithSessions = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      sessions,
+    );
+
+    // A handover claims the tab and puts it in the session's group by default.
+    await runtimeWithSessions.handle(request('browser.claim_tab', { session_id: 's1', tab_id: 42 }));
+    expect(sessions.claims.at(-1)).toEqual({ sessionId: 's1', tabId: 42, origin: 'user', group: true });
+
+    await runtimeWithSessions.handle(request('browser.claim_tab', { session_id: 's1', tab_id: 42, group: false }));
+    expect(sessions.claims.at(-1)?.group).toBe(false);
+
+    // A new tab is grouped; navigating an existing tab is claimed without touching the tab bar.
+    const opened = await runtimeWithSessions.handle(request('browser.open', { url: 'https://open.example/' }, 's1'));
+    expect(opened.ok).toBe(true);
+    expect(sessions.claims.at(-1)).toEqual({ sessionId: 's1', tabId: 8, origin: 'agent', group: true });
+
+    const navigated = await runtimeWithSessions.handle(request('browser.open', { url: 'https://open.example/', tab_id: 7 }, 's1'));
+    expect(navigated.ok).toBe(true);
+    expect(sessions.claims.at(-1)).toEqual({ sessionId: 's1', tabId: 7, origin: 'agent', group: false });
   });
 
   it('rejects unsupported URL protocols', async () => {

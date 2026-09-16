@@ -434,19 +434,21 @@ browser_observe {"tab_id": 123}                       # 一次拿 状态+交互�
 
 Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查询结果里 **`available: false` 表示当时采集器不在场，不能当成“页面没有报错”**。
 
-### 7.5 多对话 / 多任务并行
+### 7.5 多对话并行（默认自动隔离）
 
-```text
-1. browser_start_session {"name":"对话A"}       # 一次即可
-2. 之后每次调用都带同一个 session_id，并先 claim 你要用的标签页
-```
+每个对话的 MCP Server 进程会自带一个会话，**Agent 不需要手动开会话，也不需要每次传 `session_id`**：
 
-要点：
+- 自己 `browser.open` 打开的页签会**自动建立归属并归入本会话的 Chrome 分组**；组名默认是 `AI · <4位ID>`，可用 `browser.name_session` 改成有意义的名字（例如“禅道排查”）；
+- 另一个对话再想操作这些页签会被拒绝（`tab_in_use`），两个对话不会互相踩；
+- 需要接管用户**已经打开**的页签时用 `browser.claim_tab`：它会建立归属并**默认归组**（传 `group: false` 可只归属、不把页签拉进分组）；
+- `browser.list_tabs` 仍然列出全部页签（方便确认目标），但操作别人已认领的页签会失败；
+- `browser.end_session`（可带 `close_tabs`）会释放会话并解除分组。
 
-- 隔离是**协作式**的：**必须在每次调用都传 `session_id` 才生效**；不传就跳过归属检查（单 Agent 模式）；
-- 认领后，另一个 session 对该标签页的读写会被拒绝（`tab_in_use`）；
-- 从已认领标签页打开的 `target=_blank` 新页面会自动继承归属；
-- 单 Agent 场景可以完全不用 session，直接传 `tab_id`。
+边界与注意：
+
+- 自动隔离的前提是“一个对话 = 一个 MCP Server 进程”（PiDeck 给每个对话起独立进程，满足此条件）。若某个客户端把多个对话复用到同一个进程，它们会共用同一个会话，此时可用显式 `session_id` 手动区分；
+- 主动 `browser.open` 一个已有 `tab_id`（即导航已有页签）会建立归属但**不**动你的标签栏；
+- 租约存在扩展的 `storage.session` 里，**Chrome 重启会清空租约**；但会话记录在 `storage.local` 里是持久的。目前唯一的已知副作用是：某个对话被直接关掉（没有调 `end_session`）时，它占用过的页签会直到 Chrome 重启前一直被认定为该会话所有；重跑一次 `browser.claim_tab` 也接管不了（会报 `tab_in_use`），暂时只能重启 Chrome 或从那个会话里 `release_tab`/`end_session`。
 
 ## 8. 更新、移动目录、卸载
 
@@ -1180,14 +1182,21 @@ browser_observe {"tab_id": 123}                              # state + interacti
 
 Console collection runs in the page's MAIN world so it sees the page's own output. `available: false` means **the collector was not present — an empty list is not proof of silence**.
 
-### 7.5 Parallel conversations
+### 7.5 Parallel conversations (isolated by default)
 
-```text
-1. browser_start_session {"name":"thread A"}   # once
-2. pass the same session_id on every later call, and claim the tabs you did not open
-```
+Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
 
-Isolation is **cooperative**: it only applies when every call carries the `session_id`. Without it, ownership checks are skipped (single-agent mode). A claimed tab rejects other sessions with `tab_in_use`; pages opened via `target=_blank` from a claimed tab inherit ownership.
+- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**, titled `AI · <4 chars>` by default and renameable with `browser_name_session`;
+- another conversation is refused those tabs (`tab_in_use`), so conversations stop stepping on each other;
+- use `browser_claim_tab` to take over a tab the user already had open: it claims and, by default, groups it (pass `group: false` to claim without moving it);
+- `browser_list_tabs` still lists every tab so you can find your target, but driving a tab owned by another session fails;
+- `browser_end_session` (optionally with `close_tabs`) releases the session and ungroups its tabs.
+
+Caveats:
+
+- automatic isolation assumes **one conversation = one MCP server process** (PiDeck starts a separate process per conversation, which satisfies this). If a client multiplexes several conversations through one process, they share a session and you must pass an explicit `session_id` to separate them;
+- `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
+- leases live in the extension's `storage.session`, so **restarting Chrome clears them**, while session records persist in `storage.local`. The one known side effect: if a conversation is closed without calling `end_session`, the tabs it claimed stay owned by it until Chrome restarts, and another conversation cannot take them over (`tab_in_use`) — release them from that session or restart Chrome.
 
 ## 8. Updating, moving, uninstalling
 

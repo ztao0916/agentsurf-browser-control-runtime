@@ -20,6 +20,17 @@ const SESSIONS_STORAGE_KEY = 'browserControlSessions';
 const LEASES_STORAGE_KEY = 'browserControlTabLeases';
 const DEFAULT_GROUP_TITLE = 'AI Browser';
 
+/**
+ * An unnamed session still needs a group title the user can tell apart from the other conversations,
+ * so the last four characters of its ID are appended (`AI · 9A12`). Sessions created by the MCP
+ * layer use a random id, which makes this stable per conversation.
+ */
+function groupTitleFor(session: StoredSession): string {
+  if (session.name !== null) return session.name;
+  const tail = session.session_id.replace(/[^0-9a-zA-Z]/gu, '').slice(-4).toUpperCase();
+  return tail.length === 0 ? DEFAULT_GROUP_TITLE : `AI · ${tail}`;
+}
+
 export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
   private readonly sessions = new Map<string, StoredSession>();
   private readonly leases = new Map<number, TabLease>();
@@ -80,7 +91,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
       const session = this.requireSession(sessionId);
       session.name = normalizeName(name);
       if (session.group_id !== null) {
-        await chrome.tabGroups.update(session.group_id, { title: session.name ?? DEFAULT_GROUP_TITLE }).catch(() => undefined);
+        await chrome.tabGroups.update(session.group_id, { title: groupTitleFor(session) }).catch(() => undefined);
       }
       await this.persistSessions();
       return toSessionInfo(session);
@@ -178,7 +189,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     });
     session.group_id = groupId;
     await chrome.tabGroups.update(groupId, {
-      title: session.name ?? DEFAULT_GROUP_TITLE,
+      title: groupTitleFor(session),
       color: 'blue',
       collapsed: false,
     });
