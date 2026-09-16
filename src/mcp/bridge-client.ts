@@ -1,8 +1,19 @@
 import WebSocket, { type RawData } from 'ws';
 import { readConfig } from '../native-host/config';
+import { type ToolError } from '../core/protocol/errors';
 import { type ToolName, type ToolRequest } from '../core/protocol/tool-contract';
 
 const REQUEST_TIMEOUT_MS = 40_000;
+
+export class LocalBridgeError extends Error {
+  public readonly toolError: ToolError;
+
+  public constructor(error: ToolError) {
+    super(error.message);
+    this.name = 'LocalBridgeError';
+    this.toolError = error;
+  }
+}
 
 /**
  * `session_id` travels at the root of the request, not inside `args`, because that is where
@@ -52,7 +63,7 @@ export async function callLocalBridge(
 
       if (message.type === 'auth_result') {
         if (message.ok !== true) {
-          finish(new Error(getErrorMessage(message.error, 'AgentSurf authentication failed.')));
+          finish(new LocalBridgeError(readToolError(message.error, 'AgentSurf authentication failed.')));
           return;
         }
         if (authenticated) return;
@@ -72,7 +83,7 @@ export async function callLocalBridge(
       }
       if (message.request_id !== requestId) return;
       if (message.ok === true) finish(undefined, message.result);
-      else finish(new Error(getErrorMessage(message.error, 'AgentSurf returned an error.')));
+      else finish(new LocalBridgeError(readToolError(message.error, 'AgentSurf returned an error.')));
     });
     socket.on('error', (error) => finish(new Error(`Cannot connect to AgentSurf: ${error.message}`)));
     socket.on('close', () => {
@@ -87,9 +98,19 @@ function rawDataToString(data: RawData): string {
   return Buffer.concat(data).toString('utf8');
 }
 
-function getErrorMessage(value: unknown, fallback: string): string {
-  if (typeof value === 'object' && value !== null && 'message' in value && typeof value.message === 'string') {
-    return value.message;
+function readToolError(value: unknown, fallback: string): ToolError {
+  if (typeof value === 'object' && value !== null &&
+    'code' in value && typeof value.code === 'string' &&
+    'message' in value && typeof value.message === 'string' &&
+    'retryable' in value && typeof value.retryable === 'boolean') {
+    return {
+      code: value.code as ToolError['code'],
+      message: value.message,
+      retryable: value.retryable,
+      ...('details' in value && typeof value.details === 'object' && value.details !== null
+        ? { details: value.details as Record<string, unknown> }
+        : {}),
+    };
   }
-  return fallback;
+  return { code: 'internal_error', message: fallback, retryable: false };
 }

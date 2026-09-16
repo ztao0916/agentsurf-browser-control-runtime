@@ -68,4 +68,33 @@ describe('callLocalBridge', () => {
     respond(captured, { session: { session_id: 'session_abc', name: null, tab_ids: [7], group_id: null } });
     await expect(pending).resolves.toMatchObject({ session: { tab_ids: [7] } });
   });
+
+  it('preserves the structured tool error instead of flattening it to a message', async () => {
+    const captured: ExternalToolRequest[] = [];
+    await startBridge(captured);
+
+    const pending = callLocalBridge('browser.click', { tab_id: 7, element_id: 'opaque' });
+    await vi.waitFor(() => expect(captured).toHaveLength(1));
+
+    const request = captured[0] as ExternalToolRequest;
+    bridge?.receiveNativeExtensionResponse({
+      request_id: request.request_id,
+      ok: false,
+      error: {
+        code: 'stale_element',
+        message: 'The element_id belongs to an older page revision.',
+        retryable: true,
+        details: { element_id: 'opaque', page_revision: 'rev_document_1' },
+      },
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'LocalBridgeError',
+      toolError: {
+        code: 'stale_element',
+        retryable: true,
+        details: { page_revision: 'rev_document_1' },
+      },
+    });
+  });
 });

@@ -454,7 +454,7 @@ Agent 连接 Native Host 启动的本机 Bridge，第一条 WebSocket 消息为�
 }
 ```
 
-Bridge 按 `request_id` 转发响应；超时、扩展断开或 Bridge 停止时会清理待处理请求并返回结构化错误。未认证消息或错误认证不会执行浏览器工具。Native Host 与扩展之间使用 Chrome Native Messaging framing，由 Chrome 校验 `allowed_origins`，不再重复发送 Bridge token。
+Bridge 按 `request_id` 转发响应；超时、扩展断开或 Bridge 停止时会清理待处理请求并返回结构化错误。未认证消息或错误认证不会执行浏览器工具。MCP Server 会把同一个错误对象原样放进工具结果文本，调用方仍能读到 `code`、`retryable` 和 `details`，据此区分「重新获取交互元素后重试」和「放弃」。Native Host 与扩展之间使用 Chrome Native Messaging framing，由 Chrome 校验 `allowed_origins`，不再重复发送 Bridge token。
 
 开发脚本 `scripts/call-tool.mjs`（`npm run bridge:call`）可模拟外部 Agent，通过 `BROWSER_BRIDGE_URL` 和 `BROWSER_BRIDGE_TOKEN` 配置连接。调用方应在本机安全加载凭据，不要将实际 token 写进文档、命令示例或提交记录。
 

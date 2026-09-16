@@ -4,7 +4,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { TOOL_NAMES } from '../core/protocol/schemas';
 import type { ToolName } from '../core/protocol/tool-contract';
-import { callLocalBridge } from './bridge-client';
+import { callLocalBridge, LocalBridgeError } from './bridge-client';
 
 const tabId = { tab_id: z.number().int().describe('Chrome tab ID.') };
 const optionalTabId = { tab_id: z.number().int().optional().describe('Chrome tab ID. Defaults to the active tab when omitted.') };
@@ -140,6 +140,12 @@ export async function startMcpServer(): Promise<void> {
         const result = await callLocalBridge(tool, args, sessionId);
         return { content: toContent(tool, result) };
       } catch (error: unknown) {
+        if (error instanceof LocalBridgeError) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: JSON.stringify({ error: error.toolError }, null, 2) }],
+          };
+        }
         const message = error instanceof Error ? error.message : String(error);
         return { isError: true, content: [{ type: 'text', text: `AgentSurf error: ${message}` }] };
       }
