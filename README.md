@@ -452,7 +452,9 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查�
 - 自动隔离的前提是“一个对话 = 一个 MCP Server 进程”（PiDeck 给每个对话起独立进程，满足此条件）。若某个客户端把多个对话复用到同一个进程，它们会共用同一个会话，此时可用显式 `session_id` 手动区分；
 - 主动 `browser.open` 一个已有 `tab_id`（即导航已有页签）会建立归属但**不**动你的标签栏；
 - 租约存在扩展的 `storage.session` 里（**Chrome 重启即清空**），会话记录在 `storage.local` 里是持久的；
-- **空闲自动回收**：某个对话被直接关掉（没调 `end_session`）时，它占用过的页签在**空闲 30 分钟**后自动释放，别的对话即可接管；正在使用的页签会续租，不会被误抢；
+- **空闲自动回收**：某个对话被直接关掉（没调 `end_session`）时，它占用过的页签在**空闲 30 分钟**后自动释放**并解除分组**，别的对话即可接管；正在使用的页签会续租，不会被误抢；
+- **任务收尾**：干完活（不再需要那些页签）时主动调用 `browser.end_session`（必要时带 `close_tabs: true`），它会**立即**释放并解除分组；不调的话，分组会留到空闲超时才消失；
+- **重载/重启后的收尾**：重新加载扩展或重启 Chrome 会清空租约（Chrome 行为），此时运行时会在启动时把“会话还在、租约已无”的漏网分组一并解除，不会留下无主的分组；有租约（正在干活）的页签不动；
 - **手动兜底**：`browser.reset_sessions` 默认只释放**本对话自己的**会话与租约，并顺带清掉“拥有者已不存在”的租约（正是页签被消失的对话卡住的情形）；它**不会**动别的对话，返回值里的 `other_sessions_kept` 会告诉你还有几个会话没动。确实需要清全局（会释放并解除所有人的分组）时才传 `force: true`。
 
 ## 8. 更新、移动目录、卸载
@@ -1205,7 +1207,9 @@ Caveats:
 - automatic isolation assumes **one conversation = one MCP server process** (PiDeck starts a separate process per conversation, which satisfies this). If a client multiplexes several conversations through one process, they share a session and you must pass an explicit `session_id` to separate them;
 - `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
 - leases live in the extension's `storage.session` (**restarting Chrome clears them**), while session records persist in `storage.local`;
-- **idle reclaim**: if a conversation is closed without calling `end_session`, the tabs it claimed are freed after **30 minutes of inactivity** and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
+- **idle reclaim**: if a conversation is closed without calling `end_session`, the tabs it claimed are freed **and ungrouped** after **30 minutes of inactivity**, and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
+- **finish the job**: call `browser_end_session` (with `close_tabs: true` if the tabs are no longer needed) when the work is done — it releases and ungroups immediately; otherwise the group stays until the idle timeout;
+- **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
 - **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs.
 
 ## 8. Updating, moving, uninstalling

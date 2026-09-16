@@ -276,6 +276,9 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     const session = this.sessions.get(ownerSessionId);
     if (session !== undefined) {
       session.tab_ids = session.tab_ids.filter((id) => id !== tabId);
+      // Expiring a lease has to undo its group as well, otherwise an abandoned conversation leaves
+      // its group in the user's tab bar forever once the idle timeout fires.
+      if (session.group_id !== null) await this.ungroupManagedTabs(session, [tabId]);
       if (session.tab_ids.length === 0) session.group_id = null;
     }
     await this.persistAll();
@@ -392,6 +395,22 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
       for (const value of leases) {
         if (isStoredLease(value)) this.leases.set(value.tab_id, value.lease);
       }
+    }
+    await this.ungroupOrphanedTabs();
+  }
+
+  /**
+   * A reload, update, or browser restart clears storage.session without running any release code, so a
+   * group can outlive the lease that justified it and stay in the user's tab bar forever. Ungroup those
+   * tabs on startup. A tab that still has a lease keeps its group, so an active conversation is not
+   * disturbed.
+   */
+  private async ungroupOrphanedTabs(): Promise<void> {
+    for (const session of this.sessions.values()) {
+      if (session.group_id === null) continue;
+      const orphaned = session.tab_ids.filter((tabId) => !this.leases.has(tabId));
+      if (orphaned.length === 0) continue;
+      await this.ungroupManagedTabs(session, orphaned);
     }
   }
 
