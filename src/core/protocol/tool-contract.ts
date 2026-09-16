@@ -6,39 +6,20 @@ export const PROTOCOL_VERSION = '1' as const;
 export const TOP_FRAME_ID = 0;
 
 export type ToolName =
-  | 'browser.get_capabilities'
   | 'browser.start_session'
-  | 'browser.end_session'
-  | 'browser.name_session'
   | 'browser.claim_tab'
-  | 'browser.release_tab'
   | 'browser.reset_sessions'
   | 'browser.close_tab'
   | 'browser.back'
   | 'browser.forward'
   | 'browser.reload'
-  | 'browser.attach_debugger'
-  | 'browser.detach_debugger'
-  | 'browser.cdp'
-  | 'browser.get_cdp_events'
-  | 'browser.get_network_requests'
   | 'browser.get_console_messages'
-  | 'browser.get_accessibility_tree'
-  | 'browser.mouse_move'
-  | 'browser.click_at'
-  | 'browser.drag_at'
-  | 'browser.scroll_at'
-  | 'browser.press_key'
-  | 'browser.select_text'
-  | 'browser.type_text'
-  | 'browser.handle_dialog'
   | 'browser.list_downloads'
   | 'browser.wait_for_download'
   | 'browser.set_files'
   | 'browser.list_tabs'
   | 'browser.get_frames'
   | 'browser.get_page'
-  | 'browser.get_page_state'
   | 'browser.get_interactives'
   | 'browser.get_page_content'
   | 'browser.click'
@@ -53,7 +34,9 @@ export type ToolName =
   | 'browser.screenshot'
   | 'browser.observe'
   | 'browser.switch_tab'
-  | 'browser.open';
+  | 'browser.open'
+  | 'browser.select_text'
+  | 'browser.handle_dialog';
 
 export type LoadingStatus = 'loading' | 'complete' | 'unknown';
 export type PageRevisionReason = 'navigation' | 'refresh' | 'important_dom';
@@ -98,30 +81,19 @@ export interface BrowserSessionInfo {
   group_id: number | null;
 }
 
+/**
+ * Only the MCP server sends this, to give each conversation its own session before the first real
+ * call. It stays in the protocol but is not advertised as a tool.
+ */
 export interface StartSessionArgs {
   session_id?: string;
   name?: string;
-}
-
-export interface EndSessionArgs {
-  session_id: string;
-  close_tabs?: boolean;
-}
-
-export interface NameSessionArgs {
-  session_id: string;
-  name: string;
 }
 
 export interface ClaimTabArgs {
   session_id: string;
   tab_id: number;
   group?: boolean;
-}
-
-export interface ReleaseTabArgs {
-  session_id: string;
-  tab_id: number;
 }
 
 export interface ResetSessionsArgs {
@@ -140,24 +112,6 @@ export interface TabTargetArgs {
   tab_id: number;
 }
 
-export interface CdpArgs extends TabTargetArgs {
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-export interface GetCdpEventsArgs extends TabTargetArgs {
-  after_sequence?: number;
-  limit?: number;
-  methods?: string[];
-}
-
-export interface GetNetworkRequestsArgs extends TabTargetArgs {
-  after_sequence?: number;
-  limit?: number;
-  type?: string;
-  failed_only?: boolean;
-}
-
 export interface GetConsoleMessagesArgs extends TabTargetArgs {
   after_sequence?: number;
   limit?: number;
@@ -165,39 +119,7 @@ export interface GetConsoleMessagesArgs extends TabTargetArgs {
   frame_id?: number;
 }
 
-export interface PointArgs extends TabTargetArgs {
-  x: number;
-  y: number;
-}
-
 export type KeyModifier = 'Alt' | 'Control' | 'Meta' | 'Shift';
-
-export interface ClickAtArgs extends PointArgs {
-  button?: 'left' | 'right' | 'middle';
-  click_count?: number;
-  modifiers?: KeyModifier[];
-}
-
-export interface DragAtArgs extends TabTargetArgs {
-  from_x: number;
-  from_y: number;
-  to_x: number;
-  to_y: number;
-}
-
-export interface ScrollAtArgs extends PointArgs {
-  delta_x: number;
-  delta_y: number;
-}
-
-export interface PressKeyArgs extends TabTargetArgs {
-  key: string;
-  modifiers?: KeyModifier[];
-}
-
-export interface TypeTextArgs extends TabTargetArgs {
-  text: string;
-}
 
 export interface HandleDialogArgs extends TabTargetArgs {
   action: 'accept' | 'dismiss';
@@ -275,8 +197,6 @@ export interface GetPageArgs {
   tab_id?: number;
   frame_id?: number;
 }
-
-export type GetPageStateArgs = GetPageArgs;
 
 export interface GetInteractivesArgs extends InteractiveFilterArgs {
   tab_id?: number;
@@ -396,31 +316,15 @@ export interface OpenArgs {
 }
 
 export interface ToolArguments {
-  'browser.get_capabilities': Record<string, never>;
   'browser.start_session': StartSessionArgs;
-  'browser.end_session': EndSessionArgs;
-  'browser.name_session': NameSessionArgs;
   'browser.claim_tab': ClaimTabArgs;
-  'browser.release_tab': ReleaseTabArgs;
   'browser.reset_sessions': ResetSessionsArgs;
   'browser.close_tab': TabTargetArgs;
   'browser.back': TabTargetArgs;
   'browser.forward': TabTargetArgs;
   'browser.reload': TabTargetArgs;
-  'browser.attach_debugger': TabTargetArgs;
-  'browser.detach_debugger': TabTargetArgs;
-  'browser.cdp': CdpArgs;
-  'browser.get_cdp_events': GetCdpEventsArgs;
-  'browser.get_network_requests': GetNetworkRequestsArgs;
   'browser.get_console_messages': GetConsoleMessagesArgs;
-  'browser.get_accessibility_tree': TabTargetArgs;
-  'browser.mouse_move': PointArgs;
-  'browser.click_at': ClickAtArgs;
-  'browser.drag_at': DragAtArgs;
-  'browser.scroll_at': ScrollAtArgs;
-  'browser.press_key': PressKeyArgs;
   'browser.select_text': SelectTextArgs;
-  'browser.type_text': TypeTextArgs;
   'browser.handle_dialog': HandleDialogArgs;
   'browser.list_downloads': ListDownloadsArgs;
   'browser.wait_for_download': WaitForDownloadArgs;
@@ -428,7 +332,6 @@ export interface ToolArguments {
   'browser.list_tabs': ListTabsArgs;
   'browser.get_frames': TabTargetArgs;
   'browser.get_page': GetPageArgs;
-  'browser.get_page_state': GetPageStateArgs;
   'browser.get_interactives': GetInteractivesArgs;
   'browser.get_page_content': GetPageContentArgs;
   'browser.click': ClickWithModifiersArgs;
@@ -461,69 +364,9 @@ export interface BrowserSessionResult {
   session: BrowserSessionInfo;
 }
 
-export interface EndSessionResult {
-  session_id: string;
-  released_tab_ids: number[];
-  closed_tabs: boolean;
-}
-
-export interface ReleaseTabResult {
-  session: BrowserSessionInfo;
-  released_tab_id: number;
-}
-
 export interface CloseTabResult {
   tab_id: number;
   closed: true;
-}
-
-export interface DebuggerStateResult {
-  tab_id: number;
-  attached: boolean;
-}
-
-export interface CdpResult {
-  tab_id: number;
-  value: unknown;
-}
-
-export interface CdpEventInfo {
-  sequence: number;
-  tab_id: number;
-  method: string;
-  params: unknown;
-  timestamp: number;
-}
-
-export interface GetCdpEventsResult {
-  tab_id: number;
-  cursor: number;
-  events: CdpEventInfo[];
-  has_more: boolean;
-  truncated: boolean;
-}
-
-export interface NetworkRequestInfo {
-  sequence: number;
-  tab_id: number;
-  request_id: string;
-  url: string;
-  method: string;
-  type: string;
-  status_code: number | null;
-  status_line: string | null;
-  from_cache: boolean | null;
-  error: string | null;
-  started_at: number;
-  duration_ms: number | null;
-}
-
-export interface GetNetworkRequestsResult {
-  tab_id: number;
-  cursor: number;
-  requests: NetworkRequestInfo[];
-  has_more: boolean;
-  truncated: boolean;
 }
 
 export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
@@ -549,12 +392,6 @@ export interface GetConsoleMessagesResult {
   dropped: number;
 }
 
-export interface AccessibilityTreeResult {
-  tab_id: number;
-  page_revision: string;
-  nodes: unknown[];
-}
-
 export interface CoordinateActionResult {
   tab_id: number;
   performed: true;
@@ -575,8 +412,6 @@ export interface DownloadInfo {
 export interface GetPageResult {
   page: PageState;
 }
-
-export type GetPageStateResult = GetPageResult;
 
 export interface GetInteractivesResult {
   snapshot: InteractiveSnapshot;
@@ -695,54 +530,15 @@ export interface OpenResult {
 }
 
 export interface ToolResults {
-  'browser.get_capabilities': {
-    protocol_version: typeof PROTOCOL_VERSION;
-    tools: ToolName[];
-    features: {
-      native_messaging: true;
-      websocket_agent_bridge: true;
-      sessions: true;
-      tab_groups: true;
-      tab_leases: true;
-      element_ids: true;
-      frames: true;
-      accessibility_tree: true;
-      screenshots: Array<'viewport' | 'full_page' | 'clip'>;
-      cdp: true;
-      downloads: true;
-      file_upload: true;
-      agent_cursor: true;
-      top_level_document: true;
-      page_content: true;
-      page_images: true;
-      iframes: true;
-      shadow_dom: false;
-    };
-  };
   'browser.start_session': BrowserSessionResult;
-  'browser.end_session': EndSessionResult;
-  'browser.name_session': BrowserSessionResult;
   'browser.claim_tab': BrowserSessionResult;
-  'browser.release_tab': ReleaseTabResult;
   'browser.reset_sessions': ResetSessionsResult;
   'browser.close_tab': CloseTabResult;
   'browser.back': SwitchTabResult;
   'browser.forward': SwitchTabResult;
   'browser.reload': SwitchTabResult;
-  'browser.attach_debugger': DebuggerStateResult;
-  'browser.detach_debugger': DebuggerStateResult;
-  'browser.cdp': CdpResult;
-  'browser.get_cdp_events': GetCdpEventsResult;
-  'browser.get_network_requests': GetNetworkRequestsResult;
   'browser.get_console_messages': GetConsoleMessagesResult;
-  'browser.get_accessibility_tree': AccessibilityTreeResult;
-  'browser.mouse_move': CoordinateActionResult;
-  'browser.click_at': CoordinateActionResult;
-  'browser.drag_at': CoordinateActionResult;
-  'browser.scroll_at': CoordinateActionResult;
-  'browser.press_key': CoordinateActionResult;
   'browser.select_text': SelectTextResult;
-  'browser.type_text': CoordinateActionResult;
   'browser.handle_dialog': CoordinateActionResult;
   'browser.list_downloads': { downloads: DownloadInfo[] };
   'browser.wait_for_download': { download: DownloadInfo };
@@ -757,7 +553,6 @@ export interface ToolResults {
   'browser.list_tabs': ListTabsResult;
   'browser.get_frames': GetFramesResult;
   'browser.get_page': GetPageResult;
-  'browser.get_page_state': GetPageStateResult;
   'browser.get_interactives': GetInteractivesResult;
   'browser.get_page_content': PageContentResult;
   'browser.click': ClickResult;

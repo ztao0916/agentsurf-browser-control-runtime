@@ -14,38 +14,36 @@
 
 ## 1. 工具速查
 
-共 **48** 个工具。
+共 **30** 个工具。
 
 | 目的 | 工具 |
 | --- | --- |
-| 查询能力 | `browser.get_capabilities` |
 | 标签页管理 | `browser.list_tabs` / `browser.open` / `browser.switch_tab` / `browser.close_tab` |
 | 子框架 | `browser.get_frames`（配合各工具的 `frame_id`） |
 | 导航 | `browser.back` / `browser.forward` / `browser.reload` |
-| 页面元信息 | `browser.get_page` / `browser.get_page_state` |
-| 正文与结构 | `browser.get_page_content` / `browser.get_accessibility_tree` |
+| 页面元信息 | `browser.get_page` |
+| 正文 | `browser.get_page_content` |
 | 交互元素 | `browser.get_interactives` |
 | 组合观察 / 截图 | `browser.observe` / `browser.screenshot` |
 | 元素点击与输入 | `browser.click` / `browser.double_click` / `browser.type` / `browser.press` |
 | 文本选择 | `browser.select_text` |
 | 表单 | `browser.set_checked` / `browser.select_option` |
 | 元素拖拽与等待 | `browser.drag` / `browser.wait_for_element` |
-| 滚动 | `browser.scroll` / `browser.scroll_at` |
-| 坐标操作 | `browser.mouse_move` / `browser.click_at` / `browser.drag_at` |
-| 键盘 / 文本 / 对话框 | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
+| 滚动 | `browser.scroll` |
+| 对话框 | `browser.handle_dialog` |
 | 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
-| Console / Network | `browser.get_console_messages` / `browser.get_network_requests` |
-| 会话与标签页归属 | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` / `browser.reset_sessions` |
-| 调试器与 CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
+| Console | `browser.get_console_messages` |
+| 会话与标签页归属 | `browser.claim_tab` / `browser.reset_sessions` |
+
+> `browser.start_session` 仍在协议里（脚本、外部客户端可用），但**不作为 MCP 工具暴露**：MCP Server 会为每个对话自动建立会话，见 [README 第 6.5 节](../README.md#65-多对话并行默认自动隔离)。
 
 补充说明：
 
-- 支持 `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` 的工具：`browser.press`、`browser.press_key`、`browser.click`、`browser.double_click`、`browser.click_at`；
-- 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_page_state`、`browser.get_interactives`、`browser.get_page_content`、`browser.get_console_messages`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
+- 支持 `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` 的工具：`browser.press`、`browser.click`、`browser.double_click`；
+- 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_interactives`、`browser.get_page_content`、`browser.get_console_messages`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
 - `browser.get_interactives` 支持 `limit`（默认 **150**）、`visible_only`、`tag`、`role`、`name_contains`。**过滤与截断在页面内完成**，结果里始终给出 `total` 与 `truncated`。实测：某重页面 665 个元素，仅靠默认上限就从 ~66,800 tokens 降到 ~15,100，用 `visible_only: true` 降到 ~380；
 - **`truncated: true` 意味着列表不完整**，不能据此判定「页面上没有这个元素」，应该用过滤器缩小范围（而不是把 limit 调大）；
-- **`visible_only` 默认 `false` 是故意的**：折叠面板、未激活 tab、以及**悬停才显形（`opacity: 0`）的按钮**都属于不可见，但 Agent 必须先能发现它们；真去点时仍会由可见性检查把关（先 `browser.mouse_move` 悬停使其显形，再点击）；
-- **元素级工具优先于坐标级工具**：前者会校验元素仍可见、可用且 revision 未变，后者只是发坐标；
+- **`visible_only` 默认 `false` 是故意的**：折叠面板、未激活 tab、以及**悬停才显形（`opacity: 0`）的按钮**都属于不可见，但 Agent 必须先能发现它们；真去点时仍会由可见性检查把关。注意：**没有坐标级悬停工具**，这类按钮要靠先点击其容器或触发页面自身的交互来唤出；
 - **`browser.screenshot` / `browser.observe` 不再因页面变化而失败**：live 页面（动画、热更新、轮询）上会带 `page_changed: true` 返回 —— 截图另带 `page_revision_before`（截图开始时的版本），观察另带 `page_revision_after`（页面随后走到到的版本）；页面没变时这两个字段不出现。元素操作仍然严格校验 revision；
 - 参数以 `src/core/protocol/tool-contract.ts` 与 `src/core/protocol/schemas.ts` 为准。工具名与参数**不可**按其他浏览器工具的命名习惯猜测。
 
@@ -71,7 +69,7 @@ Agent 应据此决策，而不是把失败一律当成“重试”：
 | `element_not_visible` / `element_disabled` / `element_not_editable` | ✅/❌ | 先滚动或等待元素可用，不要强行操作 |
 | `frame_not_found` | ✅ | 重新 `browser_get_frames` 取新 `frame_id` |
 | `tab_not_found` | ✅ | 标签页已关闭，重新 `browser_list_tabs` |
-| `tab_in_use` | ❌ | 该标签页被其他 session 占用：换标签页或先 `release_tab` |
+| `tab_in_use` | ❌ | 该标签页被其他 session 占用：换一个标签页，或让持有它的对话收尾 |
 | `request_timeout` | ✅ | 操作太慢或页面阻塞，必要时增大 `timeout_ms` |
 | `unsupported_page` | ❌ | 受保护页面，换普通网页 |
 | `screenshot_unavailable` | ✅ | 截图调用失败（降级路径要求目标标签页是活动页）。页面在截图期间变化不再失败，改用 `page_changed` 标注 |
@@ -149,7 +147,7 @@ npm run bridge:dev    # 先构建再启动
 {
   "protocol_version": "1",
   "request_id": "req_123",
-  "tool": "browser.get_page_state",
+  "tool": "browser.get_page",
   "args": { "tab_id": 123, "frame_id": 0 }
 }
 ```
@@ -190,7 +188,7 @@ npm run bridge:dev    # 先构建再启动
 | 路径 | 职责 |
 | --- | --- |
 | `src/core/` | 与 Chrome API 无关的工具契约、参数校验、Runtime 调度 |
-| `src/chrome/` | Chrome API 适配：标签页、CDP、截图、下载、网络、**框架枚举**、会话协调 |
+| `src/chrome/` | Chrome API 适配：标签页、CDP、截图、下载、**框架枚举**、会话协调 |
 | `src/content/` | Page Agent、元素注册与 revision 追踪、动作执行、Console 采集、Agent 光标 |
 | `src/transport/` | Native Messaging、Runtime Message 与工具传输协议 |
 | `src/bridge/` | 本机 WebSocket Bridge |
@@ -203,7 +201,7 @@ npm run bridge:dev    # 先构建再启动
 
 ### 5.2 页面 revision 与 element_id
 
-Page Agent 为**每个 Document（含每个 frame）**维护独立 revision。导航、刷新与“重要 DOM 变化”会推进 revision，`browser.get_page_state` 的 `revision_reason` 会说明原因（`navigation` / `refresh` / `important_dom`）。
+Page Agent 为**每个 Document（含每个 frame）**维护独立 revision。导航、刷新与“重要 DOM 变化”会推进 revision，`browser.get_page` 的 `revision_reason` 会说明原因（`navigation` / `refresh` / `important_dom`）。
 
 MutationObserver 只筛选：交互元素增删、已注册元素关键属性变化、单批大型结构变化（每批最多推进一次）。普通文本改动不会推进 revision。
 
@@ -222,5 +220,5 @@ MutationObserver 只筛选：交互元素增删、已注册元素关键属性变
 
 - 截图默认走 CDP `Page.captureScreenshot`，**后台标签页也能截**；只有降级到 `captureVisibleTab` 才要求目标处于活动状态；
 - `full_page: true` 取的是**文档**内容尺寸；像外壳型应用那样把滚动放在容器内的页面，返回值可能就等于视口；
-- 坐标操作与元素操作会在页面显示短暂的 `AI` 光标标记：不参与交互、不被 `get_interactives` 返回、不改变 revision；
+- 元素操作会在页面显示短暂的 `AI` 光标标记：不参与交互、不被 `get_interactives` 返回、不改变 revision；
 - `browser.set_files` 用临时标记 + CDP `DOM.setFileInputFiles` 设置文件，之后清理标记；非顶层 frame 会在 `pierce` 的节点树里查找该标记。

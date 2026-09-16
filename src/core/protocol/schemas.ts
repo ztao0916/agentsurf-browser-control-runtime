@@ -30,39 +30,20 @@ import {
 type UnknownRecord = Record<string, unknown>;
 
 export const TOOL_NAMES: readonly ToolName[] = [
-  'browser.get_capabilities',
   'browser.start_session',
-  'browser.end_session',
-  'browser.name_session',
   'browser.claim_tab',
-  'browser.release_tab',
   'browser.reset_sessions',
   'browser.close_tab',
   'browser.back',
   'browser.forward',
   'browser.reload',
-  'browser.attach_debugger',
-  'browser.detach_debugger',
-  'browser.cdp',
-  'browser.get_cdp_events',
-  'browser.get_network_requests',
   'browser.get_console_messages',
-  'browser.get_accessibility_tree',
-  'browser.mouse_move',
-  'browser.click_at',
-  'browser.drag_at',
-  'browser.scroll_at',
-  'browser.press_key',
-  'browser.select_text',
-  'browser.type_text',
-  'browser.handle_dialog',
   'browser.list_downloads',
   'browser.wait_for_download',
   'browser.set_files',
   'browser.list_tabs',
   'browser.get_frames',
   'browser.get_page',
-  'browser.get_page_state',
   'browser.get_interactives',
   'browser.get_page_content',
   'browser.click',
@@ -78,7 +59,16 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'browser.observe',
   'browser.switch_tab',
   'browser.open',
+  'browser.select_text',
+  'browser.handle_dialog',
 ];
+
+/**
+ * Accepted by the protocol but deliberately kept off the MCP surface. The MCP server calls
+ * `browser.start_session` itself to give each conversation its own session before the first real
+ * call, so the agent never has to manage sessions by hand.
+ */
+export const UNADVERTISED_TOOL_NAMES: readonly ToolName[] = ['browser.start_session'];
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
@@ -200,8 +190,6 @@ function invalid(field: string, message: string): ToolFailure {
 function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
   const args = requireRecord(value, 'args');
   switch (tool) {
-    case 'browser.get_capabilities':
-      return {};
     case 'browser.start_session': {
       const sessionId = optionalString(args.session_id, 'args.session_id');
       const name = optionalString(args.name, 'args.name');
@@ -210,26 +198,11 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         ...(name === undefined ? {} : { name }),
       };
     }
-    case 'browser.end_session':
-      return {
-        session_id: requireString(args.session_id, 'args.session_id'),
-        ...(args.close_tabs === undefined ? {} : { close_tabs: requireBoolean(args.close_tabs, 'args.close_tabs') }),
-      };
-    case 'browser.name_session':
-      return {
-        session_id: requireString(args.session_id, 'args.session_id'),
-        name: requireString(args.name, 'args.name'),
-      };
     case 'browser.claim_tab':
       return {
         session_id: requireString(args.session_id, 'args.session_id'),
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
         ...(args.group === undefined ? {} : { group: requireBoolean(args.group, 'args.group') }),
-      };
-    case 'browser.release_tab':
-      return {
-        session_id: requireString(args.session_id, 'args.session_id'),
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
       };
     case 'browser.reset_sessions': {
       const force = optionalBoolean(args.force, 'args.force');
@@ -239,50 +212,7 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
     case 'browser.back':
     case 'browser.forward':
     case 'browser.reload':
-    case 'browser.attach_debugger':
-    case 'browser.detach_debugger':
-    case 'browser.get_accessibility_tree':
       return { tab_id: requireInteger(args.tab_id, 'args.tab_id') };
-    case 'browser.cdp': {
-      const params = args.params === undefined ? undefined : requireRecord(args.params, 'args.params');
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        method: requireString(args.method, 'args.method'),
-        ...(params === undefined ? {} : { params }),
-      };
-    }
-    case 'browser.get_cdp_events': {
-      const afterSequence = optionalInteger(args.after_sequence, 'args.after_sequence');
-      if (afterSequence !== undefined && afterSequence < 0) throw invalid('args.after_sequence', 'must be non-negative');
-      const limit = optionalPositiveInteger(args.limit, 'args.limit');
-      const methods = optionalStringArray(args.methods, 'args.methods');
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        ...(afterSequence === undefined ? {} : { after_sequence: afterSequence }),
-        ...(limit === undefined ? {} : { limit }),
-        ...(methods === undefined ? {} : { methods }),
-      };
-    }
-    case 'browser.get_network_requests': {
-      const afterSequence = optionalInteger(args.after_sequence, 'args.after_sequence');
-      if (afterSequence !== undefined && afterSequence < 0) throw invalid('args.after_sequence', 'must be non-negative');
-      const limit = optionalPositiveInteger(args.limit, 'args.limit');
-      const type = optionalString(args.type, 'args.type');
-      const failedOnly = optionalBoolean(args.failed_only, 'args.failed_only');
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        ...(afterSequence === undefined ? {} : { after_sequence: afterSequence }),
-        ...(limit === undefined ? {} : { limit }),
-        ...(type === undefined ? {} : { type }),
-        ...(failedOnly === undefined ? {} : { failed_only: failedOnly }),
-      };
-    }
-    case 'browser.mouse_move':
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        x: requireFiniteNumber(args.x, 'args.x'),
-        y: requireFiniteNumber(args.y, 'args.y'),
-      };
     case 'browser.get_console_messages': {
       const afterSequence = optionalInteger(args.after_sequence, 'args.after_sequence');
       if (afterSequence !== undefined && afterSequence < 0) throw invalid('args.after_sequence', 'must be non-negative');
@@ -297,51 +227,6 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         ...(frameId === undefined ? {} : { frame_id: frameId }),
       };
     }
-    case 'browser.click_at': {
-      const button = args.button;
-      if (button !== undefined && button !== 'left' && button !== 'right' && button !== 'middle') {
-        throw invalid('args.button', 'must be left, right, or middle');
-      }
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        x: requireFiniteNumber(args.x, 'args.x'),
-        y: requireFiniteNumber(args.y, 'args.y'),
-        ...(button === undefined ? {} : { button }),
-        ...(args.click_count === undefined ? {} : {
-          click_count: optionalPositiveInteger(args.click_count, 'args.click_count'),
-        }),
-        ...(args.modifiers === undefined ? {} : {
-          modifiers: optionalKeyModifiers(args.modifiers, 'args.modifiers'),
-        }),
-      };
-    }
-    case 'browser.drag_at':
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        from_x: requireFiniteNumber(args.from_x, 'args.from_x'),
-        from_y: requireFiniteNumber(args.from_y, 'args.from_y'),
-        to_x: requireFiniteNumber(args.to_x, 'args.to_x'),
-        to_y: requireFiniteNumber(args.to_y, 'args.to_y'),
-      };
-    case 'browser.scroll_at':
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        x: requireFiniteNumber(args.x, 'args.x'),
-        y: requireFiniteNumber(args.y, 'args.y'),
-        delta_x: requireFiniteNumber(args.delta_x, 'args.delta_x'),
-        delta_y: requireFiniteNumber(args.delta_y, 'args.delta_y'),
-      };
-    case 'browser.press_key': {
-      const modifiers = optionalKeyModifiers(args.modifiers, 'args.modifiers');
-      return {
-        tab_id: requireInteger(args.tab_id, 'args.tab_id'),
-        key: requireString(args.key, 'args.key'),
-        ...(modifiers === undefined ? {} : { modifiers }),
-      };
-    }
-    case 'browser.type_text':
-      if (typeof args.text !== 'string') throw invalid('args.text', 'must be a string');
-      return { tab_id: requireInteger(args.tab_id, 'args.tab_id'), text: args.text };
     case 'browser.handle_dialog': {
       if (args.action !== 'accept' && args.action !== 'dismiss') throw invalid('args.action', 'must be accept or dismiss');
       const promptText = optionalString(args.prompt_text, 'args.prompt_text');
@@ -384,8 +269,7 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
     }
     case 'browser.get_frames':
       return { tab_id: requireInteger(args.tab_id, 'args.tab_id') };
-    case 'browser.get_page':
-    case 'browser.get_page_state': {
+    case 'browser.get_page': {
       const tabId = optionalInteger(args.tab_id, 'args.tab_id');
       const frameId = optionalFrameId(args.frame_id, 'args.frame_id');
       return {

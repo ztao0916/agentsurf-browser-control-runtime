@@ -402,7 +402,7 @@ describe('BrowserToolRuntime', () => {
   });
 
   it('combines Chrome tab metadata with Page Agent viewport state', async () => {
-    const response = await runtime.handle(request('browser.get_page_state', {}));
+    const response = await runtime.handle(request('browser.get_page', {}));
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.result.page.viewport.width).toBe(1280);
@@ -530,7 +530,7 @@ describe('BrowserToolRuntime', () => {
   });
 
   it('reports the frame id on page state and interactive snapshots', async () => {
-    const framePage = await runtime.handle(request('browser.get_page_state', { tab_id: 7, frame_id: 7 }));
+    const framePage = await runtime.handle(request('browser.get_page', { tab_id: 7, frame_id: 7 }));
     expect(framePage.ok).toBe(true);
     if (framePage.ok) expect(framePage.result.page.frame_id).toBe(7);
 
@@ -549,7 +549,6 @@ describe('BrowserToolRuntime', () => {
       new FakeTabsAdapter(),
       new FakePageAgentClient(),
       new FakeScreenshotAdapter(),
-      undefined,
       undefined,
       undefined,
       undefined,

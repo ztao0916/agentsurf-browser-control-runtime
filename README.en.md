@@ -41,7 +41,7 @@ In one sentence: **when your agent needs to operate a web page, it borrows the C
 What it gives you:
 
 - your existing Chrome sessions and tabs — no re-login, no cookie export;
-- **48 `browser.*` tools**: tabs, page reading, element clicks and typing, forms, scrolling, drag, screenshots, iframes, console, network, downloads, file upload, raw CDP;
+- **30 `browser.*` tools**: tabs, page reading, element clicks and typing, forms, scrolling, drag, screenshots, iframes, console, downloads, file upload;
 - an **opaque `element_id`** model instead of CSS selectors, with every action re-checked for visibility, enabled state, and page revision;
 - a local MCP server, so the agent side is just one stdio MCP entry.
 
@@ -67,7 +67,7 @@ What it does not do:
               │  chrome.runtime.connectNative
               ▼
         Chrome extension (Manifest V3)
-              │  chrome.tabs.sendMessage / chrome.debugger / chrome.webRequest
+              │  chrome.tabs.sendMessage / chrome.debugger
               ▼
         the page (Page Agent content script, injected into every frame)
 ```
@@ -303,10 +303,12 @@ The cost: you maintain two absolute paths yourself, and the client's process env
 Ask your agent:
 
 ```text
-Call browser_get_capabilities and list the tools.
+List the browser_* tools you have available.
 ```
 
-It should return **48** tools, including `browser_get_frames`, `browser_select_text`, `browser_get_console_messages`, and `browser_get_network_requests`.
+You should see **30** tools, including `browser_get_frames`, `browser_select_text`, `browser_get_console_messages`, and `browser_screenshot`.
+
+(The client gets the tool list from the server, so there is no separate capability-query tool; `browser.get_capabilities` was removed.)
 
 ### 4.9 How to tell it really works
 
@@ -365,7 +367,7 @@ This step is the dividing line for troubleshooting:
 
 ### 5.3 End-to-end smoke test
 
-In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on a normal page, then `browser_screenshot`. Confirm no leftover "Chrome is being debugged" banner afterwards (call `browser_detach_debugger` if you used CDP).
+In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on a normal page, then `browser_screenshot`. Screenshots go through CDP, so the tab shows a "Chrome is being debugged" banner; reloading that tab removes it.
 
 ## 6. Driving it from an agent
 
@@ -374,11 +376,11 @@ In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on 
 ```text
 1. browser_list_tabs                                  # see what exists before touching anything
 2. browser_open {"url":"https://example.com","activate":true}
-3. browser_get_page_state {"tab_id":...}              # URL, load state, revision
+3. browser_get_page {"tab_id":...}                    # URL, load state, revision
 4. browser_get_page_content {"tab_id":...}            # body text
 ```
 
-`browser_get_page` / `browser_get_page_state` return **metadata, not article text**. To open a URL use `browser_open`; there is **no** `browser_navigate`.
+`browser_get_page` returns **metadata, not article text**. To open a URL use `browser_open`; there is **no** `browser_navigate`.
 
 ### 6.2 Element actions (the `element_id` model)
 
@@ -431,8 +433,6 @@ Rules and behaviours:
 ```text
 browser_get_console_messages {"tab_id": 123}                 # console output, exceptions, rejections
 browser_get_console_messages {"tab_id": 123, "frame_id": 561}
-browser_get_network_requests {"tab_id": 123}                 # method/type/status/duration/failure
-browser_get_accessibility_tree {"tab_id": 123}
 browser_observe {"tab_id": 123}                              # state + interactives + AX + screenshot
 ```
 
@@ -442,20 +442,20 @@ Console collection runs in the page's MAIN world so it sees the page's own outpu
 
 Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
 
-- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**, titled `AI · <4 chars>` by default and renameable with `browser_name_session`;
+- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**, titled `AI · <4 chars>` by default;
 - another conversation is refused those tabs (`tab_in_use`), so conversations stop stepping on each other;
 - use `browser_claim_tab` to take over a tab the user already had open: it claims and, by default, groups it (pass `group: false` to claim without moving it);
 - `browser_list_tabs` returns this conversation's tabs plus unclaimed ones and reports the rest in `other_session_tabs`; pass `include_all: true` to see every tab (for scripts and troubleshooting);
-- **leases apply to every caller**: a session-less call (a script, the CLI) is refused with `tab_in_use` on a tab another conversation holds instead of silently bypassing the check — a script that wants such a tab starts a session and claims it;
-- `browser_end_session` (optionally with `close_tabs`) releases the session and ungroups its tabs.
+- **leases apply to every caller**: a session-less call (a script, the CLI) is refused with `tab_in_use` on a tab another conversation holds instead of silently bypassing the check — a script that wants such a tab calls `browser.start_session` (still in the protocol, just not advertised to agents) and claims it;
+- `browser_reset_sessions` releases this conversation's leases and ungroups its tabs.
 
 Caveats:
 
 - automatic isolation assumes **one conversation = one MCP server process** (PiDeck starts a separate process per conversation, which satisfies this). If a client multiplexes several conversations through one process, they share a session and you must pass an explicit `session_id` to separate them;
 - `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
 - leases live in the extension's `storage.session` (**restarting Chrome clears them**), while session records persist in `storage.local`;
-- **idle reclaim**: if a conversation is closed without calling `end_session`, the tabs it claimed are freed **and ungrouped** after **30 minutes of inactivity**, and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
-- **finish the job**: call `browser_end_session` (with `close_tabs: true` if the tabs are no longer needed) when the work is done — it releases and ungroups immediately; otherwise the group stays until the idle timeout;
+- **idle reclaim**: if a conversation is closed without a clean finish, the tabs it claimed are freed **and ungrouped** after **30 minutes of inactivity**, and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
+- **finish the job**: call `browser_reset_sessions` when the work is done — it releases this conversation's leases and ungroups immediately; otherwise the group stays until the idle timeout. It does **not** close tabs, so close them yourself with `browser_close_tab`;
 - **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
 - **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs.
 
@@ -526,7 +526,7 @@ This removes the native host registration and launcher, **keeps the config**, an
 | `element_not_visible` / `element_disabled` / `element_not_editable` | The element exists but cannot be acted on yet. Inspect the real page state. |
 | `unsupported_page` | Chrome forbids injecting a Page Agent there (`chrome://`, Web Store). Use a normal HTTP/HTTPS page. |
 | `screenshot_unavailable` | The capture call failed: the fallback path needs an active tab, or Chrome itself failed. **A page that changes during capture is no longer an error** — the result carries `page_changed: true`. |
-| `tool is unsupported` | That tool does not exist in this runtime. Compare against `browser_get_capabilities`. |
+| `tool is unsupported` | That tool does not exist in this runtime. Compare against the tool list your agent has. |
 | `native-host.exe` in use during install | Disable the extension, let the old host exit, then install. Do **not** kill every `node.exe`. |
 
 ### 8.2 Order of investigation
@@ -547,26 +547,24 @@ Redact the token and any sensitive page data before sharing logs.
 
 ## 9. Safety boundaries
 
-AgentSurf acts on your logged-in pages, and `browser.cdp` plus file upload are powerful. Encode these rules in your agent's instructions:
+AgentSurf acts on your logged-in pages, and file upload is powerful. Encode these rules in your agent's instructions:
 
 - **read-only by default**; ask the user before submitting, saving, deleting, publishing, uploading, or sending anything;
 - the user logs in themselves: never request passwords or codes, never read or print cookies, tokens, or local storage;
 - never commit `config.json` or the token, and never paste them into a chat;
 - never expose the bridge beyond localhost;
-- CDP shows a "Chrome is being debugged" banner and conflicts with the user's own DevTools; detach when done.
+- screenshots go through CDP, which shows a "Chrome is being debugged" banner and conflicts with the user's own DevTools; reload that tab afterwards to clear it.
 
 These are **instructions for the agent**, not an enforced approval layer. The caller still owns the authorization boundary.
 
 ## 10. Current limitations
 
 - **No OCR**: text inside images needs screenshots plus the model's own vision.
-- **No Shadow DOM support**: `shadow_dom: false`; open shadow roots contribute text to page content, but their elements do not appear in `get_interactives`.
+- **No Shadow DOM support**: open shadow roots contribute text to page content, but their elements do not appear in `get_interactives`.
 - **Frames are explicit**: the top document is the default; use `browser.get_frames`. Cross-origin frames cannot be driven.
 - **Protected pages cannot be injected**: `chrome://`, the Chrome Web Store, and similar.
 - **CDP conflicts with DevTools**: attaching fails if DevTools is already open on that tab, and shows a debug banner.
 - **Console buffers are per document and lost on navigation**, and only cover the period after the collector started.
-- **Network gives metadata only** (no response bodies), buffered in the service worker.
-- **CDP event buffer**: 1000 events per tab, recorded only after attach.
 - **Session isolation is cooperative**: it requires `session_id` on every call for that session.
 - **Files and downloads**: uploads need absolute local paths; downloads expose only Chrome Downloads API metadata and cannot be reliably tied to a source tab.
 - **Platform coverage**: verified on Windows; macOS scripts exist but are unverified on real hardware; no Linux installer.
@@ -578,7 +576,7 @@ For developers, and for anyone integrating below the MCP layer, the following no
 
 | Content | What is in it |
 | --- | --- |
-| [1. Tool reference](docs/reference.en.md#1-tool-reference) | The 48 `browser.*` tools grouped by purpose, where `frame_id` / `modifiers` apply, and the filtering and truncation semantics of `get_interactives` |
+| [1. Tool reference](docs/reference.en.md#1-tool-reference) | The 30 `browser.*` tools grouped by purpose, where `frame_id` / `modifiers` apply, and the filtering and truncation semantics of `get_interactives` |
 | [2. Error codes and retry semantics](docs/reference.en.md#2-error-codes-and-retry-semantics) | The structured error object, whether each `code` is retryable, and the suggested action |
 | [3. Development and debugging](docs/reference.en.md#3-development-and-debugging) | Build / lint / test commands, the extension status page, the standalone bridge |
 | [4. External protocol](docs/reference.en.md#4-external-protocol) | Speaking to the local bridge directly instead of going through MCP |

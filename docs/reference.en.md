@@ -14,36 +14,34 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 
 ## 1. Tool reference
 
-48 tools in total.
+30 tools in total.
 
 | Goal | Tools |
 | --- | --- |
-| Capabilities | `browser.get_capabilities` |
 | Tabs | `browser.list_tabs` / `browser.open` / `browser.switch_tab` / `browser.close_tab` |
 | Frames | `browser.get_frames` (plus `frame_id` on the tools below) |
 | Navigation | `browser.back` / `browser.forward` / `browser.reload` |
-| Page metadata | `browser.get_page` / `browser.get_page_state` |
-| Text and structure | `browser.get_page_content` / `browser.get_accessibility_tree` |
+| Page metadata | `browser.get_page` |
+| Text | `browser.get_page_content` |
 | Interactive elements | `browser.get_interactives` |
 | Combined read / screenshot | `browser.observe` / `browser.screenshot` |
 | Element click and input | `browser.click` / `browser.double_click` / `browser.type` / `browser.press` |
 | Text selection | `browser.select_text` |
 | Form state | `browser.set_checked` / `browser.select_option` |
 | Element drag and wait | `browser.drag` / `browser.wait_for_element` |
-| Scrolling | `browser.scroll` / `browser.scroll_at` |
-| Raw coordinates | `browser.mouse_move` / `browser.click_at` / `browser.drag_at` |
-| Keyboard / text / dialogs | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
+| Scrolling | `browser.scroll` |
+| Dialogs | `browser.handle_dialog` |
 | Files | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
-| Console / Network | `browser.get_console_messages` / `browser.get_network_requests` |
-| Sessions and tab ownership | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` / `browser.reset_sessions` |
-| Debugger and CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
+| Console | `browser.get_console_messages` |
+| Sessions and tab ownership | `browser.claim_tab` / `browser.reset_sessions` |
 
-- `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.press_key`, `browser.click`, `browser.double_click`, `browser.click_at`.
-- `frame_id` is accepted by `browser.get_page`, `browser.get_page_state`, `browser.get_interactives`, `browser.get_page_content`, `browser.get_console_messages`, and every element action.
+> `browser.start_session` is still part of the protocol (usable by scripts and external clients) but is **not advertised as an MCP tool**: the MCP server establishes a session per conversation automatically. See [README section 6.5](../README.en.md#65-parallel-conversations-isolated-by-default).
+
+- `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.click`, `browser.double_click`.
+- `frame_id` is accepted by `browser.get_page`, `browser.get_interactives`, `browser.get_page_content`, `browser.get_console_messages`, and every element action.
 - `browser.get_interactives` accepts `limit` (default **150**), `visible_only`, `tag`, `role`, `name_contains`. Filtering and truncation happen inside the page, and the result reports `total` plus `truncated`. Measured: a 665-element page fell from ~66,800 tokens to ~15,100 by the cap alone, and to ~380 tokens with `visible_only: true`.
 - **`truncated: true` means the list is incomplete** — do not conclude the element is missing; narrow with a filter instead.
-- **`visible_only: false` is the deliberate default**: collapsed panels, inactive tabs, and hover-revealed buttons (`opacity: 0`) are invisible, yet the agent must be able to discover them. Actions still refuse invisible elements, so hover first (`browser.mouse_move`), then click.
-- **Prefer element-level tools over coordinate-level ones**: element tools verify visibility, enabled state, and revision; coordinate tools just send input.
+- **`visible_only: false` is the deliberate default**: collapsed panels, inactive tabs, and hover-revealed buttons (`opacity: 0`) are invisible, yet the agent must be able to discover them. Actions still refuse invisible elements. Note there is **no coordinate-level hover tool**, so such a button has to be revealed by clicking its container or by triggering the page's own interaction.
 - **`browser.screenshot` / `browser.observe` no longer fail when the page changes**: on a live page (animations, hot reload, polling) they return with `page_changed: true` — a screenshot also carries `page_revision_before` (the revision it started from), an observation carries `page_revision_after` (the revision the page moved on to). Neither field appears while the page holds still. Element actions still validate revisions strictly.
 - Authoritative parameters live in `src/core/protocol/tool-contract.ts` and `src/core/protocol/schemas.ts`. Do not guess names or arguments from other browser tools.
 
@@ -67,7 +65,7 @@ Every failure is structured (the MCP layer puts the same object into the tool re
 | `element_not_visible` / `element_disabled` / `element_not_editable` | mixed | scroll or wait; do not force the action |
 | `frame_not_found` | yes | re-read frames and use the new `frame_id` |
 | `tab_not_found` | yes | the tab closed; re-read tabs |
-| `tab_in_use` | no | another session owns the tab: pick another or release it |
+| `tab_in_use` | no | another session owns the tab: pick another, or let the conversation holding it finish |
 | `request_timeout` | yes | raise `timeout_ms` if the operation is legitimately slow |
 | `unsupported_page` | no | protected page; use a normal one |
 | `screenshot_unavailable` | yes | the capture call failed (the fallback path needs an active tab). A page changing during capture is no longer an error — that is reported as `page_changed` |
@@ -132,7 +130,7 @@ Then send tool requests (the external protocol omits the extension's internal `k
 {
   "protocol_version": "1",
   "request_id": "req_123",
-  "tool": "browser.get_page_state",
+  "tool": "browser.get_page",
   "args": { "tab_id": 123, "frame_id": 0 }
 }
 ```
@@ -173,7 +171,7 @@ Behaviour:
 | Path | Responsibility |
 | --- | --- |
 | `src/core/` | Chrome-independent tool contract, argument validation, runtime dispatch |
-| `src/chrome/` | Chrome adapters: tabs, CDP, screenshots, downloads, network, **frame enumeration**, session coordination |
+| `src/chrome/` | Chrome adapters: tabs, CDP, screenshots, downloads, **frame enumeration**, session coordination |
 | `src/content/` | Page Agent, element registry, revision tracking, action executor, console collector, agent cursor |
 | `src/transport/` | Native messaging, runtime messages, tool transport |
 | `src/bridge/` | local WebSocket bridge |
@@ -203,5 +201,5 @@ An `element_id` is opaque; the DOM reference lives only in the content script. B
 
 - screenshots go through CDP `Page.captureScreenshot`, so **background tabs work**; only the `captureVisibleTab` fallback needs an active tab;
 - `full_page: true` uses the document's content size, so an app shell that scrolls inside a container can return viewport-sized output;
-- coordinate and element actions briefly draw an `AI` cursor: it does not receive events, is never returned by `get_interactives`, and does not change the revision;
+- element actions briefly draw an `AI` cursor: it does not receive events, is never returned by `get_interactives`, and does not change the revision;
 - `browser.set_files` marks the input temporarily, sets files via CDP `DOM.setFileInputFiles`, then cleans up; for non-top frames the lookup walks a `pierce`d node tree.

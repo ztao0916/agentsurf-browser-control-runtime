@@ -33,8 +33,7 @@
     "tabGroups",
     "scripting",
     "storage",
-    "webNavigation",
-    "webRequest"
+    "webNavigation"
   ],
   "host_permissions": [
     "<all_urls>"

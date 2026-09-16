@@ -128,22 +128,6 @@ describe('tool contract schemas', () => {
       args: { tab_id: 1, element_id: 'opaque', key: 'a', modifiers: ['Control'] },
     }).args).toEqual({ tab_id: 1, element_id: 'opaque', key: 'a', modifiers: ['Control'] });
 
-    expect(parseToolRequest({
-      kind: 'tool-request',
-      protocol_version: '1',
-      request_id: 'press-key',
-      tool: 'browser.press_key',
-      args: { tab_id: 1, key: 'Enter' },
-    }).args).toEqual({ tab_id: 1, key: 'Enter' });
-
-    expect(parseToolRequest({
-      kind: 'tool-request',
-      protocol_version: '1',
-      request_id: 'click-at',
-      tool: 'browser.click_at',
-      args: { tab_id: 1, x: 10, y: 20, modifiers: ['Shift'] },
-    }).args).toEqual({ tab_id: 1, x: 10, y: 20, modifiers: ['Shift'] });
-
     expect(() => parseToolRequest({
       kind: 'tool-request',
       protocol_version: '1',

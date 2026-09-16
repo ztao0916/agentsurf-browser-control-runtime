@@ -41,7 +41,7 @@ AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器
 它做什么：
 
 - 复用你现有的 Chrome 登录态和标签页，不需要重新登录、不需要导出 Cookie；
-- 提供 **48 个 `browser.*` 工具**：标签页、页面读取、元素点击/输入、表单、滚动、拖拽、截图、iframe、Console、Network、下载、文件上传、CDP；
+- 提供 **30 个 `browser.*` 工具**：标签页、页面读取、元素点击/输入、表单、滚动、拖拽、截图、iframe、Console、下载、文件上传；
 - 元素定位使用**不透明 `element_id`**（不暴露 CSS Selector），动作前会校验元素仍可见、可用、且属于当前页面版本；
 - 通过本机 MCP Server 接入，Agent 侧只需要一个 stdio MCP 配置。
 
@@ -67,7 +67,7 @@ AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器
               │  chrome.runtime.connectNative
               ▼
         Chrome 扩展（Manifest V3）
-              │  chrome.tabs.sendMessage / chrome.debugger / chrome.webRequest
+              │  chrome.tabs.sendMessage / chrome.debugger
               ▼
         网页（Page Agent Content Script，注入所有 frame）
 ```
@@ -309,10 +309,12 @@ realpath dist/mcp/cli.js   # MCP Server 入口路径
 对 Agent 说：
 
 ```text
-调用 browser_get_capabilities 看看有哪些工具。
+列出你现在可用的 browser_* 工具。
 ```
 
-应返回 **48** 个工具，并包含 `browser_get_frames`、`browser_select_text`、`browser_get_console_messages`、`browser_get_network_requests`。
+应看到 **30** 个工具，其中包括 `browser_get_frames`、`browser_select_text`、`browser_get_console_messages`、`browser_screenshot`。
+
+（工具清单由 MCP 客户端从 Server 拿到，没有单独的“查询能力”工具；`browser.get_capabilities` 已移除。）
 
 ### 4.9 装完怎么确认真的通了
 
@@ -375,7 +377,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 
 1. `browser_list_tabs` —— 能列出标签页；
 2. `browser_get_page_content`（带某个普通网页的 `tab_id`）—— 能读到正文；
-3. `browser_screenshot` —— 能拿到图片，且页面上**没有**“Chrome 正在被调试”横幅残留（用完记得 `browser_detach_debugger`）。
+3. `browser_screenshot` —— 能拿到图片（截图依赖 CDP，会附加调试器，页面上出现“Chrome 正在被调试”横幅；重新加载该页签即可去掉）。
 
 ## 6. 在 Agent 里怎么用
 
@@ -385,12 +387,12 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 1. browser_list_tabs                      # 先看清有哪些标签页，避免动到用户正在用的页面
 2. browser_open {"url":"https://example.com","activate":true}
                                           # 打开页面拿到 tab_id
-3. browser_get_page_state {"tab_id":...}  # 确认 URL / 加载状态 / revision
+3. browser_get_page {"tab_id":...}         # 确认 URL / 加载状态 / revision
 4. browser_get_page_content {"tab_id":...}
                                           # 读正文；SPA 或外壳页可能要配合 frames
 ```
 
-注意：**`browser_get_page` / `browser_get_page_state` 只返回页面元信息，不是正文抓取工具**；打开网址用 `browser_open`（**没有** `browser_navigate`）。
+注意：**`browser_get_page` 只返回页面元信息，不是正文抓取工具**；打开网址用 `browser_open`（**没有** `browser_navigate`）。
 
 ### 6.2 元素操作流程（element_id 模式）
 
@@ -447,9 +449,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 ```text
 browser_get_console_messages {"tab_id": 123}          # console.log/error、未捕获异常、未处理 rejection
 browser_get_console_messages {"tab_id": 123, "frame_id": 561}
-browser_get_network_requests {"tab_id": 123}          # 请求元数据：method/type/status/耗时/失败
-browser_get_accessibility_tree {"tab_id": 123}        # 结构与可访问文本
-browser_observe {"tab_id": 123}                       # 一次拿 状态+交互元素+AX+截图
+browser_observe {"tab_id": 123}                       # 一次拿 状态+交互元素+可访问性树+截图
 ```
 
 Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查询结果里 **`available: false` 表示当时采集器不在场，不能当成“页面没有报错”**。
@@ -458,20 +458,20 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查�
 
 每个对话的 MCP Server 进程会自带一个会话，**Agent 不需要手动开会话，也不需要每次传 `session_id`**：
 
-- 自己 `browser.open` 打开的页签会**自动建立归属并归入本会话的 Chrome 分组**；组名默认是 `AI · <4位ID>`，可用 `browser.name_session` 改成有意义的名字（例如“禅道排查”）；
+- 自己 `browser.open` 打开的页签会**自动建立归属并归入本会话的 Chrome 分组**（组名默认 `AI · <4位ID>`）；
 - 另一个对话再想操作这些页签会被拒绝（`tab_in_use`），两个对话不会互相踩；
 - 需要接管用户**已经打开**的页签时用 `browser.claim_tab`：它会建立归属并**默认归组**（传 `group: false` 可只归属、不把页签拉进分组）；
 - `browser.list_tabs` 默认只列出**本对话的页签 + 尚未归属的页签**，并用 `other_session_tabs` 告诉你隐藏了几个；传 `include_all: true` 可以看到全部（脚本、排查用）；
-- **租约对所有调用都生效**：不带 `session_id` 的调用（脚本、CLI）碰到别人已占用的页签同样报 `tab_in_use`，不会再静默放行；脚本要接管就先 `start_session` + `claim_tab`；
-- `browser.end_session`（可带 `close_tabs`）会释放会话并解除分组。
+- **租约对所有调用都生效**：不带 `session_id` 的调用（脚本、CLI）碰到别人已占用的页签同样报 `tab_in_use`，不会再静默放行；脚本要接管就先发 `browser.start_session`（它仍在协议里，只是不暴露给 Agent）再 `claim_tab`；
+- 收尾用 `browser.reset_sessions`，它释放本对话的租约并解除分组。
 
 边界与注意：
 
 - 自动隔离的前提是“一个对话 = 一个 MCP Server 进程”（PiDeck 给每个对话起独立进程，满足此条件）。若某个客户端把多个对话复用到同一个进程，它们会共用同一个会话，此时可用显式 `session_id` 手动区分；
 - 主动 `browser.open` 一个已有 `tab_id`（即导航已有页签）会建立归属但**不**动你的标签栏；
 - 租约存在扩展的 `storage.session` 里（**Chrome 重启即清空**），会话记录在 `storage.local` 里是持久的；
-- **空闲自动回收**：某个对话被直接关掉（没调 `end_session`）时，它占用过的页签在**空闲 30 分钟**后自动释放**并解除分组**，别的对话即可接管；正在使用的页签会续租，不会被误抢；
-- **任务收尾**：干完活（不再需要那些页签）时主动调用 `browser.end_session`（必要时带 `close_tabs: true`），它会**立即**释放并解除分组；不调的话，分组会留到空闲超时才消失；
+- **空闲自动回收**：某个对话被直接关掉（没有主动收尾）时，它占用过的页签在**空闲 30 分钟**后自动释放**并解除分组**，别的对话即可接管；正在使用的页签会续租，不会被误抢；
+- **任务收尾**：干完活（不再需要那些页签）时调用 `browser.reset_sessions`，它会**立即**释放本对话的租约并解除分组；不调的话，分组会留到空闲超时才消失。它**不关闭页签**，要关页签再单独用 `browser.close_tab`；
 - **重载/重启后的收尾**：重新加载扩展或重启 Chrome 会清空租约（Chrome 行为），此时运行时会在启动时把“会话还在、租约已无”的漏网分组一并解除，不会留下无主的分组；有租约（正在干活）的页签不动；
 - **手动兜底**：`browser.reset_sessions` 默认只释放**本对话自己的**会话与租约，并顺带清掉“拥有者已不存在”的租约（正是页签被消失的对话卡住的情形）；它**不会**动别的对话，返回值里的 `other_sessions_kept` 会告诉你还有几个会话没动。确实需要清全局（会释放并解除所有人的分组）时才传 `force: true`。
 
@@ -547,7 +547,7 @@ npm run native-host:uninstall:macos
 | `element_not_visible` / `element_disabled` / `element_not_editable` | 元素存在但不满足操作前提。不要强行点，先看页面实际状态 |
 | `unsupported_page` | Chrome 不允许在该页面注入 Page Agent（`chrome://`、应用商店页等）。换普通 HTTP/HTTPS 页面 |
 | `screenshot_unavailable` | 截图调用失败：降级路径下目标不是活动标签页，或 Chrome 截图本身报错。**页面在截图期间变化不再算失败**，结果会带 `page_changed: true` |
-| `tool is unsupported` | 工具名不被当前运行时支持。对照 `browser_get_capabilities`，不要急着重装 |
+| `tool is unsupported` | 工具名不被当前运行时支持。对照 Agent 手上的工具清单，不要急着重装 |
 | 安装时报 `native-host.exe` 被占用 | 先禁用扩展、等旧 Host 退出再安装。**不要**批量结束 `node.exe` |
 
 ### 8.2 定位顺序
@@ -568,26 +568,24 @@ npm run native-host:uninstall:macos
 
 ## 9. 安全边界
 
-AgentSurf 能操作你登录态下的页面，`browser.cdp`、文件上传等能力很强。建议在 Agent 的使用规则里写死：
+AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建议在 Agent 的使用规则里写死：
 
 - **默认只读**；提交、保存、删除、发布、上传、发送消息等会修改线上数据的操作，先取得用户明确授权；
 - 登录由用户自行完成：不索取密码/验证码，不读取或输出 Cookie、Token、LocalStorage 等认证信息；
 - 不把本机 `config.json`、token、敏感页面数据提交进仓库或粘贴到聊天里；
 - 不把 Bridge 暴露到外网；
-- CDP 会弹“Chrome 正在被调试”横幅，并与用户自己的 DevTools 冲突，用完及时 `browser.detach_debugger`。
+- 截图会经由 CDP 弹“Chrome 正在被调试”横幅，并与用户自己的 DevTools 冲突；用完重新加载该标签页即可去掉。
 
 以上是**给 Agent 的使用约束**，不代表运行时已实现人工审批；调用方仍需自己管理授权边界。
 
 ## 10. 当前限制
 
 - **无 OCR**：图片里的文字需要靠截图 + 模型自身视觉能力；
-- **无 Shadow DOM 专门支持**：`browser.get_capabilities` 中 `shadow_dom: false`；开放 Shadow Root 的文本会并入页面正文，但元素不会进入 `get_interactives`；
+- **无 Shadow DOM 专门支持**：开放 Shadow Root 的文本会并入页面正文，但元素不会进入 `get_interactives`；
 - **iframe 需显式寻址**：默认只作用于顶层文档，必须配合 `browser.get_frames`；跨域框架通常无法注入；
 - **受保护页面不可注入**：`chrome://`、Chrome 应用商店等；
 - **CDP 与 DevTools 互斥**：同一标签页已开 DevTools 时 `attach` 会失败；attach 期间会有调试横幅；
 - **Console 跨导航丢失**：缓冲在页面内，刷新/跳转后清空；且只能看到采集器在场之后的输出；
-- **Network 是元数据**：没有响应体；且缓冲在 Service Worker 内，Host 重启即清空；
-- **CDP 事件缓冲上限 1000 条/标签页**，且只记录 attach 之后的事件；
 - **会话隔离是协作式的**：必须每次调用都带 `session_id` 才生效；
 - **文件上传/下载限制**：上传需本机绝对路径；下载只能拿到 Chrome Downloads API 提供的元数据，且无法可靠关联来源标签页；
 - **平台覆盖**：Windows 已实测；**macOS 脚本已提供但未在真机验证**；Linux 未提供安装脚本；
@@ -599,7 +597,7 @@ AgentSurf 能操作你登录态下的页面，`browser.cdp`、文件上传等能
 
 | 内容 | 说明 |
 | --- | --- |
-| [1. 工具速查](docs/reference.md#1-工具速查) | 48 个 `browser.*` 工具的分组清单、`frame_id` / `modifiers` 支持范围、`get_interactives` 的过滤与截断语义 |
+| [1. 工具速查](docs/reference.md#1-工具速查) | 30 个 `browser.*` 工具的分组清单、`frame_id` / `modifiers` 支持范围、`get_interactives` 的过滤与截断语义 |
 | [2. 错误码与重试语义](docs/reference.md#2-错误码与重试语义) | 结构化错误对象、每个 `code` 是否可重试、建议动作 |
 | [3. 开发与调试](docs/reference.md#3-开发与调试) | 构建 / lint / 测试命令、扩展状态页、独立 Bridge |
 | [4. 外部调用协议](docs/reference.md#4-外部调用协议) | 不用 MCP，自己写客户端直连本地 Bridge |

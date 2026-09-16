@@ -21,15 +21,12 @@ import type {
 } from './protocol/tool-contract';
 import type { SessionCoordinator } from './session/session-coordinator';
 import type { DebuggerAdapter } from '../chrome/debugger-adapter';
-import { TOOL_NAMES } from './protocol/schemas';
 import { TOP_FRAME_ID } from './protocol/tool-contract';
 import type { PageAgentClient } from '../chrome/scripting-adapter';
 import type { TabsAdapter } from '../chrome/tabs-adapter';
 import type { ScreenshotAdapter } from '../chrome/screenshot-adapter';
 import type { DownloadAdapter } from '../chrome/download-adapter';
-import type { NetworkAdapter } from '../chrome/network-adapter';
 import type { FrameAdapter } from '../chrome/frames-adapter';
-import { describeKey } from './key-descriptors';
 import type { ConsoleEntry, GetConsoleMessagesArgs, GetConsoleMessagesResult } from './protocol/tool-contract';
 
 export class BrowserToolRuntime {
@@ -40,7 +37,6 @@ export class BrowserToolRuntime {
     private readonly sessions?: SessionCoordinator,
     private readonly debuggerAdapter?: DebuggerAdapter,
     private readonly downloads?: DownloadAdapter,
-    private readonly network?: NetworkAdapter,
     private readonly frames?: FrameAdapter,
   ) {}
 
@@ -68,43 +64,8 @@ export class BrowserToolRuntime {
 
   private async dispatch(request: ToolRequest): Promise<ToolResults[ToolName]> {
     switch (request.tool) {
-      case 'browser.get_capabilities':
-        return {
-          protocol_version: '1',
-          tools: [...TOOL_NAMES],
-          features: {
-            native_messaging: true,
-            websocket_agent_bridge: true,
-            sessions: true,
-            tab_groups: true,
-            tab_leases: true,
-            element_ids: true,
-            accessibility_tree: true,
-            screenshots: ['viewport', 'full_page', 'clip'],
-            cdp: true,
-            downloads: true,
-            file_upload: true,
-            agent_cursor: true,
-            top_level_document: true,
-            frames: true,
-            page_content: true,
-            page_images: true,
-            iframes: true,
-            shadow_dom: false,
-          },
-        };
       case 'browser.start_session':
         return { session: await this.requireSessions().start(request.args.session_id, request.args.name) };
-      case 'browser.end_session': {
-        const ended = await this.requireSessions().end(request.args.session_id, request.args.close_tabs ?? false);
-        return {
-          session_id: request.args.session_id,
-          released_tab_ids: ended.releasedTabIds,
-          closed_tabs: request.args.close_tabs ?? false,
-        };
-      }
-      case 'browser.name_session':
-        return { session: await this.requireSessions().name(request.args.session_id, request.args.name) };
       case 'browser.claim_tab':
         return {
           session: await this.requireSessions().claim(
@@ -116,11 +77,6 @@ export class BrowserToolRuntime {
             // user can see which conversation owns which tab. Pass group: false to leave the tab bar alone.
             request.args.group ?? true,
           ),
-        };
-      case 'browser.release_tab':
-        return {
-          session: await this.requireSessions().release(request.args.session_id, request.args.tab_id),
-          released_tab_id: request.args.tab_id,
         };
       case 'browser.reset_sessions': {
         const reset = await this.requireSessions().reset(request.session_id, request.args.force ?? false);
@@ -143,143 +99,11 @@ export class BrowserToolRuntime {
       case 'browser.reload':
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         return { tab: await this.tabs.reload(request.args.tab_id) };
-      case 'browser.attach_debugger':
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        await this.requireDebugger().attach(request.args.tab_id);
-        return { tab_id: request.args.tab_id, attached: true };
-      case 'browser.detach_debugger':
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        await this.requireDebugger().detach(request.args.tab_id);
-        return { tab_id: request.args.tab_id, attached: false };
-      case 'browser.cdp':
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        return {
-          tab_id: request.args.tab_id,
-          value: await this.requireDebugger().send(request.args.tab_id, request.args.method, request.args.params),
-        };
-      case 'browser.get_cdp_events': {
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const events = this.requireDebugger().getEvents(
-          request.args.tab_id,
-          request.args.after_sequence ?? 0,
-          Math.min(request.args.limit ?? 100, 1_000),
-          request.args.methods,
-        );
-        return { tab_id: request.args.tab_id, ...events };
-      }
-      case 'browser.get_network_requests': {
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
-        const page = this.requireNetwork().list(request.args.tab_id, {
-          after_sequence: request.args.after_sequence ?? 0,
-          limit: Math.min(request.args.limit ?? 100, 1_000),
-          ...(request.args.type === undefined ? {} : { type: request.args.type }),
-          ...(request.args.failed_only === undefined ? {} : { failed_only: request.args.failed_only }),
-        });
-        return { tab_id: request.args.tab_id, ...page };
-      }
       case 'browser.get_console_messages': {
         await this.requireTabAccess(request.session_id, request.args.tab_id);
         const collected = await this.pageAgent.getConsoleMessages(request.args.tab_id, request.args.frame_id ?? TOP_FRAME_ID);
         return { tab_id: request.args.tab_id, ...selectConsoleMessages(collected, request.args) };
       }
-      case 'browser.get_accessibility_tree': {
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        const state = await this.pageAgent.getState(request.args.tab_id, TOP_FRAME_ID);
-        const value = await this.requireDebugger().send(request.args.tab_id, 'Accessibility.getFullAXTree');
-        const nodes = getArray(value, 'nodes');
-        return { tab_id: request.args.tab_id, page_revision: state.page_revision, nodes };
-      }
-      case 'browser.mouse_move':
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        await this.showAgentCursor(request.args.tab_id, request.args.x, request.args.y);
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseMoved', x: request.args.x, y: request.args.y,
-        });
-        return { tab_id: request.args.tab_id, performed: true };
-      case 'browser.click_at': {
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        await this.showAgentCursor(request.args.tab_id, request.args.x, request.args.y);
-        const button = request.args.button ?? 'left';
-        const clickCount = request.args.click_count ?? 1;
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseMoved', x: request.args.x, y: request.args.y,
-        });
-        const modifiers = modifierBitmask(request.args.modifiers);
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mousePressed', x: request.args.x, y: request.args.y, button, clickCount, modifiers,
-        });
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseReleased', x: request.args.x, y: request.args.y, button, clickCount, modifiers,
-        });
-        return { tab_id: request.args.tab_id, performed: true };
-      }
-      case 'browser.drag_at': {
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        await this.showAgentCursor(request.args.tab_id, request.args.from_x, request.args.from_y);
-        const points = interpolatePoints(
-          request.args.from_x,
-          request.args.from_y,
-          request.args.to_x,
-          request.args.to_y,
-          8,
-        );
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseMoved', x: request.args.from_x, y: request.args.from_y,
-        });
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mousePressed', x: request.args.from_x, y: request.args.from_y, button: 'left', buttons: 1, clickCount: 1,
-        });
-        for (const point of points) {
-          await this.showAgentCursor(request.args.tab_id, point.x, point.y);
-          await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-            type: 'mouseMoved', x: point.x, y: point.y, button: 'left', buttons: 1,
-          });
-        }
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseReleased', x: request.args.to_x, y: request.args.to_y, button: 'left', buttons: 0, clickCount: 1,
-        });
-        return { tab_id: request.args.tab_id, performed: true };
-      }
-      case 'browser.scroll_at':
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        await this.showAgentCursor(request.args.tab_id, request.args.x, request.args.y);
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchMouseEvent', {
-          type: 'mouseWheel',
-          x: request.args.x,
-          y: request.args.y,
-          deltaX: request.args.delta_x,
-          deltaY: request.args.delta_y,
-        });
-        return { tab_id: request.args.tab_id, performed: true };
-      case 'browser.press_key': {
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        const descriptor = describeKey(request.args.key);
-        // Chrome only runs a key's default action when the Windows virtual key code is present, and
-        // only treats the key as text-producing when `text` is set.
-        const modifiers = modifierBitmask(request.args.modifiers);
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchKeyEvent', {
-          type: 'keyDown',
-          key: descriptor.key,
-          code: descriptor.code,
-          windowsVirtualKeyCode: descriptor.virtualKeyCode,
-          nativeVirtualKeyCode: descriptor.virtualKeyCode,
-          modifiers,
-          ...(descriptor.text === undefined ? {} : { text: descriptor.text, unmodifiedText: descriptor.text }),
-        });
-        await this.requireDebugger().send(request.args.tab_id, 'Input.dispatchKeyEvent', {
-          type: 'keyUp',
-          key: descriptor.key,
-          code: descriptor.code,
-          windowsVirtualKeyCode: descriptor.virtualKeyCode,
-          nativeVirtualKeyCode: descriptor.virtualKeyCode,
-          modifiers,
-        });
-        return { tab_id: request.args.tab_id, performed: true };
-      }
-      case 'browser.type_text':
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        await this.requireDebugger().send(request.args.tab_id, 'Input.insertText', { text: request.args.text });
-        return { tab_id: request.args.tab_id, performed: true };
       case 'browser.handle_dialog':
         await this.requireTabAccess(request.session_id, request.args.tab_id);
         await this.requireDebugger().send(request.args.tab_id, 'Page.handleJavaScriptDialog', {
@@ -323,8 +147,6 @@ export class BrowserToolRuntime {
       case 'browser.get_frames':
         return this.getFrames(request.args.tab_id, request.session_id);
       case 'browser.get_page':
-        return { page: await this.getPage(request.args.tab_id, request.args.frame_id, request.session_id) } satisfies GetPageResult;
-      case 'browser.get_page_state':
         return { page: await this.getPage(request.args.tab_id, request.args.frame_id, request.session_id) } satisfies GetPageResult;
       case 'browser.get_interactives':
         return this.getInteractives(request.args.tab_id, request.args.frame_id, request.args, request.session_id);
@@ -692,17 +514,6 @@ export class BrowserToolRuntime {
     }
     return this.downloads;
   }
-
-  private requireNetwork(): NetworkAdapter {
-    if (this.network === undefined) {
-      throw new ToolFailure(createToolError('internal_error', 'Chrome network observation is unavailable.', false));
-    }
-    return this.network;
-  }
-
-  private async showAgentCursor(tabId: number, x: number, y: number): Promise<void> {
-    await this.pageAgent.showAgentCursor(tabId, TOP_FRAME_ID, x, y).catch(() => undefined);
-  }
 }
 
 function findNodeIdByAttribute(value: unknown, attributeName: string, attributeValue: string): number | null {
@@ -761,17 +572,6 @@ function getNumber(value: unknown, key: string): number | undefined {
 function getNestedNumber(value: unknown, objectKey: string, numberKey: string): number | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   return getNumber((value as Record<string, unknown>)[objectKey], numberKey);
-}
-
-function modifierBitmask(modifiers: Array<'Alt' | 'Control' | 'Meta' | 'Shift'> | undefined): number {
-  return (modifiers ?? []).reduce((mask, modifier) => mask | ({ Alt: 1, Control: 2, Meta: 4, Shift: 8 }[modifier] ?? 0), 0);
-}
-
-function interpolatePoints(fromX: number, fromY: number, toX: number, toY: number, steps: number): Array<{ x: number; y: number }> {
-  return Array.from({ length: steps }, (_, index) => {
-    const progress = (index + 1) / steps;
-    return { x: fromX + (toX - fromX) * progress, y: fromY + (toY - fromY) * progress };
-  });
 }
 
 function selectConsoleMessages(

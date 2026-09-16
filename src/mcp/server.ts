@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { TOOL_NAMES } from '../core/protocol/schemas';
+import { TOOL_NAMES, UNADVERTISED_TOOL_NAMES } from '../core/protocol/schemas';
 import type { ToolName } from '../core/protocol/tool-contract';
 import { callLocalBridge, LocalBridgeError } from './bridge-client';
 
@@ -18,31 +18,15 @@ const frameId = {
 };
 
 const schemas = {
-  'browser.get_capabilities': {},
   'browser.start_session': { session_id: z.string().min(1).optional(), name: z.string().min(1).optional() },
-  'browser.end_session': { ...sessionId, close_tabs: z.boolean().optional() },
-  'browser.name_session': { ...sessionId, name: z.string().min(1) },
   'browser.claim_tab': { ...sessionId, tab_id: tabId.tab_id, group: z.boolean().optional() },
-  'browser.release_tab': { ...sessionId, tab_id: tabId.tab_id },
   'browser.reset_sessions': { force: z.boolean().optional().describe('Also release sessions other conversations still hold. Default false.') },
   'browser.close_tab': tabId,
   'browser.back': tabId,
   'browser.forward': tabId,
   'browser.reload': tabId,
-  'browser.attach_debugger': tabId,
-  'browser.detach_debugger': tabId,
-  'browser.cdp': { ...tabId, method: z.string().min(1), params: z.record(z.string(), z.unknown()).optional() },
-  'browser.get_cdp_events': { ...tabId, after_sequence: z.number().int().optional(), limit: z.number().int().positive().optional(), methods: z.array(z.string()).optional() },
-  'browser.get_network_requests': { ...tabId, after_sequence: z.number().int().optional(), limit: z.number().int().positive().optional(), type: z.string().min(1).optional(), failed_only: z.boolean().optional() },
   'browser.get_console_messages': { ...tabId, ...frameId, after_sequence: z.number().int().optional(), limit: z.number().int().positive().optional(), levels: z.array(z.enum(['log', 'info', 'warn', 'error', 'debug'])).optional() },
-  'browser.get_accessibility_tree': tabId,
-  'browser.mouse_move': { ...tabId, x: z.number(), y: z.number() },
-  'browser.click_at': { ...tabId, x: z.number(), y: z.number(), button: z.enum(['left', 'right', 'middle']).optional(), click_count: z.number().int().positive().optional(), modifiers: z.array(z.enum(['Alt', 'Control', 'Meta', 'Shift'])).optional() },
-  'browser.drag_at': { ...tabId, from_x: z.number(), from_y: z.number(), to_x: z.number(), to_y: z.number() },
-  'browser.scroll_at': { ...tabId, x: z.number(), y: z.number(), delta_x: z.number(), delta_y: z.number() },
-  'browser.press_key': { ...tabId, key: z.string().min(1), modifiers: z.array(z.enum(['Alt', 'Control', 'Meta', 'Shift'])).optional() },
   'browser.select_text': { ...elementId, ...frameId, text: z.string().optional(), selection_type: z.enum(['text', 'cursor_before', 'cursor_after']).optional() },
-  'browser.type_text': { ...tabId, text: z.string() },
   'browser.handle_dialog': { ...tabId, action: z.enum(['accept', 'dismiss']), prompt_text: z.string().optional() },
   'browser.list_downloads': optionalTabId,
   'browser.wait_for_download': { ...optionalTabId, timeout_ms: z.number().int().positive().optional() },
@@ -50,7 +34,6 @@ const schemas = {
   'browser.list_tabs': { window_id: z.number().int().optional(), include_all: z.boolean().optional().describe('Include tabs another session holds. Default false.') },
   'browser.get_frames': tabId,
   'browser.get_page': { ...optionalTabId, ...frameId },
-  'browser.get_page_state': { ...optionalTabId, ...frameId },
   'browser.get_interactives': {
     ...optionalTabId,
     ...frameId,
@@ -177,6 +160,7 @@ export async function startMcpServer(): Promise<void> {
   );
 
   for (const tool of TOOL_NAMES) {
+    if (UNADVERTISED_TOOL_NAMES.includes(tool)) continue;
     const mcpName = tool.replaceAll('.', '_');
     server.registerTool(mcpName, {
       title: mcpName,
@@ -219,13 +203,9 @@ export async function startMcpServer(): Promise<void> {
 
 function descriptionFor(tool: ToolName): string {
   const descriptions: Record<ToolName, string> = {
-    'browser.get_capabilities': 'Get AgentSurf capabilities and supported browser tools.',
-
-    'browser.start_session': 'Start a session that owns the right to drive specific tabs. Usually unnecessary: this conversation already has one and its tabs are claimed and grouped automatically. Use it to create a named session, or to take over a specific session id.',
-    'browser.end_session': 'End a session and release every tab it holds. Set close_tabs to close those tabs as well.',
-    'browser.name_session': 'Rename a session so it is easier to recognize. The name becomes the Chrome tab group title.',
+    // Never registered: ensureSession calls it directly, so the agent never sees this one.
+    'browser.start_session': 'Create this conversation\'s own session. Called by the MCP server, not by the agent.',
     'browser.claim_tab': 'Take over a tab this session does not own yet, for example a page the user already had open. The tab joins the session group unless you pass group: false, and other sessions are refused it from then on.',
-    'browser.release_tab': 'Give up a session ownership of a tab.',
     'browser.reset_sessions': 'Release this conversation\'s own browser session and any lease whose owner is gone, which recovers tabs stuck on a conversation that no longer exists. Other conversations are left alone unless you pass force: true, which releases every session and ungroups their tabs.',
     'browser.list_tabs': 'List Chrome tabs without changing the active tab. Start here to find a tab_id. Only this conversation tabs and unclaimed tabs are returned, with other_session_tabs counting what was hidden; pass include_all to see every tab.',
     'browser.get_frames': 'List the frames inside a tab: iframes and blank-src app frames included. Frame 0 is the top document. Pass a returned frame_id to page reads and element actions to work inside that frame.',
@@ -238,20 +218,12 @@ function descriptionFor(tool: ToolName): string {
     'browser.reload': 'Reload the tab, re-running its scripts.',
 
     'browser.get_page': 'Read page metadata and viewport state.',
-    'browser.get_page_state': 'Read the current page state and revision.',
     'browser.get_interactives': 'List interactive page elements and their opaque element_ids. Call this before any element action. Pass frame_id to inspect an iframe; the top document is frame 0, and an element_id only works in the frame that returned it. A heavy page can hold hundreds of elements, so the list is capped at 150 and reports total plus truncated; narrow it with limit, visible_only, tag, role or name_contains instead of asking for everything.',
     'browser.get_page_content': 'Extract readable page text, and optionally HTML, image, and iframe metadata. Covers the top document unless frame_id targets a frame; app shells keep their real content inside an iframe, so check browser_get_frames when the text looks like navigation only.',
-    'browser.get_accessibility_tree': 'Read the Chrome accessibility tree for a tab, for structure that get_page_content flattens away.',
     'browser.screenshot': 'Capture a screenshot of a Chrome tab as an image. Works on a background tab. Prefer this over describing a page in text when layout or visual state matters.',
     'browser.observe': 'Capture page state, interactive elements, accessibility data, and a screenshot in one call.',
 
     'browser.get_console_messages': 'Read page console output, uncaught exceptions, and unhandled rejections. Check available: false, which means the collector was not running and an empty list is not proof of silence.',
-    'browser.get_network_requests': 'List network requests observed for a tab since the extension started. Use failed_only to find errors, and type to cut noise.',
-    'browser.attach_debugger': 'Attach the Chrome debugger so browser_get_cdp_events starts recording. This shows a "Chrome is being debugged" banner and fails if DevTools is already open on the tab. browser_cdp and browser_screenshot attach on their own.',
-    'browser.detach_debugger': 'Detach the Chrome debugger and remove the debug banner for a tab.',
-    'browser.cdp': 'Send a raw Chrome DevTools Protocol command to a tab. Use this for anything without a dedicated tool, for example Runtime.evaluate to run JavaScript in the page, or Emulation.setDeviceMetricsOverride to resize the viewport. The debugger attaches automatically.',
-    'browser.get_cdp_events': 'Read buffered CDP events for a tab, optionally filtered by method, for example Runtime.consoleAPICalled or Network.responseReceived. Only events seen since the debugger attached are buffered, up to 1000 per tab.',
-
     'browser.click': 'Click an element returned by browser_get_interactives.',
     'browser.double_click': 'Double-click an element returned by browser_get_interactives.',
     'browser.type': 'Type into an editable element returned by browser_get_interactives.',
@@ -261,14 +233,8 @@ function descriptionFor(tool: ToolName): string {
     'browser.select_option': 'Choose options in a select element by value.',
     'browser.drag': 'Drag one element from browser_get_interactives onto another.',
     'browser.wait_for_element': 'Wait for an element from browser_get_interactives to become attached, detached, visible, or hidden. Get a fresh element_id if the page revision changed while waiting.',
-    'browser.scroll': 'Scroll the document by a pixel delta, reporting whether it reached the top or bottom. Use browser_scroll_at to scroll a nested container instead.',
+    'browser.scroll': 'Scroll the document by a pixel delta, reporting whether it reached the top or bottom.',
 
-    'browser.mouse_move': 'Move the mouse to viewport coordinates, to trigger hover-only menus. There is no element-based hover tool.',
-    'browser.click_at': 'Click at raw viewport coordinates. Prefer browser_click, which takes an element_id and verifies the element is still visible and enabled on the current page revision.',
-    'browser.drag_at': 'Drag between raw viewport coordinates along an interpolated path, for canvas and map interactions. Prefer browser_drag for HTML elements.',
-    'browser.scroll_at': 'Send a mouse wheel event at viewport coordinates, so a nested scroll container scrolls instead of the document.',
-    'browser.press_key': 'Send a key press to the focused element, including keys such as Enter or Tab that trigger actions. Supports optional modifier keys. Prefer browser_press to target a specific element.',
-    'browser.type_text': 'Insert text into whatever is currently focused, without targeting an element. Prefer browser_type for a specific element.',
     'browser.handle_dialog': 'Accept or dismiss a JavaScript alert, confirm, or prompt. Supply prompt_text when accepting a prompt.',
 
     'browser.set_files': 'Set files on a file input element using absolute local paths.',
