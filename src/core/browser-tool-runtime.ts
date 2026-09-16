@@ -122,6 +122,10 @@ export class BrowserToolRuntime {
           session: await this.requireSessions().release(request.args.session_id, request.args.tab_id),
           released_tab_id: request.args.tab_id,
         };
+      case 'browser.reset_sessions': {
+        const reset = await this.requireSessions().reset();
+        return { released_tab_ids: reset.releasedTabIds, session_count: reset.sessionCount };
+      }
       case 'browser.close_tab':
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         await this.tabs.close(request.args.tab_id);
@@ -170,12 +174,12 @@ export class BrowserToolRuntime {
         return { tab_id: request.args.tab_id, ...page };
       }
       case 'browser.get_console_messages': {
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        await this.requireTabAccess(request.session_id, request.args.tab_id);
         const collected = await this.pageAgent.getConsoleMessages(request.args.tab_id, request.args.frame_id ?? TOP_FRAME_ID);
         return { tab_id: request.args.tab_id, ...selectConsoleMessages(collected, request.args) };
       }
       case 'browser.get_accessibility_tree': {
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        await this.requireTabAccess(request.session_id, request.args.tab_id);
         const state = await this.pageAgent.getState(request.args.tab_id, TOP_FRAME_ID);
         const value = await this.requireDebugger().send(request.args.tab_id, 'Accessibility.getFullAXTree');
         const nodes = getArray(value, 'nodes');
@@ -310,7 +314,8 @@ export class BrowserToolRuntime {
       case 'browser.get_interactives':
         return this.getInteractives(request.args.tab_id, request.args.frame_id, request.args, request.session_id);
       case 'browser.get_page_content': {
-        await this.assertSessionAccess(request.session_id, request.args.tab_id);
+        // Checked first so a closed tab reports tab_not_found instead of a Page Agent failure.
+        await this.requireTabAccess(request.session_id, request.args.tab_id);
         if (!this.pageAgent.getPageContent) throw new ToolFailure(createToolError('invalid_request', 'Page content extraction is unavailable.', false));
         const frameId = request.args.frame_id ?? TOP_FRAME_ID;
         const result = await this.pageAgent.getPageContent(request.args.tab_id, frameId, {

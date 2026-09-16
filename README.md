@@ -448,7 +448,9 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查�
 
 - 自动隔离的前提是“一个对话 = 一个 MCP Server 进程”（PiDeck 给每个对话起独立进程，满足此条件）。若某个客户端把多个对话复用到同一个进程，它们会共用同一个会话，此时可用显式 `session_id` 手动区分；
 - 主动 `browser.open` 一个已有 `tab_id`（即导航已有页签）会建立归属但**不**动你的标签栏；
-- 租约存在扩展的 `storage.session` 里，**Chrome 重启会清空租约**；但会话记录在 `storage.local` 里是持久的。目前唯一的已知副作用是：某个对话被直接关掉（没有调 `end_session`）时，它占用过的页签会直到 Chrome 重启前一直被认定为该会话所有；重跑一次 `browser.claim_tab` 也接管不了（会报 `tab_in_use`），暂时只能重启 Chrome 或从那个会话里 `release_tab`/`end_session`。
+- 租约存在扩展的 `storage.session` 里（**Chrome 重启即清空**），会话记录在 `storage.local` 里是持久的；
+- **空闲自动回收**：某个对话被直接关掉（没调 `end_session`）时，它占用过的页签在**空闲 30 分钟**后自动释放，别的对话即可接管；正在使用的页签会续租，不会被误抢；
+- **手动兑底**：`browser.reset_sessions` 一次性释放所有会话与租约并解除分组，用于页签被一个已经消失的对话卡住的情况。
 
 ## 8. 更新、移动目录、卸载
 
@@ -564,7 +566,7 @@ npm run native-host:uninstall:macos
 | 键盘 / 文本 / 对话框 | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
 | 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
 | Console / Network | `browser.get_console_messages` / `browser.get_network_requests` |
-| 会话与标签页归属 | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` |
+| 会话与标签页归属 | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` / `browser.reset_sessions` |
 | 调试器与 CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
 
 补充说明：
@@ -1196,7 +1198,9 @@ Caveats:
 
 - automatic isolation assumes **one conversation = one MCP server process** (PiDeck starts a separate process per conversation, which satisfies this). If a client multiplexes several conversations through one process, they share a session and you must pass an explicit `session_id` to separate them;
 - `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
-- leases live in the extension's `storage.session`, so **restarting Chrome clears them**, while session records persist in `storage.local`. The one known side effect: if a conversation is closed without calling `end_session`, the tabs it claimed stay owned by it until Chrome restarts, and another conversation cannot take them over (`tab_in_use`) — release them from that session or restart Chrome.
+- leases live in the extension's `storage.session` (**restarting Chrome clears them**), while session records persist in `storage.local`;
+- **idle reclaim**: if a conversation is closed without calling `end_session`, the tabs it claimed are freed after **30 minutes of inactivity** and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
+- **manual escape hatch**: `browser_reset_sessions` releases every session and lease at once and ungroups their tabs, for tabs stuck on a conversation that is gone.
 
 ## 8. Updating, moving, uninstalling
 
@@ -1307,7 +1311,7 @@ Redact the token and any sensitive page data before sharing logs.
 | Keyboard / text / dialogs | `browser.press_key` / `browser.type_text` / `browser.handle_dialog` |
 | Files | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
 | Console / Network | `browser.get_console_messages` / `browser.get_network_requests` |
-| Sessions and tab ownership | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` |
+| Sessions and tab ownership | `browser.start_session` / `browser.end_session` / `browser.name_session` / `browser.claim_tab` / `browser.release_tab` / `browser.reset_sessions` |
 | Debugger and CDP | `browser.attach_debugger` / `browser.detach_debugger` / `browser.cdp` / `browser.get_cdp_events` |
 
 - `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.press_key`, `browser.click`, `browser.double_click`, `browser.click_at`.

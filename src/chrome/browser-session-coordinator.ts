@@ -14,11 +14,26 @@ interface TabLease {
   turn_id: string | null;
   origin: TabClaimOrigin;
   claimed_at: number;
+  /** Absent on leases written before the idle timeout existed. */
+  last_used_at?: number;
 }
 
 const SESSIONS_STORAGE_KEY = 'browserControlSessions';
 const LEASES_STORAGE_KEY = 'browserControlTabLeases';
 const DEFAULT_GROUP_TITLE = 'AI Browser';
+
+/**
+ * A conversation can disappear without ending its session (the client is closed, the process is
+ * killed), and its leases would then block those tabs forever. Leases therefore expire after this
+ * much idle time: the tab is freed and the next session that needs it can take it over.
+ */
+const LEASE_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+/** Persisting every use would write on each element action; this keeps the stored value fresh enough. */
+const LEASE_TOUCH_PERSIST_MS = 60 * 1000;
+
+export function isLeaseIdle(lease: TabLease, now: number): boolean {
+  return now - (lease.last_used_at ?? lease.claimed_at) >= LEASE_IDLE_TIMEOUT_MS;
+}
 
 /**
  * An unnamed session still needs a group title the user can tell apart from the other conversations,
@@ -124,6 +139,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
         turn_id: turnId ?? null,
         origin,
         claimed_at: lease?.claimed_at ?? Date.now(),
+        last_used_at: Date.now(),
       });
       if (!session.tab_ids.includes(tabId)) session.tab_ids.push(tabId);
       if (group) await this.ensureGrouped(session, tabId);
@@ -156,14 +172,60 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     await this.ensureInitialized();
     if (sessionId === undefined) return;
     const lease = this.leases.get(tabId);
-    if (lease?.session_id !== sessionId) {
+    if (lease === undefined) return;
+    if (lease.session_id === sessionId) {
+      await this.touchLease(lease);
+      return;
+    }
+    if (!isLeaseIdle(lease, Date.now())) {
       throw new ToolFailure(createToolError(
         'tab_in_use',
         `Tab ${tabId} is not leased to session ${sessionId}. Claim it before use.`,
         false,
-        { tab_id: tabId, owning_session_id: lease?.session_id ?? null },
+        { tab_id: tabId, owning_session_id: lease.session_id },
       ));
     }
+    // The owner went away without releasing, so free the tab instead of blocking it forever.
+    await this.enqueue(() => this.dropLease(tabId, lease.session_id));
+  }
+
+  /**
+   * Releases every session and lease. This is the escape hatch for a conversation that was closed
+   * without ending its session: without it those tabs stay owned until Chrome restarts.
+   */
+  public async reset(): Promise<{ releasedTabIds: number[]; sessionCount: number }> {
+    return this.enqueue(async () => {
+      const releasedTabIds = [...this.leases.keys()];
+      const sessionCount = this.sessions.size;
+      for (const session of this.sessions.values()) {
+        await this.ungroupManagedTabs(session, [...session.tab_ids]);
+      }
+      this.leases.clear();
+      this.sessions.clear();
+      await this.persistAll();
+      return { releasedTabIds, sessionCount };
+    });
+  }
+
+  private async touchLease(lease: TabLease): Promise<void> {
+    const now = Date.now();
+    const previous = lease.last_used_at ?? lease.claimed_at;
+    lease.last_used_at = now;
+    if (now - previous < LEASE_TOUCH_PERSIST_MS) return;
+    await this.persistAll();
+  }
+
+  /** Drops a lease that no longer has a live owner, and forgets the tab on that session. */
+  private async dropLease(tabId: number, ownerSessionId: string): Promise<void> {
+    const lease = this.leases.get(tabId);
+    if (lease === undefined || lease.session_id !== ownerSessionId) return;
+    this.leases.delete(tabId);
+    const session = this.sessions.get(ownerSessionId);
+    if (session !== undefined) {
+      session.tab_ids = session.tab_ids.filter((id) => id !== tabId);
+      if (session.tab_ids.length === 0) session.group_id = null;
+    }
+    await this.persistAll();
   }
 
   private async claimChildTab(tabId: number, openerTabId: number): Promise<void> {
@@ -324,5 +386,6 @@ function isStoredLease(value: unknown): value is { tab_id: number; lease: TabLea
   return typeof lease.session_id === 'string' &&
     (typeof lease.turn_id === 'string' || lease.turn_id === null) &&
     (lease.origin === 'agent' || lease.origin === 'user' || lease.origin === 'child') &&
-    typeof lease.claimed_at === 'number';
+    typeof lease.claimed_at === 'number' &&
+    (lease.last_used_at === undefined || typeof lease.last_used_at === 'number');
 }

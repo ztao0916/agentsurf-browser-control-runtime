@@ -36,6 +36,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'browser.name_session',
   'browser.claim_tab',
   'browser.release_tab',
+  'browser.reset_sessions',
   'browser.close_tab',
   'browser.back',
   'browser.forward',
@@ -230,6 +231,8 @@ function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
         session_id: requireString(args.session_id, 'args.session_id'),
         tab_id: requireInteger(args.tab_id, 'args.tab_id'),
       };
+    case 'browser.reset_sessions':
+      return {};
     case 'browser.close_tab':
     case 'browser.back':
     case 'browser.forward':

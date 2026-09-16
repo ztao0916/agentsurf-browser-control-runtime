@@ -297,6 +297,7 @@ interface ClaimCall {
 
 class FakeSessionCoordinator implements SessionCoordinator {
   public readonly claims: ClaimCall[] = [];
+  public resetCount = 0;
 
   public start(sessionId?: string): Promise<BrowserSessionInfo> {
     return Promise.resolve(sessionInfo(sessionId ?? 'session_default'));
@@ -304,6 +305,11 @@ class FakeSessionCoordinator implements SessionCoordinator {
 
   public end(): Promise<{ releasedTabIds: number[] }> {
     return Promise.resolve({ releasedTabIds: [] });
+  }
+
+  public reset(): Promise<{ releasedTabIds: number[]; sessionCount: number }> {
+    this.resetCount += 1;
+    return Promise.resolve({ releasedTabIds: [42], sessionCount: 2 });
   }
 
   public name(sessionId: string): Promise<BrowserSessionInfo> {
@@ -605,6 +611,23 @@ describe('BrowserToolRuntime', () => {
     const navigated = await runtimeWithSessions.handle(request('browser.open', { url: 'https://open.example/', tab_id: 7 }, 's1'));
     expect(navigated.ok).toBe(true);
     expect(sessions.claims.at(-1)).toEqual({ sessionId: 's1', tabId: 7, origin: 'agent', group: false });
+  });
+
+  it('routes reset_sessions to the coordinator', async () => {
+    const sessions = new FakeSessionCoordinator();
+    const runtimeWithSessions = new BrowserToolRuntime(
+      new FakeTabsAdapter(),
+      new FakePageAgentClient(),
+      new FakeScreenshotAdapter(),
+      sessions,
+    );
+
+    const response = await runtimeWithSessions.handle(request('browser.reset_sessions', {}));
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.result).toEqual({ released_tab_ids: [42], session_count: 2 });
+    }
+    expect(sessions.resetCount).toBe(1);
   });
 
   it('rejects unsupported URL protocols', async () => {

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { TOOL_NAMES } from '../core/protocol/schemas';
 import type { ToolName } from '../core/protocol/tool-contract';
@@ -23,6 +24,7 @@ const schemas = {
   'browser.name_session': { ...sessionId, name: z.string().min(1) },
   'browser.claim_tab': { ...sessionId, tab_id: tabId.tab_id, group: z.boolean().optional() },
   'browser.release_tab': { ...sessionId, tab_id: tabId.tab_id },
+  'browser.reset_sessions': {},
   'browser.close_tab': tabId,
   'browser.back': tabId,
   'browser.forward': tabId,
@@ -128,6 +130,34 @@ function toContent(tool: ToolName, result: unknown): ContentBlock[] {
   ];
 }
 
+// One MCP server process serves one conversation (the client spawns a process per conversation), so
+// the server can own a session by itself: tabs it opens are claimed and grouped automatically and
+// another conversation is refused them, without the agent passing anything. An explicit session_id
+// in the tool arguments wins and becomes this conversation's default from then on, which keeps the
+// manual handover flow working.
+let conversationSessionId = `mcp_${randomUUID()}`;
+const startedSessions = new Set<string>();
+
+/** Created on first use, so a bridge that is not up yet still reports its own error on the real call. */
+async function ensureSession(sessionId: string): Promise<void> {
+  if (startedSessions.has(sessionId)) return;
+  try {
+    await callLocalBridge('browser.start_session', {}, sessionId);
+    startedSessions.add(sessionId);
+  } catch {
+    // Ignored on purpose: the request that follows returns the actionable error.
+  }
+}
+
+/** `browser_start_session` may generate the id itself, so adopt whatever it reports back. */
+function adoptStartedSession(result: unknown): void {
+  if (!isRecord(result) || !isRecord(result['session'])) return;
+  const sessionId = result['session']['session_id'];
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return;
+  conversationSessionId = sessionId;
+  startedSessions.add(sessionId);
+}
+
 export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
     { name: 'agentsurf', version: '0.1.0' },
@@ -152,8 +182,21 @@ export async function startMcpServer(): Promise<void> {
     }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
       try {
         // Forwarded at the request root, and left in args for the session tools that read it there.
-        const sessionId = typeof args.session_id === 'string' ? args.session_id : undefined;
-        const result = await callLocalBridge(tool, args, sessionId);
+        const explicit = typeof args['session_id'] === 'string' ? args['session_id'] : undefined;
+        if (explicit !== undefined) conversationSessionId = explicit;
+        await ensureSession(conversationSessionId);
+        let result: unknown;
+        try {
+          result = await callLocalBridge(tool, args, conversationSessionId);
+        } catch (error: unknown) {
+          // `browser_reset_sessions` (or a cleared extension store) can delete the session this
+          // conversation was using, so recreate it once instead of failing the call.
+          if (!(error instanceof LocalBridgeError) || error.toolError.code !== 'session_not_found') throw error;
+          startedSessions.delete(conversationSessionId);
+          await ensureSession(conversationSessionId);
+          result = await callLocalBridge(tool, args, conversationSessionId);
+        }
+        if (tool === 'browser.start_session') adoptStartedSession(result);
         return { content: toContent(tool, result) };
       } catch (error: unknown) {
         if (error instanceof LocalBridgeError) {
@@ -180,6 +223,7 @@ function descriptionFor(tool: ToolName): string {
     'browser.name_session': 'Rename a session so it is easier to recognize. The name becomes the Chrome tab group title.',
     'browser.claim_tab': 'Take over a tab this session does not own yet, for example a page the user already had open. The tab joins the session group unless you pass group: false, and other sessions are refused it from then on.',
     'browser.release_tab': 'Give up a session ownership of a tab.',
+    'browser.reset_sessions': 'Release every browser session and tab lease at once, and ungroup the tabs those sessions held. Use it to recover tabs stuck as owned by a conversation that was closed without ending its session.',
     'browser.list_tabs': 'List Chrome tabs without changing the active tab. Start here to find a tab_id.',
     'browser.get_frames': 'List the frames inside a tab: iframes and blank-src app frames included. Frame 0 is the top document. Pass a returned frame_id to page reads and element actions to work inside that frame.',
     'browser.open': 'Open a URL in Chrome, or navigate an existing tab when tab_id is given.',

@@ -9,4 +9,6 @@ export interface SessionCoordinator {
   claim(sessionId: string, turnId: string | undefined, tabId: number, origin: TabClaimOrigin, group: boolean): Promise<BrowserSessionInfo>;
   release(sessionId: string, tabId: number): Promise<BrowserSessionInfo>;
   assertAccess(sessionId: string | undefined, tabId: number): Promise<void>;
+  /** Escape hatch: drop every session and lease, for tabs stuck on a conversation that is gone. */
+  reset(): Promise<{ releasedTabIds: number[]; sessionCount: number }>;
 }

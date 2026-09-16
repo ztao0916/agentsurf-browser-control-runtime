@@ -12,6 +12,7 @@ export type ToolName =
   | 'browser.name_session'
   | 'browser.claim_tab'
   | 'browser.release_tab'
+  | 'browser.reset_sessions'
   | 'browser.close_tab'
   | 'browser.back'
   | 'browser.forward'
@@ -121,6 +122,11 @@ export interface ClaimTabArgs {
 export interface ReleaseTabArgs {
   session_id: string;
   tab_id: number;
+}
+
+export interface ResetSessionsResult {
+  released_tab_ids: number[];
+  session_count: number;
 }
 
 export interface TabTargetArgs {
@@ -387,6 +393,7 @@ export interface ToolArguments {
   'browser.name_session': NameSessionArgs;
   'browser.claim_tab': ClaimTabArgs;
   'browser.release_tab': ReleaseTabArgs;
+  'browser.reset_sessions': Record<string, never>;
   'browser.close_tab': TabTargetArgs;
   'browser.back': TabTargetArgs;
   'browser.forward': TabTargetArgs;
@@ -698,6 +705,7 @@ export interface ToolResults {
   'browser.name_session': BrowserSessionResult;
   'browser.claim_tab': BrowserSessionResult;
   'browser.release_tab': ReleaseTabResult;
+  'browser.reset_sessions': ResetSessionsResult;
   'browser.close_tab': CloseTabResult;
   'browser.back': SwitchTabResult;
   'browser.forward': SwitchTabResult;
