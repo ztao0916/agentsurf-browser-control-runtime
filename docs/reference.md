@@ -214,7 +214,8 @@ MutationObserver 只筛选：交互元素增删、已注册元素关键属性变
 - Content Script 以 `all_frames: true` + `match_about_blank: true` 注入，因此 `about:blank` / `srcdoc` 这类同源框架也有 Page Agent；
 - 请求通过 `chrome.tabs.sendMessage(tabId, msg, { frameId })` **定向**发送（广播会让多个 Agent 抢答同一响应）；
 - 按需注入也用 `scripting.executeScript({ target: { tabId, frameIds: [frameId] } })` 定向；
-- MAIN world 的 Console 采集是**尽力而为**：页面 CSP 可能拦掉它，但不会连带让 Page Agent 失效（此时 `available: false`）。
+- MAIN world 的 Console 采集是**尽力而为**：只在 session 认领的 tab 上安装（认领时对该 tab 全部 frame 注入，之后每次导航提交按 frame 重新注入），页面 CSP 可能拦掉它，但不会连带让 Page Agent 失效（此时 `available: false`）；补丁与文档同生命周期，**释放租约不会摘掉它**，要等该 tab 下次导航；
+- 补丁让页面自己的 `console.error` 在 `chrome://extensions` 里被记为**扩展的错误**（调用原生方法的脚本是我们），这正是采集器只在认领的 tab 上安装的原因：没被 agent 操作的页面保持干净的 `console`；
 
 ### 5.4 截图、光标、文件
 

@@ -223,7 +223,7 @@ function descriptionFor(tool: ToolName): string {
     'browser.screenshot': 'Capture a screenshot of a Chrome tab as an image. Works on a background tab. Prefer this over describing a page in text when layout or visual state matters.',
     'browser.observe': 'Capture page state, interactive elements, accessibility data, and a screenshot in one call.',
 
-    'browser.get_console_messages': 'Read page console output, uncaught exceptions, and unhandled rejections. Check available: false, which means the collector was not running and an empty list is not proof of silence.',
+    'browser.get_console_messages': 'Read page console output, uncaught exceptions, and unhandled rejections. Collection runs only on tabs this session has claimed and restarts on navigation, so available: false means the collector was not running and an empty list is not proof of silence.',
     'browser.click': 'Click an element returned by browser_get_interactives.',
     'browser.double_click': 'Double-click an element returned by browser_get_interactives.',
     'browser.type': 'Type into an editable element returned by browser_get_interactives.',

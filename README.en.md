@@ -436,7 +436,7 @@ browser_get_console_messages {"tab_id": 123, "frame_id": 561}
 browser_observe {"tab_id": 123}                              # state + interactives + AX + screenshot
 ```
 
-Console collection runs in the page's MAIN world so it sees the page's own output. `available: false` means **the collector was not present — an empty list is not proof of silence**.
+Console collection runs in the page's MAIN world so it sees the page's own output. It is installed **only on tabs a session has claimed, and re-injected after every navigation**: a page the agent never touched keeps its own `console` untouched. `available: false` means **the collector was not present — an empty list is not proof of silence**.
 
 ### 6.5 Parallel conversations (isolated by default)
 

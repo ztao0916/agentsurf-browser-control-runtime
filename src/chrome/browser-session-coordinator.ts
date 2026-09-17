@@ -57,6 +57,13 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
   private initializePromise: Promise<void> | null = null;
   private mutationQueue: Promise<void> = Promise.resolve();
 
+  /**
+   * A leased tab is one an agent drives, which is also the only place the MAIN-world console
+   * collector may patch the page's console. Assigned after construction because the collector reads
+   * leases back from this object.
+   */
+  public onLease: ((tabId: number) => void) | null = null;
+
   public constructor() {
     chrome.tabs.onRemoved.addListener((tabId) => void this.enqueue(() => this.removeTab(tabId)));
     chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
@@ -146,6 +153,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
         claimed_at: lease?.claimed_at ?? Date.now(),
         last_used_at: Date.now(),
       });
+      this.onLease?.(tabId);
       if (!session.tab_ids.includes(tabId)) session.tab_ids.push(tabId);
       if (group) await this.ensureGrouped(session, tabId);
       await this.persistAll();
@@ -290,6 +298,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     const session = this.sessions.get(openerLease.session_id);
     if (session === undefined) return;
     this.leases.set(tabId, { ...openerLease, origin: 'child', claimed_at: Date.now() });
+    this.onLease?.(tabId);
     session.tab_ids.push(tabId);
     await this.ensureGrouped(session, tabId);
     await this.persistAll();
@@ -338,6 +347,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     if (lease === undefined) return;
     this.leases.delete(removedTabId);
     this.leases.set(addedTabId, lease);
+    this.onLease?.(addedTabId);
     const session = this.sessions.get(lease.session_id);
     if (session !== undefined) {
       session.tab_ids = session.tab_ids.map((id) => id === removedTabId ? addedTabId : id);

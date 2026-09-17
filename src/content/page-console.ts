@@ -15,8 +15,10 @@ declare global {
 }
 
 /**
- * Runs in the MAIN world at document_start so the page's own console output is observable. Patching
- * `console` from the isolated world would only see the content script's own messages.
+ * Runs in the page's MAIN world so the page's own console output is observable. Patching `console`
+ * from the isolated world would only see the content script's own messages. Because this patch makes
+ * Chrome blame the extension for the page's console errors, it is injected only into tabs a session
+ * drives (`ChromeConsoleCollector`), and the guard below keeps repeat injections harmless.
  */
 function install(): void {
   const entries: ConsoleEntry[] = [];

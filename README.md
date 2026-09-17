@@ -452,7 +452,7 @@ browser_get_console_messages {"tab_id": 123, "frame_id": 561}
 browser_observe {"tab_id": 123}                       # 一次拿 状态+交互元素+可访问性树+截图
 ```
 
-Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查询结果里 **`available: false` 表示当时采集器不在场，不能当成“页面没有报错”**。
+Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**采集器只在 agent 认领的 tab 上安装，并在每次导航后重新注入**：没被 agent 操作过的页面完全不碰它的 `console`。查询结果里 **`available: false` 表示当时采集器不在场，不能当成「页面没有报错」**。
 
 ### 6.5 多对话并行（默认自动隔离）
 

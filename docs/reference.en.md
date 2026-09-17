@@ -195,7 +195,8 @@ An `element_id` is opaque; the DOM reference lives only in the content script. B
 - content scripts run with `all_frames: true` + `match_about_blank: true`, so `about:blank` / `srcdoc` frames get a Page Agent too;
 - requests are addressed with `chrome.tabs.sendMessage(tabId, msg, { frameId })` — without a frame ID the message would race multiple agents for one response;
 - on-demand injection targets one frame with `scripting.executeScript({ target: { tabId, frameIds: [frameId] } })`;
-- MAIN-world console collection is best effort: a page CSP may block it without taking the Page Agent down (the result then reports `available: false`).
+- MAIN-world console collection is best effort: it is installed only on tabs a session has claimed (every frame at claim time, then per frame on each navigation commit), and a page CSP may block it without taking the Page Agent down (the result then reports `available: false`); the patch lives as long as the document, so **releasing a lease does not remove it** — the tab's next navigation does;
+- the patch makes the page's own `console.error` calls show up as **this extension's errors** in `chrome://extensions`, because the script calling the real console method is ours. That is exactly why it only runs on claimed tabs: a page the agent never touches keeps a clean console;
 
 ### 5.4 Screenshots, cursor, files
 
