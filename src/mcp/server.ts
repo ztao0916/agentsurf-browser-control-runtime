@@ -66,11 +66,20 @@ const optionalSessionId = {
   ),
 };
 
+const optionalSessionName = {
+  session_name: z.string().min(1).optional().describe(
+    'Name for this conversation\'s Chrome tab group, so the tab bar reads as the task instead of a generated id. Sticky: pass it once when the name becomes clear, and again only to rename.',
+  ),
+};
+
 // Every tool accepts a session so ownership can be enforced, but a tool that declares its own
 // session_id keeps its stricter schema because its own definition is spread last. The shape is
 // widened from the literal map, so the conversion is intentional.
 const toolSchemas = Object.fromEntries(
-  Object.entries(schemas).map(([tool, schema]) => [tool, { ...optionalSessionId, ...schema }]),
+  Object.entries(schemas).map(([tool, schema]) => [
+    tool,
+    { ...optionalSessionId, ...optionalSessionName, ...schema },
+  ]),
 ) as unknown as typeof schemas;
 
 type ContentBlock = CallToolResult['content'][number];
@@ -120,15 +129,26 @@ function toContent(tool: ToolName, result: unknown): ContentBlock[] {
 // in the tool arguments wins and becomes this conversation's default from then on, which keeps the
 // manual handover flow working.
 let conversationSessionId = `mcp_${randomUUID()}`;
+let conversationSessionName: string | undefined;
 const startedSessions = new Set<string>();
 
-/** Created on first use, so a bridge that is not up yet still reports its own error on the real call. */
-async function ensureSession(sessionId: string): Promise<void> {
-  if (startedSessions.has(sessionId)) return;
+/**
+ * Created on first use, so a bridge that is not up yet still reports its own error on the real call.
+ * A name that only arrives on a later call is sent too: the tab group is normally created by the
+ * first claimed tab, so without that follow-up the group would keep its generated title forever.
+ */
+async function ensureSession(sessionId: string, name?: string): Promise<void> {
+  const renamed = name !== undefined && name !== conversationSessionName;
+  if (renamed) conversationSessionName = name;
+  if (startedSessions.has(sessionId) && !renamed) return;
   try {
     // The id has to travel in args as well as at the request root: browser.start_session reads it
     // from args and would otherwise create a session under a different generated id.
-    await callLocalBridge('browser.start_session', { session_id: sessionId }, sessionId);
+    await callLocalBridge(
+      'browser.start_session',
+      { session_id: sessionId, ...(name === undefined ? {} : { name }) },
+      sessionId,
+    );
     startedSessions.add(sessionId);
   } catch {
     // Ignored on purpose: the request that follows returns the actionable error.
@@ -156,6 +176,7 @@ export async function startMcpServer(): Promise<void> {
         'browser_list_tabs hides tabs held by another conversation and reports the count instead; a tab that is not yours is refused with tab_in_use.',
         'Ask the user before consequential actions such as submitting, purchasing, deleting, uploading, or sending messages.',
         'This conversation already owns a browser session: tabs you open are claimed and grouped automatically, and another conversation is refused them. Use browser_claim_tab to take over a tab the user already had open; that claims and groups it too.',
+        'Pass session_name on any call once you know what the task is: it names this conversation\'s Chrome tab group, so the tab bar reads as the task instead of a generated id. It sticks for the conversation, and without it the group falls back to the first page you touched.',
       ].join(' '),
     },
   );
@@ -172,7 +193,8 @@ export async function startMcpServer(): Promise<void> {
         // Forwarded at the request root, and left in args for the session tools that read it there.
         const explicit = typeof args['session_id'] === 'string' ? args['session_id'] : undefined;
         if (explicit !== undefined) conversationSessionId = explicit;
-        await ensureSession(conversationSessionId);
+        const name = typeof args['session_name'] === 'string' ? args['session_name'] : undefined;
+        await ensureSession(conversationSessionId, name);
         let result: unknown;
         try {
           result = await callLocalBridge(tool, args, conversationSessionId);

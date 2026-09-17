@@ -21,6 +21,7 @@ interface TabLease {
 const SESSIONS_STORAGE_KEY = 'browserControlSessions';
 const LEASES_STORAGE_KEY = 'browserControlTabLeases';
 const DEFAULT_GROUP_TITLE = 'AI Browser';
+const MAX_GROUP_TITLE_LENGTH = 80;
 
 /**
  * A conversation can disappear without ending its session (the client is closed, the process is
@@ -77,17 +78,28 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     chrome.tabGroups.onRemoved.addListener((group) => void this.enqueue(() => this.removeGroup(group.id)));
   }
 
-  public async start(sessionId = crypto.randomUUID(), name?: string): Promise<BrowserSessionInfo> {
+  // `sessionId` is a plain string, not the UUID literal the default would otherwise infer: the MCP
+  // layer forwards a session_id the caller chose, and that id is arbitrary.
+  public async start(sessionId: string = crypto.randomUUID(), name?: string): Promise<BrowserSessionInfo> {
     return this.enqueue(async () => {
+      const normalized = name === undefined ? undefined : normalizeName(name);
       const existing = this.sessions.get(sessionId);
       if (existing !== undefined) {
-        if (name !== undefined && existing.name !== name) existing.name = normalizeName(name);
+        if (normalized !== undefined && existing.name !== normalized) {
+          existing.name = normalized;
+          // A group is titled when a tab joins it, so a rename has to refresh it as well: the
+          // conversation names itself on a later call than the one that created the group.
+          if (existing.group_id !== null) {
+            await chrome.tabGroups.update(existing.group_id, { title: groupTitleFor(existing) })
+              .catch(() => undefined);
+          }
+        }
         await this.persistSessions();
         return toSessionInfo(existing);
       }
       const session: StoredSession = {
         session_id: sessionId,
-        name: name === undefined ? null : normalizeName(name),
+        name: normalized ?? null,
         tab_ids: [],
         group_id: null,
       };
@@ -316,10 +328,22 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     });
     session.group_id = groupId;
     await chrome.tabGroups.update(groupId, {
-      title: groupTitleFor(session),
+      title: await this.titleFor(session, tabId),
       color: 'blue',
       collapsed: false,
     });
+  }
+
+  /**
+   * An unnamed session is titled after the first tab it groups. That tab is what the conversation
+   * started on, so its page title says more than a generated id does. Later tabs never rename the
+   * group: the user has already read the title by then, and it would flicker on every claim.
+   */
+  private async titleFor(session: StoredSession, tabId: number): Promise<string> {
+    if (session.name !== null) return session.name;
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const title = (tab?.title ?? '').trim();
+    return title === '' ? groupTitleFor(session) : title.slice(0, MAX_GROUP_TITLE_LENGTH);
   }
 
   private async ungroupManagedTabs(session: StoredSession, tabIds: number[]): Promise<void> {
@@ -439,7 +463,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
 }
 
 function normalizeName(name: string): string {
-  return name.trim().slice(0, 80) || DEFAULT_GROUP_TITLE;
+  return name.trim().slice(0, MAX_GROUP_TITLE_LENGTH) || DEFAULT_GROUP_TITLE;
 }
 
 function toSessionInfo(session: StoredSession): BrowserSessionInfo {

@@ -442,7 +442,8 @@ Console collection runs in the page's MAIN world so it sees the page's own outpu
 
 Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
 
-- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**, titled `AI · <4 chars>` by default;
+- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**; the title **defaults to the title of the first page the conversation touches** (for example "ZenTao - Task 17824"), falling back to `AI · <4 chars>` when that page has no title;
+- **to make the group read as the task**, pass `session_name` on any call (for example `{"tab_id": 123, "session_name": "ZenTao 17824"}`): it sticks for the conversation, renames an existing group on the spot, and stops page titles from overriding it;
 - another conversation is refused those tabs (`tab_in_use`), so conversations stop stepping on each other;
 - use `browser_claim_tab` to take over a tab the user already had open: it claims and, by default, groups it (pass `group: false` to claim without moving it);
 - `browser_list_tabs` returns this conversation's tabs plus unclaimed ones and reports the rest in `other_session_tabs`; pass `include_all: true` to see every tab (for scripts and troubleshooting);

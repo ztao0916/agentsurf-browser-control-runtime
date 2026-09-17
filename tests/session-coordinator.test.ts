@@ -87,3 +87,96 @@ describe('startup cleanup of groups whose lease is gone', () => {
     expect(ungroup).not.toHaveBeenCalled();
   });
 });
+
+interface GroupingStub {
+  update: ReturnType<typeof vi.fn>;
+}
+
+/** One stored session with no group yet, ready to be titled by its first claimed tab. */
+function stubGrouping(options: { name?: string | null; groupId?: number | null; pageTitle?: string } = {}): GroupingStub {
+  const update = vi.fn(() => Promise.resolve());
+  const listener = { addListener: () => undefined };
+  vi.stubGlobal('chrome', {
+    storage: {
+      local: {
+        get: () => ({
+          browserControlSessions: [
+            { session_id: 's1', name: options.name ?? null, tab_ids: [], group_id: options.groupId ?? null },
+          ],
+        }),
+        set: () => undefined,
+      },
+      session: { get: () => ({ browserControlTabLeases: [] }), set: () => undefined },
+    },
+    tabs: {
+      get: (tabId: number) => Promise.resolve({
+        id: tabId,
+        groupId: -1,
+        ...(options.pageTitle === undefined ? {} : { title: options.pageTitle }),
+      }),
+      group: () => Promise.resolve(GROUP_ID),
+      ungroup: vi.fn(() => Promise.resolve()),
+      onRemoved: listener,
+      onReplaced: listener,
+      onCreated: listener,
+    },
+    tabGroups: {
+      get: () => Promise.resolve({ id: GROUP_ID }),
+      update,
+      onRemoved: listener,
+    },
+  });
+  return { update };
+}
+
+describe('naming a group from the page it started on', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('titles a new group after the first page instead of a generated id', async () => {
+    const { update } = stubGrouping({ pageTitle: '禅道 - 任务 17824' });
+
+    await new ChromeBrowserSessionCoordinator().claim('s1', undefined, 11, 'user', true);
+
+    expect(update.mock.calls[0]?.[1]).toMatchObject({ title: '禅道 - 任务 17824' });
+  });
+
+  it('falls back to the generated title when the page has none', async () => {
+    const { update } = stubGrouping();
+
+    await new ChromeBrowserSessionCoordinator().claim('s1', undefined, 11, 'user', true);
+
+    expect(update.mock.calls[0]?.[1]).toMatchObject({ title: 'AI · S1' });
+  });
+
+  it('keeps an explicit name rather than the page title', async () => {
+    const { update } = stubGrouping({ name: '禅道排查', pageTitle: '禅道 - 任务 17824' });
+
+    await new ChromeBrowserSessionCoordinator().claim('s1', undefined, 11, 'user', true);
+
+    expect(update.mock.calls[0]?.[1]).toMatchObject({ title: '禅道排查' });
+  });
+});
+
+describe('renaming an existing group', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('retitles the group when the conversation names itself after the group exists', async () => {
+    const { update } = stubGrouping({ groupId: GROUP_ID, pageTitle: '禅道 - 任务 17824' });
+
+    await new ChromeBrowserSessionCoordinator().start('s1', '禅道 17824');
+
+    expect(update.mock.calls.map((call: unknown[]) => call[1])).toEqual([{ title: '禅道 17824' }]);
+  });
+
+  it('leaves the group alone when the name has not changed', async () => {
+    const { update } = stubGrouping({ name: '禅道排查', groupId: GROUP_ID });
+
+    await new ChromeBrowserSessionCoordinator().start('s1', '禅道排查');
+
+    expect(update).not.toHaveBeenCalled();
+  });
+});
