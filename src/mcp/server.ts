@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { TOOL_NAMES, UNADVERTISED_TOOL_NAMES } from '../core/protocol/schemas';
 import type { ToolName } from '../core/protocol/tool-contract';
 import { callLocalBridge, LocalBridgeError } from './bridge-client';
+import { stripLeadingBom } from './stdio-input';
 
 const tabId = { tab_id: z.number().int().describe('Chrome tab ID.') };
 const optionalTabId = { tab_id: z.number().int().optional().describe('Chrome tab ID. Defaults to the active tab when omitted.') };
@@ -198,7 +199,7 @@ export async function startMcpServer(): Promise<void> {
     });
   }
 
-  await server.connect(new StdioServerTransport());
+  await server.connect(new StdioServerTransport(stripLeadingBom(process.stdin)));
 }
 
 function descriptionFor(tool: ToolName): string {
