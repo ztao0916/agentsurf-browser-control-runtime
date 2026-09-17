@@ -315,15 +315,9 @@ export class ChromePageAgentClient implements PageAgentClient {
   }
 
   private async inject(tabId: number, frameId: number): Promise<void> {
-    // The console collector must live in the MAIN world to observe the page's own console output,
-    // and MAIN-world injection is subject to the page CSP. Keep it best effort: a page that blocks
-    // it still gets a working Page Agent, and the collector reports available: false instead.
-    await chrome.scripting.executeScript({
-      target: { tabId, frameIds: [frameId] },
-      files: ['content/page-console.js'],
-      world: 'MAIN',
-    }).catch(() => undefined);
-
+    // Only the Page Agent is injected here. The console collector patches the page's own console and
+    // Chrome therefore reports the page's errors as this extension's, so it belongs to a tab a session
+    // drives, not to every frame the runtime happens to talk to — ChromeConsoleCollector owns it.
     try {
       await chrome.scripting.executeScript({
         target: { tabId, frameIds: [frameId] },

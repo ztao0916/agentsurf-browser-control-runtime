@@ -298,7 +298,6 @@ interface ClaimCall {
 class FakeSessionCoordinator implements SessionCoordinator {
   public readonly claims: ClaimCall[] = [];
   public readonly resetCalls: Array<{ sessionId: string | undefined; force: boolean; closeOpenedTabs: boolean | undefined }> = [];
-  public readonly nameCalls: Array<{ sessionId: string; name: string }> = [];
   /** tab_id → owning session_id, as the runtime sees it when filtering list_tabs. */
   public owners = new Map<number, string>();
 
@@ -324,7 +323,6 @@ class FakeSessionCoordinator implements SessionCoordinator {
   }
 
   public name(sessionId: string, name?: string): Promise<BrowserSessionInfo> {
-    if (name !== undefined) this.nameCalls.push({ sessionId, name });
     return Promise.resolve({ ...sessionInfo(sessionId), name: name ?? null });
   }
 
@@ -649,32 +647,6 @@ describe('BrowserToolRuntime', () => {
     const response = await runtimeWithSessions.handle(request('browser.claim_tab', { tab_id: 42 }));
     expect(response.ok).toBe(false);
     if (!response.ok) expect(response.error.code).toBe('invalid_request');
-  });
-
-  it('names the session when claim_tab or open carries a name', async () => {
-    const sessions = new FakeSessionCoordinator();
-    const runtimeWithSessions = new BrowserToolRuntime(
-      new FakeTabsAdapter(),
-      new FakePageAgentClient(),
-      new FakeScreenshotAdapter(),
-      sessions,
-    );
-
-    const claimed = await runtimeWithSessions.handle(
-      request('browser.claim_tab', { session_id: 's1', tab_id: 42, name: 'AdSense 数据核对' }),
-    );
-    expect(sessions.nameCalls).toEqual([{ sessionId: 's1', name: 'AdSense 数据核对' }]);
-    expect(claimed.ok && claimed.result).toMatchObject({ session: { name: 'AdSense 数据核对' } });
-
-    await runtimeWithSessions.handle(
-      request('browser.open', { url: 'https://open.example/', name: '线上排障' }, 's1'),
-    );
-    expect(sessions.nameCalls.at(-1)).toEqual({ sessionId: 's1', name: '线上排障' });
-
-    // Unnamed calls must not rename an already-named session.
-    await runtimeWithSessions.handle(request('browser.claim_tab', { session_id: 's1', tab_id: 43 }));
-    await runtimeWithSessions.handle(request('browser.open', { url: 'https://open.example/' }, 's1'));
-    expect(sessions.nameCalls).toHaveLength(2);
   });
 
   it('routes reset_sessions to the coordinator with the caller session and the force flag', async () => {

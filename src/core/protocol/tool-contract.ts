@@ -95,8 +95,6 @@ export interface ClaimTabArgs {
   session_id?: string;
   tab_id: number;
   group?: boolean;
-  /** Names the session's tab group after the conversation, overriding the page-derived title. */
-  name?: string;
 }
 
 export interface ResetSessionsArgs {
@@ -323,8 +321,6 @@ export interface OpenArgs {
   url: string;
   tab_id?: number;
   activate?: boolean;
-  /** Names the session's tab group after the conversation, overriding the page-derived title. */
-  name?: string;
 }
 
 export interface ToolArguments {

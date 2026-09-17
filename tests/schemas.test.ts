@@ -44,14 +44,14 @@ describe('tool contract schemas', () => {
     expect(request.session_id).toBe('mcp_conversation');
   });
 
-  it('keeps an explicit claim session and the group name', () => {
+  it('keeps an explicit claim session', () => {
     expect(parseToolRequest({
       kind: 'tool-request',
       protocol_version: '1',
       request_id: 'claim',
       tool: 'browser.claim_tab',
-      args: { session_id: 's1', tab_id: 42, group: false, name: 'AdSense 数据核对' },
-    }).args).toEqual({ session_id: 's1', tab_id: 42, group: false, name: 'AdSense 数据核对' });
+      args: { session_id: 's1', tab_id: 42, group: false },
+    }).args).toEqual({ session_id: 's1', tab_id: 42, group: false });
   });
 
   it('parses the reset options and rejects a non-boolean close flag', () => {

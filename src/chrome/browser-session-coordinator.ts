@@ -71,6 +71,13 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
   private initializePromise: Promise<void> | null = null;
   private mutationQueue: Promise<void> = Promise.resolve();
 
+  /**
+   * A leased tab is one an agent drives, which is also the only place the MAIN-world console
+   * collector may patch the page's console. Assigned after construction because the collector reads
+   * leases back from this object.
+   */
+  public onLease: ((tabId: number) => void) | null = null;
+
   public constructor() {
     chrome.tabs.onRemoved.addListener((tabId) => void this.enqueue(() => this.removeTab(tabId)));
     chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
@@ -84,17 +91,28 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     chrome.tabGroups.onRemoved.addListener((group) => void this.enqueue(() => this.removeGroup(group.id)));
   }
 
-  public async start(sessionId = crypto.randomUUID(), name?: string): Promise<BrowserSessionInfo> {
+  // `sessionId` is a plain string, not the UUID literal the default would otherwise infer: the MCP
+  // layer forwards a session_id the caller chose, and that id is arbitrary.
+  public async start(sessionId: string = crypto.randomUUID(), name?: string): Promise<BrowserSessionInfo> {
     return this.enqueue(async () => {
+      const normalized = name === undefined ? undefined : normalizeName(name);
       const existing = this.sessions.get(sessionId);
       if (existing !== undefined) {
-        if (name !== undefined && existing.name !== name) existing.name = normalizeName(name);
+        if (normalized !== undefined && existing.name !== normalized) {
+          existing.name = normalized;
+          // A group is titled when a tab joins it, so a rename has to refresh it as well: the
+          // conversation names itself on a later call than the one that created the group.
+          if (existing.group_id !== null) {
+            await chrome.tabGroups.update(existing.group_id, { title: groupTitleFor(existing) })
+              .catch(() => undefined);
+          }
+        }
         await this.persistSessions();
         return toSessionInfo(existing);
       }
       const session: StoredSession = {
         session_id: sessionId,
-        name: name === undefined ? null : normalizeName(name),
+        name: normalized ?? null,
         tab_ids: [],
         group_id: null,
       };
@@ -160,6 +178,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
         claimed_at: lease?.claimed_at ?? Date.now(),
         last_used_at: Date.now(),
       });
+      this.onLease?.(tabId);
       if (!session.tab_ids.includes(tabId)) session.tab_ids.push(tabId);
       if (group) await this.ensureGrouped(session, tabId);
       await this.persistAll();
@@ -317,6 +336,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     const session = this.sessions.get(openerLease.session_id);
     if (session === undefined) return;
     this.leases.set(tabId, { ...openerLease, origin: 'child', claimed_at: Date.now() });
+    this.onLease?.(tabId);
     session.tab_ids.push(tabId);
     await this.ensureGrouped(session, tabId);
     await this.persistAll();
@@ -368,6 +388,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     if (lease === undefined) return;
     this.leases.delete(removedTabId);
     this.leases.set(addedTabId, lease);
+    this.onLease?.(addedTabId);
     const session = this.sessions.get(lease.session_id);
     if (session !== undefined) {
       session.tab_ids = session.tab_ids.map((id) => id === removedTabId ? addedTabId : id);
@@ -459,7 +480,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
 }
 
 function normalizeName(name: string): string {
-  return name.trim().slice(0, 80) || DEFAULT_GROUP_TITLE;
+  return name.trim().slice(0, GROUP_TITLE_MAX_LENGTH) || DEFAULT_GROUP_TITLE;
 }
 
 function toSessionInfo(session: StoredSession): BrowserSessionInfo {

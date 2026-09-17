@@ -6,12 +6,10 @@ import { z } from 'zod';
 import { TOOL_NAMES, UNADVERTISED_TOOL_NAMES } from '../core/protocol/schemas';
 import type { ToolName } from '../core/protocol/tool-contract';
 import { callLocalBridge, LocalBridgeError } from './bridge-client';
+import { stripLeadingBom } from './stdio-input';
 
 const tabId = { tab_id: z.number().int().describe('Chrome tab ID.') };
 const optionalTabId = { tab_id: z.number().int().optional().describe('Chrome tab ID. Defaults to the active tab when omitted.') };
-const sessionName = z.string().min(1).describe(
-  'Name for this conversation\'s Chrome tab group: a short label in the user\'s language describing what the conversation is doing (about 12 characters, so it fits a tab), for example "AdSense 数据核对". Omit it to fall back to the page title.',
-);
 const elementId = { tab_id: z.number().int(), element_id: z.string().min(1).describe('Opaque element_id returned by browser_get_interactives.') };
 const frameId = {
   frame_id: z.number().int().nonnegative().optional().describe(
@@ -21,7 +19,7 @@ const frameId = {
 
 const schemas = {
   'browser.start_session': { session_id: z.string().min(1).optional(), name: z.string().min(1).optional() },
-  'browser.claim_tab': { tab_id: tabId.tab_id, group: z.boolean().optional(), name: sessionName.optional() },
+  'browser.claim_tab': { tab_id: tabId.tab_id, group: z.boolean().optional() },
   'browser.reset_sessions': {
     force: z.boolean().optional().describe('Also release sessions other conversations still hold. Default false.'),
     close_opened_tabs: z.boolean().optional().describe('Also close the tabs this conversation opened itself. A tab the user already had open is never closed. Default true.'),
@@ -61,7 +59,7 @@ const schemas = {
   'browser.screenshot': { ...tabId, image_format: z.enum(['png', 'jpeg']).optional(), full_page: z.boolean().optional(), clip: z.object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive(), scale: z.number().positive().optional() }).optional() },
   'browser.observe': { ...tabId, image_format: z.enum(['png', 'jpeg']).optional(), full_page: z.boolean().optional(), clip: z.object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive(), scale: z.number().positive().optional() }).optional(), include: z.array(z.enum(['page_state', 'interactives', 'screenshot', 'accessibility'])).optional() },
   'browser.switch_tab': tabId,
-  'browser.open': { url: z.string().url(), tab_id: z.number().int().optional(), activate: z.boolean().optional(), name: sessionName.optional() },
+  'browser.open': { url: z.string().url(), tab_id: z.number().int().optional(), activate: z.boolean().optional() },
 };
 
 const optionalSessionId = {
@@ -70,11 +68,20 @@ const optionalSessionId = {
   ),
 };
 
+const optionalSessionName = {
+  session_name: z.string().min(1).optional().describe(
+    'Name for this conversation\'s Chrome tab group, so the tab bar reads as the task instead of a generated id. Sticky: pass it once when the name becomes clear, and again only to rename.',
+  ),
+};
+
 // Every tool accepts a session so ownership can be enforced, and every one of them leaves it
 // optional: the server owns a session per conversation, so the agent never has to supply an id it
 // has no way of knowing. The shape is widened from the literal map, so the conversion is intentional.
 const toolSchemas = Object.fromEntries(
-  Object.entries(schemas).map(([tool, schema]) => [tool, { ...optionalSessionId, ...schema }]),
+  Object.entries(schemas).map(([tool, schema]) => [
+    tool,
+    { ...optionalSessionId, ...optionalSessionName, ...schema },
+  ]),
 ) as unknown as typeof schemas;
 
 type ContentBlock = CallToolResult['content'][number];
@@ -124,15 +131,26 @@ function toContent(tool: ToolName, result: unknown): ContentBlock[] {
 // in the tool arguments wins and becomes this conversation's default from then on, which keeps the
 // manual handover flow working.
 let conversationSessionId = `mcp_${randomUUID()}`;
+let conversationSessionName: string | undefined;
 const startedSessions = new Set<string>();
 
-/** Created on first use, so a bridge that is not up yet still reports its own error on the real call. */
-async function ensureSession(sessionId: string): Promise<void> {
-  if (startedSessions.has(sessionId)) return;
+/**
+ * Created on first use, so a bridge that is not up yet still reports its own error on the real call.
+ * A name that only arrives on a later call is sent too: the tab group is normally created by the
+ * first claimed tab, so without that follow-up the group would keep its generated title forever.
+ */
+async function ensureSession(sessionId: string, name?: string): Promise<void> {
+  const renamed = name !== undefined && name !== conversationSessionName;
+  if (renamed) conversationSessionName = name;
+  if (startedSessions.has(sessionId) && !renamed) return;
   try {
     // The id has to travel in args as well as at the request root: browser.start_session reads it
     // from args and would otherwise create a session under a different generated id.
-    await callLocalBridge('browser.start_session', { session_id: sessionId }, sessionId);
+    await callLocalBridge(
+      'browser.start_session',
+      { session_id: sessionId, ...(name === undefined ? {} : { name }) },
+      sessionId,
+    );
     startedSessions.add(sessionId);
   } catch {
     // Ignored on purpose: the request that follows returns the actionable error.
@@ -180,7 +198,7 @@ export async function startMcpServer(): Promise<void> {
         'browser_list_tabs hides tabs held by another conversation and reports the count instead; a tab that is not yours is refused with tab_in_use.',
         'Ask the user before consequential actions such as submitting, purchasing, deleting, uploading, or sending messages.',
         'This conversation already owns a browser session: tabs you open are claimed and grouped automatically, and another conversation is refused them. Use browser_claim_tab to take over a tab the user already had open; that claims and groups it too.',
-        'Name the tab group on the first tab you claim or open by passing name: a short label (about 12 characters) in the user\'s language describing what this conversation is doing, so the user sees a meaningful group title instead of a random code. Omit it and the group is titled after the page instead.',
+        'Pass session_name on any call once you know what the task is: it names this conversation\'s Chrome tab group, so the tab bar reads as the task instead of a generated id. It sticks for the conversation, and without it the group falls back to the first page you touched.',
         'When the browser task is finished, call browser_reset_sessions so the tab group does not linger in the user\'s tab bar: it ungroups, and closes the tabs you opened yourself while leaving the user\'s own tabs open. Report your findings after that, and do not make cleanup the user\'s job.',
       ].join(' '),
     },
@@ -198,7 +216,8 @@ export async function startMcpServer(): Promise<void> {
         // Forwarded at the request root, and left in args for the session tools that read it there.
         const explicit = typeof args['session_id'] === 'string' ? args['session_id'] : undefined;
         if (explicit !== undefined) conversationSessionId = explicit;
-        await ensureSession(conversationSessionId);
+        const name = typeof args['session_name'] === 'string' ? args['session_name'] : undefined;
+        await ensureSession(conversationSessionId, name);
         let result: unknown;
         try {
           result = await callLocalBridge(tool, args, conversationSessionId);
@@ -225,7 +244,7 @@ export async function startMcpServer(): Promise<void> {
     });
   }
 
-  await server.connect(new StdioServerTransport());
+  await server.connect(new StdioServerTransport(stripLeadingBom(process.stdin)));
   // Registered once the server is up: a transport that failed to connect never created a session,
   // so there would be nothing to release. Clients end a conversation either by killing the process
   // or by closing its stdin, so both paths are covered.
@@ -257,7 +276,7 @@ function descriptionFor(tool: ToolName): string {
     'browser.screenshot': 'Capture a screenshot of a Chrome tab as an image. Works on a background tab. Prefer this over describing a page in text when layout or visual state matters.',
     'browser.observe': 'Capture page state, interactive elements, accessibility data, and a screenshot in one call.',
 
-    'browser.get_console_messages': 'Read page console output, uncaught exceptions, and unhandled rejections. Check available: false, which means the collector was not running and an empty list is not proof of silence.',
+    'browser.get_console_messages': 'Read page console output, uncaught exceptions, and unhandled rejections. Collection runs only on tabs this session has claimed and restarts on navigation, so available: false means the collector was not running and an empty list is not proof of silence.',
     'browser.click': 'Click an element returned by browser_get_interactives.',
     'browser.double_click': 'Double-click an element returned by browser_get_interactives.',
     'browser.type': 'Type into an editable element returned by browser_get_interactives.',

@@ -452,14 +452,14 @@ browser_get_console_messages {"tab_id": 123, "frame_id": 561}
 browser_observe {"tab_id": 123}                       # 一次拿 状态+交互元素+可访问性树+截图
 ```
 
-Console 采集运行在页面 MAIN world，能捕获页面自身的输出；查询结果里 **`available: false` 表示当时采集器不在场，不能当成“页面没有报错”**。
+Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**采集器只在 agent 认领的 tab 上安装，并在每次导航后重新注入**：没被 agent 操作过的页面完全不碰它的 `console`。查询结果里 **`available: false` 表示当时采集器不在场，不能当成「页面没有报错」**。
 
 ### 6.5 多对话并行（默认自动隔离）
 
 每个对话的 MCP Server 进程会自带一个会话，**Agent 不需要手动开会话，也不需要每次传 `session_id`**：
 
-- 自己 `browser.open` 打开的页签会**自动建立归属并归入本会话的 Chrome 分组**；
-- **分组名**：第一次 `browser.open` / `browser.claim_tab` 时传 `name` 给它起个短名（建议 12 字以内、用对话的语言，例如 `AdSense 数据核对`），用户就能一眼看出哪个分组属于哪个对话。不传则用被接管页签的标题兜底（页签还在加载、标题就是 URL 时改用域名），两者都没有时才用 `AgentSurf`；
+- 自己 `browser.open` 打开的页签会**自动建立归属并归入本会话的 Chrome 分组**；组名**默认取这个对话碰到的第一个页面的标题**（如「禅道 - 任务 17824」，页签还在加载、标题就是 URL 时改用域名），该页面没有标题时才用 `AgentSurf`；
+- **想让分组直接显示任务名**：在任意一次调用里带上 `session_name`（如 `{"tab_id": 123, "session_name": "禅道 17824"}`）。它对该对话长期生效，已经建好的分组会当场改名，且之后不再被页面标题覆盖；
 - 另一个对话再想操作这些页签会被拒绝（`tab_in_use`），两个对话不会互相踩；
 - 需要接管用户**已经打开**的页签时用 `browser.claim_tab`：它会建立归属并**默认归组**（传 `group: false` 可只归属、不把页签拉进分组）；
 - `browser.list_tabs` 默认只列出**本对话的页签 + 尚未归属的页签**，并用 `other_session_tabs` 告诉你隐藏了几个；传 `include_all: true` 可以看到全部（脚本、排查用）；

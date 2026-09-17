@@ -78,19 +78,16 @@ export class BrowserToolRuntime {
             false,
           ));
         }
-        const claimed = await sessions.claim(
-          sessionId,
-          request.turn_id,
-          request.args.tab_id,
-          'user',
-          // Claiming is a handover, so the tab joins the session's group by default: that is how the
-          // user can see which conversation owns which tab. Pass group: false to leave the tab bar alone.
-          request.args.group ?? true,
-        );
-        // Renamed after the claim: the session has to exist before it can be titled, and naming it
-        // here retitles the group the claim just created.
         return {
-          session: request.args.name === undefined ? claimed : await sessions.name(sessionId, request.args.name),
+          session: await sessions.claim(
+            sessionId,
+            request.turn_id,
+            request.args.tab_id,
+            'user',
+            // Claiming is a handover, so the tab joins the session's group by default: that is how the
+            // user can see which conversation owns which tab. Pass group: false to leave the tab bar alone.
+            request.args.group ?? true,
+          ),
         };
       }
       case 'browser.reset_sessions': {
@@ -317,11 +314,6 @@ export class BrowserToolRuntime {
             // it must not leave a tab behind. Only close what this call created.
             if (request.args.tab_id === undefined) await this.tabs.close(tab.tab_id).catch(() => undefined);
             throw error;
-          }
-          // Kept outside the try: the tab is legitimately owned by now, so a naming problem must not
-          // close it.
-          if (request.args.name !== undefined) {
-            await this.requireSessions().name(request.session_id, request.args.name);
           }
         }
         return { tab } satisfies OpenResult;
