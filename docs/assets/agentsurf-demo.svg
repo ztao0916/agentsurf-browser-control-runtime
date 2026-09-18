@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 560" role="img" aria-labelledby="title desc">
+  <title id="title">AgentSurf browser control runtime demo</title>
+  <desc id="desc">An MCP agent sends browser tasks through the local AgentSurf runtime to the user's existing signed-in Chrome session, without launching a new browser profile or exporting cookies.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.55" stop-color="#0b1930"/>
+      <stop offset="1" stop-color="#10243c"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12253f" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#0c1b30" stop-opacity="0.96"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#67e8f9"/>
+      <stop offset="0.5" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#dbeafe"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#93c5fd" stroke-opacity="0.05" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#60a5fa"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="560" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="560" rx="28" fill="url(#grid)"/>
+
+  <text x="56" y="62" fill="#f8fafc" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="38" font-weight="760" letter-spacing="-1.2">AgentSurf</text>
+  <text x="56" y="94" fill="#9fb3c8" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18">Control the Chrome you already use. Keep the session you already have.</text>
+
+  <g transform="translate(1011 49)">
+    <rect width="213" height="42" rx="21" fill="#0f2f2c" stroke="#34d399" stroke-opacity="0.45"/>
+    <circle cx="21" cy="21" r="5" fill="#34d399">
+      <animate attributeName="opacity" values="0.45;1;0.45" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <text x="36" y="27" fill="#a7f3d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">local • 127.0.0.1</text>
+  </g>
+
+  <g>
+    <rect x="56" y="136" width="260" height="300" rx="22" fill="url(#card)" stroke="#2b496b"/>
+    <rect x="80" y="160" width="42" height="42" rx="12" fill="#0e7490" fill-opacity="0.3" stroke="#22d3ee" stroke-opacity="0.5"/>
+    <path d="M93 174l8 7-8 7M105 188h11" fill="none" stroke="#67e8f9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="136" y="187" fill="#f8fafc" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="19" font-weight="700">MCP Agent</text>
+    <text x="80" y="225" fill="#8ea8c3" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">natural-language task</text>
+
+    <g>
+      <rect x="80" y="244" width="194" height="42" rx="14" fill="#1e3a5f"/>
+      <text x="96" y="270" fill="#dbeafe" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="14">Read the billing page</text>
+      <animate attributeName="opacity" values="0;0;1;1;1;0" keyTimes="0;0.08;0.18;0.76;0.9;1" dur="8s" repeatCount="indefinite"/>
+    </g>
+    <g>
+      <rect x="106" y="298" width="174" height="42" rx="14" fill="#164e63"/>
+      <text x="122" y="324" fill="#cffafe" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="14">Click Export report</text>
+      <animate attributeName="opacity" values="0;0;0;1;1;0" keyTimes="0;0.2;0.28;0.4;0.88;1" dur="8s" repeatCount="indefinite"/>
+    </g>
+    <g>
+      <rect x="80" y="352" width="194" height="50" rx="14" fill="#0f2f2c" stroke="#34d399" stroke-opacity="0.45"/>
+      <text x="96" y="382" fill="#a7f3d0" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="14">✓ Session reused</text>
+      <animate attributeName="opacity" values="0;0;0;0;1;1;0" keyTimes="0;0.4;0.56;0.7;0.78;0.96;1" dur="8s" repeatCount="indefinite"/>
+    </g>
+  </g>
+
+  <path d="M318 286H354" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="5 7">
+    <animate attributeName="stroke-dashoffset" values="0;-24" dur="1.2s" repeatCount="indefinite"/>
+  </path>
+  <circle r="5" fill="#67e8f9" filter="url(#glow)">
+    <animateMotion dur="1.6s" repeatCount="indefinite" path="M 326 286 L 346 286"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+
+  <g>
+    <rect x="356" y="136" width="560" height="300" rx="22" fill="url(#card)" stroke="#315d8d"/>
+    <rect x="382" y="159" width="42" height="42" rx="12" fill="url(#accent)" fill-opacity="0.22" stroke="#60a5fa" stroke-opacity="0.7"/>
+    <circle cx="403" cy="180" r="10" fill="none" stroke="#93c5fd" stroke-width="3"/>
+    <circle cx="403" cy="180" r="3" fill="#67e8f9"/>
+    <path d="M403 164v8M403 188v8M387 180h8M411 180h8" stroke="#93c5fd" stroke-width="2" stroke-linecap="round"/>
+    <text x="438" y="187" fill="#f8fafc" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="19" font-weight="700">AgentSurf local runtime</text>
+
+    <g transform="translate(382 230)">
+      <rect width="154" height="38" rx="19" fill="#0f2946" stroke="#3b82f6" stroke-opacity="0.55"/>
+      <text x="16" y="25" fill="#bfdbfe" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">get_page</text>
+      <rect width="154" height="38" rx="19" fill="none" stroke="#67e8f9" stroke-width="2">
+        <animate attributeName="opacity" values="0.2;1;0.2" dur="2.4s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+    <g transform="translate(548 230)">
+      <rect width="176" height="38" rx="19" fill="#0f2946" stroke="#8b5cf6" stroke-opacity="0.55"/>
+      <text x="16" y="25" fill="#ddd6fe" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">get_interactives</text>
+    </g>
+    <g transform="translate(736 230)">
+      <rect width="154" height="38" rx="19" fill="#0f2946" stroke="#22d3ee" stroke-opacity="0.55"/>
+      <text x="16" y="25" fill="#cffafe" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">click</text>
+    </g>
+
+    <rect x="382" y="292" width="508" height="54" rx="15" fill="#071827" stroke="#27496c"/>
+    <circle cx="406" cy="319" r="6" fill="#34d399"/>
+    <text x="424" y="324" fill="#b8cce0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">token auth · loopback only · no cookie export</text>
+
+    <rect x="382" y="366" width="508" height="42" rx="14" fill="#0d2137">
+      <text x="402" y="392" fill="#8ea8c3" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">opaque element IDs + revision checks before every action</text>
+      <rect x="382" y="366" width="4" height="42" rx="2" fill="#60a5fa"/>
+    </rect>
+  </g>
+
+  <path d="M918 286H954" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="5 7">
+    <animate attributeName="stroke-dashoffset" values="0;-24" dur="1.2s" repeatCount="indefinite"/>
+  </path>
+  <circle r="5" fill="#67e8f9" filter="url(#glow)">
+    <animateMotion dur="1.6s" repeatCount="indefinite" path="M 926 286 L 946 286"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+
+  <g>
+    <rect x="956" y="136" width="268" height="300" rx="22" fill="url(#chrome)" stroke="#ffffff" stroke-opacity="0.42"/>
+    <path d="M956 158a22 22 0 0 1 22-22h224a22 22 0 0 1 22 22v22H956z" fill="#dbeafe"/>
+    <circle cx="980" cy="158" r="5" fill="#fb7185"/>
+    <circle cx="998" cy="158" r="5" fill="#fbbf24"/>
+    <circle cx="1016" cy="158" r="5" fill="#34d399"/>
+    <rect x="1050" y="147" width="148" height="22" rx="11" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text x="1062" y="163" fill="#64748b" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="11">Existing Chrome tab</text>
+
+    <rect x="976" y="194" width="228" height="28" rx="8" fill="#ffffff" stroke="#dbeafe"/>
+    <circle cx="991" cy="208" r="5" fill="#60a5fa"/>
+    <rect x="1004" y="204" width="72" height="8" rx="4" fill="#cbd5e1"/>
+    <text x="1172" y="213" fill="#059669" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="11" font-weight="700">Signed in</text>
+
+    <rect x="976" y="236" width="228" height="142" rx="12" fill="#ffffff" stroke="#dbeafe"/>
+    <rect x="992" y="252" width="86" height="11" rx="5.5" fill="#334155"/>
+    <rect x="992" y="272" width="196" height="8" rx="4" fill="#e2e8f0"/>
+    <rect x="992" y="288" width="148" height="8" rx="4" fill="#e2e8f0"/>
+    <rect x="992" y="314" width="92" height="32" rx="9" fill="#2563eb">
+      <animate attributeName="fill" values="#2563eb;#2563eb;#1d4ed8;#2563eb" keyTimes="0;0.57;0.64;0.72" dur="8s" repeatCount="indefinite"/>
+    </rect>
+    <text x="1009" y="335" fill="#ffffff" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" font-weight="700">Export report</text>
+
+    <circle cx="1084" cy="330" r="9" fill="none" stroke="#60a5fa" stroke-width="3">
+      <animate attributeName="r" values="8;22;30" dur="2.8s" begin="4.9s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0.3;0" dur="2.8s" begin="4.9s" repeatCount="indefinite"/>
+    </circle>
+    <g>
+      <path d="M0 0l0 24 6-6 5 10 5-2-5-10 8-1z" fill="#0f172a" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+      <animateMotion dur="8s" repeatCount="indefinite" keyPoints="0;0;1;1;0" keyTimes="0;0.4;0.61;0.88;1" calcMode="linear" path="M 1082 370 C 1096 360 1102 342 1090 332"/>
+    </g>
+
+    <g>
+      <rect x="1040" y="402" width="138" height="32" rx="10" fill="#ecfdf5" stroke="#86efac"/>
+      <text x="1054" y="423" fill="#047857" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" font-weight="700">✓ Report exported</text>
+      <animate attributeName="opacity" values="0;0;0;0;0;1;1;0" keyTimes="0;0.50;0.58;0.64;0.70;0.77;0.96;1" dur="8s" repeatCount="indefinite"/>
+    </g>
+  </g>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">
+    <text x="341" y="267" fill="#7dd3fc">stdio</text>
+    <text x="929" y="267" fill="#7dd3fc">native messaging</text>
+  </g>
+
+  <g transform="translate(56 478)" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">
+    <rect width="222" height="40" rx="20" fill="#10243c" stroke="#335577"/>
+    <text x="20" y="25" fill="#c9d9e9">No new browser profile</text>
+    <rect x="238" width="184" height="40" rx="20" fill="#10243c" stroke="#335577"/>
+    <text x="258" y="25" fill="#c9d9e9">No cookie export</text>
+    <rect x="438" width="228" height="40" rx="20" fill="#10243c" stroke="#335577"/>
+    <text x="458" y="25" fill="#c9d9e9">Any MCP-compatible agent</text>
+    <rect x="682" width="184" height="40" rx="20" fill="#10243c" stroke="#335577"/>
+    <text x="702" y="25" fill="#c9d9e9">Windows + macOS</text>
+    <rect x="882" width="342" height="40" rx="20" fill="#0f2f2c" stroke="#34d399" stroke-opacity="0.45"/>
+    <text x="902" y="25" fill="#a7f3d0">Apache-2.0 · local-first · open source</text>
+  </g>
+</svg>

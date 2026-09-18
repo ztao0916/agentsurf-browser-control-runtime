@@ -4,21 +4,25 @@
 
 AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console/network inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls, no task planning, and no vendor lock-in.
 
+![AgentSurf animated demo: an agent operating the user's signed-in Chrome through a local runtime](docs/assets/agentsurf-demo.svg)
+
 > This project is **not distributed through the Chrome Web Store** and publishes no public npm package. The supported path is: build from source, load the extension as an unpacked extension, and register the native host locally.
 >
-> The first setup takes about ten minutes. The steps below assume no coding experience: each one says **which window to use**, **what you should see**, and **where to look when it fails**.
+> The full chain has been verified on both Windows and macOS; there is no Linux installer yet. First setup usually takes 5–10 minutes, and the steps say **which window to use**, **what you should see**, and **where to look when it fails**.
 
 ## Quick start
 
-Three steps, details in [section 4](#4-installation):
+Use the setup wizard for dependency installation, build, and native-host registration:
 
-1. **Build**: `npm install && npm run build`
-2. **Load the extension**: open `chrome://extensions` → turn on "Developer mode" → "Load unpacked" → pick the `dist` folder in the project
-3. **Register and wire it up**:
-   - Windows (PowerShell): `npm run native-host:install -- -ExtensionId <extension ID>`
-   - macOS (Terminal): `npm run native-host:install:macos -- "<extension ID>"`
+```bash
+git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+cd agentsurf-browser-control-runtime
+npm run setup
+```
 
-   Then paste the MCP config JSON printed by the installer into your agent's config file and restart the agent.
+The wizard installs dependencies, builds the extension, asks you to load `dist/` in `chrome://extensions`, registers the native host after you enter the extension ID, and prints the MCP config JSON to paste into your agent. In an interactive terminal it can also run a smoke test.
+
+For manual installation or step-by-step troubleshooting, see [section 4](#4-installation).
 
 ## Table of contents
 
@@ -33,6 +37,7 @@ Three steps, details in [section 4](#4-installation):
 - [9. Safety boundaries](#9-safety-boundaries)
 - [10. Current limitations](#10-current-limitations)
 - [11. Further reference](#11-further-reference)
+- [12. License](#12-license)
 
 ## 1. What it is
 
@@ -110,7 +115,7 @@ Windows and macOS are both covered here. Read the comparison table in 4.1 first;
 
 In one sentence: **the extension, the protocol, and the MCP config format are the same on both platforms; only the commands and the file locations differ.**
 
-> ⚠️ The macOS installer ships with the repository, but the full link **has not been verified on a real Mac yet**; the Windows path has been verified on real machines.
+> ✅ The full chain has been verified on both Windows and macOS; there is no Linux installer yet.
 
 ### 4.2 Prerequisites
 
@@ -124,6 +129,8 @@ In one sentence: **the extension, the protocol, and the MCP config format are th
 After installing Node or Git, **open a new terminal window** — otherwise the command is still not found.
 
 ### 4.3 Clone and build
+
+> You can also run `npm run setup` in the project directory: it performs the install and build below, then guides you through the extension ID and native-host registration. The manual steps remain here for troubleshooting.
 
 **Windows (PowerShell)**
 
@@ -568,7 +575,7 @@ These are **instructions for the agent**, not an enforced approval layer. The ca
 - **Console buffers are per document and lost on navigation**, and only cover the period after the collector started.
 - **Session isolation is cooperative**: it requires `session_id` on every call for that session.
 - **Files and downloads**: uploads need absolute local paths; downloads expose only Chrome Downloads API metadata and cannot be reliably tied to a source tab.
-- **Platform coverage**: verified on Windows; macOS scripts exist but are unverified on real hardware; no Linux installer.
+- **Platform coverage**: verified on both Windows and macOS; no Linux installer.
 - Unit tests cover protocol and dispatch logic; real-browser behaviour (injection, screenshots, CDP, iframes) was verified manually — see `docs/`.
 
 ## 11. Further reference
@@ -582,3 +589,7 @@ For developers, and for anyone integrating below the MCP layer, the following no
 | [3. Development and debugging](docs/reference.en.md#3-development-and-debugging) | Build / lint / test commands, the extension status page, the standalone bridge |
 | [4. External protocol](docs/reference.en.md#4-external-protocol) | Speaking to the local bridge directly instead of going through MCP |
 | [5. Implementation notes](docs/reference.en.md#5-implementation-notes) | Layout, page revisions and `element_id`, frame routing, screenshots and files |
+
+## 12. License
+
+AgentSurf is licensed under the [Apache License 2.0](LICENSE), including the patent grant in Section 3.
