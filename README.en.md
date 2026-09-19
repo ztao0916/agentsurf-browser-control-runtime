@@ -6,187 +6,103 @@
 
 [中文](README.md) ｜ **English**
 
-> This project is linked with and recognizes the [LINUX DO](https://linux.do/) community.
+> This project is published in the [LINUX DO](https://linux.do/) community.
 
-AgentSurf is a local Chrome control runtime for AI agents. You can think of it as a universal version of the ChatGPT browser extension: the same idea of letting AI drive a browser, but without being tied to ChatGPT — any MCP-capable agent can connect. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls and no task planning.
+AgentSurf lets your AI agent operate the local Chrome browser you are already using. Think of it as a universal version of the ChatGPT browser plugin: it is not tied to one model or client, and any MCP-capable agent can use it.
 
-![AgentSurf animated demo: an agent operating the user's signed-in Chrome through a local runtime](docs/assets/agentsurf-demo.svg)
+It reuses your existing sessions and tabs and supports common browser actions such as reading pages, clicking, typing, scrolling, taking screenshots, uploading files, working with iframes, and reading the console. You do not need to switch browsers or sign in again.
 
-> Integration: MCP server. Verified on both Windows and macOS. First setup usually takes 5–10 minutes — hand this section to your AI agent and let it walk you through it.
+![AgentSurf demo: an agent controls the user's signed-in Chrome through the local runtime](docs/assets/agentsurf-demo.svg)
+
+> Tested with Codex, Command Code agent, and pi agent; all connected and worked correctly. Windows and macOS have both been tested on real machines, and first-time setup usually takes 5–10 minutes.
 
 ## Quick start
 
-Verified on both Windows and macOS. Nothing here needs administrator rights, and nothing changes the logins or settings you already have in Chrome.
+Give this README to an agent that can operate your computer and let it guide you through setup, or follow the steps below manually.
 
-### Prerequisites
+### 1. Prerequisites
 
-| Needed | Version and check command |
+| Requirement | Version and check |
 | --- | --- |
-| Node.js | 20+, `node -v` |
-| npm | 10+, `npm -v` |
-| Chrome | 116+, open `chrome://version` in the address bar |
+| Node.js | 20+, run `node -v` |
+| Git | run `git --version` |
+| Chrome | 116+, open `chrome://version` |
 
-### Install and register
+> Administrator access is not required, and your existing Chrome sessions and settings will not be changed.
 
-For a first-time install, run:
+### 2. Install
+
+1. Clone the repository and enter the project directory:
 
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
+```
+
+2. Run the setup wizard:
+
+```bash
 npm run setup
 ```
 
-The wizard installs dependencies, builds the extension, and registers the native host, prompting you to:
+The setup wizard installs dependencies, builds the project, registers the native host, and prompts you to:
 
-1. open `chrome://extensions` and turn on Developer mode;
-2. click **Load unpacked** and select the project's `dist/` folder;
-3. copy the extension ID shown on the AgentSurf card and paste it into the terminal;
-4. copy the MCP config JSON printed at the end for the next step.
+1. Open `chrome://extensions` and enable Developer mode;
+2. Click “Load unpacked” and select the project's `dist/` directory;
+3. Copy the extension ID shown on the AgentSurf card and paste it back into the terminal;
+4. Save the MCP config JSON printed by the setup wizard.
 
-> If the extension ID changes after switching machines, moving the project, or reloading the extension, run `npm run setup` again.
+### 3. Check the extension connection
 
-### Reload the extension and confirm the link
+1. Return to `chrome://extensions` and click **Reload** on the AgentSurf card;
+2. Click the AgentSurf icon in Chrome's toolbar;
+3. Seeing `● connected` means the extension is connected.
 
-1. Back in `chrome://extensions`, click the **reload** button (🔄) on the AgentSurf card;
-2. open the address below (or just click the AgentSurf icon in the toolbar — it opens the same page):
+If it is not connected: click **Disconnect** once, wait one second, then click **Connect**.
 
-```text
-chrome-extension://<extension ID>/debug.html
-```
+### 4. Connect your agent (MCP config)
 
-3. You should see:
+Copy the complete JSON printed by the installer into your agent's MCP config, then restart the agent. The config file location differs by client; if you are unsure, give the installer output to your agent and ask it to configure the client for you.
 
-```text
-● connected
-Host      com.browsercontrol.runtime
-Endpoint  ws://127.0.0.1:8765
-Pending   0
-```
+The block below is only a structure example. Always use the JSON printed by the installer:
 
-If it is not connected: click **Disconnect** once, wait a second, then click **Connect**. **Do not click Reconnect repeatedly** — that produces a reconnect storm.
-
-### Connect your agent (MCP config)
-
-Paste the JSON printed by the installer into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example (`command` is whatever path the script printed):
-
-```jsonc
+```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "absolute path to the launcher printed by the installer"
-      // Example: "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+      "command": "<absolute path to the launcher printed by the installer>"
     }
   }
 }
 ```
 
-> Other MCP clients work the same way; only the **location** of the config file differs, and the JSON you paste is identical.
+macOS example (replace `XXX` with your username):
 
-Four things to know:
-
-- there are **no `args`**. Copy the printed block verbatim — **do not assemble the path yourself**;
-- **restart the MCP client** (or its session) after editing the config; it is only read at startup;
-- no environment variables are needed; the MCP server reads the `config.json` written during installation;
-- after switching machines, moving the project, or changing your Node install, **re-run `npm run setup`** to regenerate the launcher.
-
-## Why this exists
-
-The reason is practical: browser control in recent Codex versions kept failing for me. Rather than wait for a fix, I wrote a more reliable path myself.
-
-The design bet is simple: instead of having an agent open a fresh browser and move your logins into it, let it use the Chrome you already have. Logins, tabs, and extensions are all in place, so there is one less setup step — and one less class of errors.
-
-So AgentSurf is not trying to be a feature-complete browser automation framework. The goal is to make "an agent controlling a browser" dependable: the chain can be verified, failures can be located, and the context in your Chrome is reused directly. The same idea is not limited to Codex — any MCP-capable agent can use this path.
-
-## Usage experience
-
-These are my hands-on notes from three clients:
-
-- **Codex**: connected cleanly; the tools were discovered and called correctly, and everyday page operations felt smooth.
-- **Command Code agent**: connected through the same MCP setup with no issues.
-- **pi agent**: setup was equally smooth, and the experience was broadly the same as the other two.
-
-All three clients connected and called the tools reliably, and the overall experience was stable and pleasant. This is just my personal impression — different agents may call the tools in different ways and get different results.
-
-## Table of contents
-
-- [1. What it is](#1-what-it-is)
-- [2. How it works](#2-how-it-works)
-- [3. MCP server integration](#3-mcp-server-integration)
-- [4. Driving it from an agent](#4-driving-it-from-an-agent)
-- [5. Safety boundaries](#5-safety-boundaries)
-- [6. License](#6-license)
-
-## 1. What it is
-
-In one sentence: **when your agent needs to operate a web page, it borrows the Chrome you are already using instead of launching a clean browser profile.**
-
-What it gives you:
-
-- your existing Chrome sessions and tabs — no re-login, no cookie export;
-- **30 `browser.*` tools**: tabs, page reading, element clicks and typing, forms, scrolling, drag, screenshots, iframes, console, downloads, file upload;
-- an **opaque `element_id`** model instead of CSS selectors, with every action re-checked for visibility, enabled state, and page revision;
-- a local MCP server, so the agent side is just one stdio MCP entry.
-
-What it does not do:
-
-- no built-in model, no task planning;
-- no cloud browser: everything talks over `127.0.0.1`;
-- no CAPTCHA solving or anti-bot evasion.
-
-## 2. How it works
-
-```text
-        MCP client (your agent)
-              │  stdio
-              ▼
-        AgentSurf MCP Server
-              │  WebSocket + token, bound to 127.0.0.1 only
-              ▼
-        local Browser Bridge
-              │  Chrome Native Messaging (length-prefixed frames over stdin/stdout)
-              ▼
-        Native Host (native-host.exe / native-host.sh)
-              │  chrome.runtime.connectNative
-              ▼
-        Chrome extension (Manifest V3)
-              │  chrome.tabs.sendMessage / chrome.debugger
-              ▼
-        the page (Page Agent content script, injected into every frame)
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+    }
+  }
+}
 ```
 
-Key consequences:
+## Use and verify
 
-- **The extension is the initiator.** It calls `connectNative` on startup, which starts the native host, which starts the bridge. You never need to run `npm run bridge` for normal use.
-- The extension **listens on no port at all**; the bridge only binds `127.0.0.1` and requires a token (generated by the installer, stored on disk, never pasted into a chat).
-- The MCP server and the native host **share the same local config**, so you do not copy tokens between them.
-- A standalone bridge exists only for protocol development — see [Development and debugging](docs/reference.en.md#3-development-and-debugging).
+In the conversation, tell your agent:
 
-## 3. MCP server integration
+```text
+Open https://example.com and tell me the page title.
+```
 
-Agent ↔ `dist/mcp/cli.js` (stdio MCP server) ↔ Bridge ↔ extension.
+If it can open the page and return the title, AgentSurf is working. You can then ask it to read, click, type, take screenshots, or perform other browser actions.
 
-The agent carries no protocol burden: the MCP server exposes every tool and its schema, so all you do is paste one JSON block into your client's MCP config — see [Connect your agent](#connect-your-agent-mcp-config) in Quick start.
+## Safety
 
-> The extension and native host in [Quick start](#quick-start) must be installed first; that is the foundation for everything else.
+- Start in read-only mode; require your explicit approval before submitting, saving, deleting, publishing, uploading, or sending anything;
+- Never send passwords, verification codes, cookies, or tokens to an agent;
+- Screenshots show a “Chrome is being debugged” banner; reload the tab afterwards to remove it;
+- For your first run, test on an ordinary page before using AgentSurf on important pages.
 
-## 4. Driving it from an agent
-
-Ask the agent in the conversation to operate the browser, for example to open a page, read its content, or take a screenshot.
-
-If it can do that, the setup is working.
-
-## 5. Safety boundaries
-
-AgentSurf acts on your logged-in pages, and file upload is powerful. Encode these rules in your agent's instructions:
-
-- **read-only by default**; ask the user before submitting, saving, deleting, publishing, uploading, or sending anything;
-- the user logs in themselves: never request passwords or codes, never read or print cookies, tokens, or local storage;
-- never commit `config.json` or the token, and never paste them into a chat;
-- never expose the bridge beyond localhost;
-- screenshots go through CDP, which shows a "Chrome is being debugged" banner and conflicts with the user's own DevTools; reload that tab afterwards to clear it.
-
-These are **instructions for the agent**, not an enforced approval layer. The caller still owns the authorization boundary.
-
-## 6. License
-
-AgentSurf is licensed under the [Apache License 2.0](LICENSE), including the patent grant in Section 3.
+AgentSurf is licensed under the [Apache License 2.0](LICENSE).
