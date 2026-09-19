@@ -89,30 +89,6 @@ Pending   0
 - 不需要任何环境变量，MCP Server 会自动读取安装时生成的 `config.json`；
 - 换电脑、移动项目目录、切换 Node 版本后，**重新运行 `npm run setup`** 就能重新生成启动器。
 
-### 让 Agent 确认工具可用
-
-对 Agent 说：
-
-```text
-列出你现在可用的 browser_* 工具。
-```
-
-应看到 **30** 个工具，其中包括 `browser_get_frames`、`browser_select_text`、`browser_get_console_messages`、`browser_screenshot`。
-
-（工具清单由 MCP 客户端从 Server 拿到，没有单独的“查询能力”工具；`browser.get_capabilities` 已移除。）
-
-### 装完怎么确认真的通了
-
-- **不经过 MCP 客户端**直接验全链路（在项目目录执行，返回 `ok: true` 和一串标签页就算通）：
-
-```sh
-node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
-```
-
-- 这里失败 → 链路问题；
-- 这里成功但 Agent 里失败 → MCP 配置问题，回到 [MCP 配置](#接到你的-agentmcp-配置)检查路径并重启客户端；
-- 更完整的验证清单（Bridge 是否监听、端到端冒烟）见[第 4 节](#4-验证接入是否成功)。
-
 ## 为什么要写这个
 
 起因很实际：新版 Codex 里操作浏览器经常报错（这是我自己的体感），与其等它修，不如自己写一条更稳的链路。

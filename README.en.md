@@ -89,30 +89,6 @@ Four things to know:
 - no environment variables are needed; the MCP server reads the `config.json` written during installation;
 - after switching machines, moving the project, or changing your Node install, **re-run `npm run setup`** to regenerate the launcher.
 
-### Confirm the tools are available
-
-Ask your agent:
-
-```text
-List the browser_* tools you have available.
-```
-
-You should see **30** tools, including `browser_get_frames`, `browser_select_text`, `browser_get_console_messages`, and `browser_screenshot`.
-
-(The client gets the tool list from the server, so there is no separate capability-query tool; `browser.get_capabilities` was removed.)
-
-### How to tell it really works
-
-- Verify the whole link **without the MCP client** (run it in the project directory; `ok: true` plus a list of tabs means the link is fine):
-
-```sh
-node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
-```
-
-- Fails here → the link is the problem;
-- Works here but fails inside the agent → MCP config problem, check the path in [Connect your agent](#connect-your-agent-mcp-config) and restart the client;
-- Full verification checklist (is the bridge listening, end-to-end smoke test): see [section 4](#4-verifying-the-setup).
-
 ## Why this exists
 
 The reason is practical: browser control in recent Codex versions kept failing for me. Rather than wait for a fix, I wrote a more reliable path myself.
