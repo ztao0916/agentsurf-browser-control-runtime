@@ -13,8 +13,6 @@ import { InteractiveExtractor } from './interactive-extractor';
 import { PageRevisionTracker } from './page-revision-tracker';
 import { AgentCursor } from './agent-cursor';
 import { extractPageContent } from './page-content-extractor';
-import { CONSOLE_CHANNEL, isConsoleEntriesMessage } from './console-channel'
-import type { ConsoleEntry } from '../core/protocol/tool-contract';
 
 const INSTALLATION_KEY = '__browserControlRuntimePageAgentInstalled';
 
@@ -69,8 +67,6 @@ if (!window[INSTALLATION_KEY]) {
             action: 'get-page-content',
             result: { tab_id: 0, page_revision: registry.pageRevision, ...extractPageContent(document, request.include_html, request.include_images, request.include_frames, request.max_text_length) },
           });
-        case 'get-console-messages':
-          return success(request, { action: 'get-console-messages', result: await queryConsoleCollector() });
         case 'get-interactives': {
           const extracted = extractor.extract({
             limit: request.limit,
@@ -147,7 +143,6 @@ if (!window[INSTALLATION_KEY]) {
 
 type SuccessPayload =
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-page-content' }>, 'action' | 'result'>
-  | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-console-messages' }>, 'action' | 'result'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-page-state' }>, 'action' | 'state'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'get-interactives' }>, 'action' | 'snapshot'>
   | Pick<Extract<PageAgentResponse, { ok: true; action: 'click' }>, 'action' | 'result'>
@@ -176,38 +171,4 @@ function success(request: PageAgentRequest, payload: SuccessPayload): PageAgentR
 
 function getRequestId(message: PageAgentRequest): string {
   return typeof message.request_id === 'string' ? message.request_id : 'unknown';
-}
-
-const CONSOLE_QUERY_TIMEOUT_MS = 3_000;
-
-interface ConsoleCollection {
-  available: boolean;
-  entries: ConsoleEntry[];
-  dropped: number;
-}
-
-/**
- * Reads the buffer held by the MAIN-world collector. A missing collector reports `available: false`
- * rather than an empty list, so callers never mistake "not collecting" for "no messages".
- */
-function queryConsoleCollector(): Promise<ConsoleCollection> {
-  return new Promise((resolve) => {
-    const requestId = crypto.randomUUID();
-    const finish = (result: ConsoleCollection): void => {
-      clearTimeout(timeout);
-      window.removeEventListener('message', onMessage);
-      resolve(result);
-    };
-    const timeout = setTimeout(
-      () => finish({ available: false, entries: [], dropped: 0 }),
-      CONSOLE_QUERY_TIMEOUT_MS,
-    );
-    const onMessage = (event: MessageEvent): void => {
-      if (event.source !== window || !isConsoleEntriesMessage(event.data)) return;
-      if (event.data.request_id !== requestId) return;
-      finish({ available: event.data.available, entries: event.data.entries, dropped: event.data.dropped });
-    };
-    window.addEventListener('message', onMessage);
-    window.postMessage({ channel: CONSOLE_CHANNEL, kind: 'query', request_id: requestId }, '*');
-  });
 }

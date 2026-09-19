@@ -2,7 +2,6 @@ import { ChromePageAgentClient } from '../chrome/scripting-adapter';
 import { ChromeTabsAdapter } from '../chrome/tabs-adapter';
 import { ChromeScreenshotAdapter } from '../chrome/screenshot-adapter';
 import { ChromeBrowserSessionCoordinator } from '../chrome/browser-session-coordinator';
-import { ChromeConsoleCollector } from '../chrome/console-collector';
 import { ChromeDebuggerAdapter } from '../chrome/debugger-adapter';
 import { ChromeDownloadAdapter } from '../chrome/download-adapter';
 import { ChromeFrameAdapter } from '../chrome/frames-adapter';
@@ -18,8 +17,6 @@ import {
 import { NativeMessagingTransport, type NativeTransportEvent } from '../transport/native-messaging-transport';
 
 const sessions = new ChromeBrowserSessionCoordinator();
-const consoleCollector = new ChromeConsoleCollector(sessions);
-sessions.onLease = (tabId) => void consoleCollector.install(tabId);
 const debuggerAdapter = new ChromeDebuggerAdapter();
 const runtime = new BrowserToolRuntime(
   new ChromeTabsAdapter(),

@@ -14,7 +14,7 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 
 ## 1. Tool reference
 
-30 tools in total.
+29 tools in total.
 
 | Goal | Tools |
 | --- | --- |
@@ -32,7 +32,6 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 | Scrolling | `browser.scroll` |
 | Dialogs | `browser.handle_dialog` |
 | Files | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
-| Console | `browser.get_console_messages` |
 | Sessions and tab ownership | `browser.claim_tab` / `browser.reset_sessions` (finish a task: ungroup + close the tabs this conversation opened) |
 
 > `browser.start_session` is still part of the protocol (usable by scripts and external clients) but is **not advertised as an MCP tool**: the MCP server establishes a session per conversation automatically. See [README section 6.5](../README.en.md#65-parallel-conversations-isolated-by-default).
@@ -40,7 +39,7 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 - `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.click`, `browser.double_click`.
 - `browser.open` and `browser.claim_tab` accept an optional `name` (**the session's tab group title**, about 12 characters), which the agent sets from what the conversation is doing. Without it the group is titled after the claimed page's title — its hostname while the tab is still loading — and `AgentSurf` last.
 - `browser.reset_sessions` accepts an optional `close_opened_tabs` (**default `true`**): besides ungrouping, it closes the tabs **this conversation opened itself** — the test is a lease with `origin: agent`, so a tab the user already had open (`origin: user`) is never closed. Pass `false` to ungroup only; `closed_tab_ids` in the result lists what was closed. `force: true` only ungroups and **closes no tabs at all**.
-- `frame_id` is accepted by `browser.get_page`, `browser.get_interactives`, `browser.get_page_content`, `browser.get_console_messages`, and every element action.
+- `frame_id` is accepted by `browser.get_page`, `browser.get_interactives`, `browser.get_page_content`, and every element action.
 - `browser.get_interactives` accepts `limit` (default **150**), `visible_only`, `tag`, `role`, `name_contains`. Filtering and truncation happen inside the page, and the result reports `total` plus `truncated`. Measured: a 665-element page fell from ~66,800 tokens to ~15,100 by the cap alone, and to ~380 tokens with `visible_only: true`.
 - **`truncated: true` means the list is incomplete** — do not conclude the element is missing; narrow with a filter instead.
 - **`visible_only: false` is the deliberate default**: collapsed panels, inactive tabs, and hover-revealed buttons (`opacity: 0`) are invisible, yet the agent must be able to discover them. Actions still refuse invisible elements. Note there is **no coordinate-level hover tool**, so such a button has to be revealed by clicking its container or by triggering the page's own interaction.
@@ -174,7 +173,7 @@ Behaviour:
 | --- | --- |
 | `src/core/` | Chrome-independent tool contract, argument validation, runtime dispatch |
 | `src/chrome/` | Chrome adapters: tabs, CDP, screenshots, downloads, **frame enumeration**, session coordination |
-| `src/content/` | Page Agent, element registry, revision tracking, action executor, console collector, agent cursor |
+| `src/content/` | Page Agent, element registry, revision tracking, action executor, agent cursor |
 | `src/transport/` | Native messaging, runtime messages, tool transport |
 | `src/bridge/` | local WebSocket bridge |
 | `src/mcp/` | MCP server, bridge client, native host install CLI |
@@ -197,8 +196,7 @@ An `element_id` is opaque; the DOM reference lives only in the content script. B
 - content scripts run with `all_frames: true` + `match_about_blank: true`, so `about:blank` / `srcdoc` frames get a Page Agent too;
 - requests are addressed with `chrome.tabs.sendMessage(tabId, msg, { frameId })` — without a frame ID the message would race multiple agents for one response;
 - on-demand injection targets one frame with `scripting.executeScript({ target: { tabId, frameIds: [frameId] } })`;
-- MAIN-world console collection is best effort: it is installed only on tabs a session has claimed (every frame at claim time, then per frame on each navigation commit), and a page CSP may block it without taking the Page Agent down (the result then reports `available: false`); the patch lives as long as the document, so **releasing a lease does not remove it** — the tab's next navigation does;
-- the patch makes the page's own `console.error` calls show up as **this extension's errors** in `chrome://extensions`, because the script calling the real console method is ours. That is exactly why it only runs on claimed tabs: a page the agent never touches keeps a clean console;
+- AgentSurf does not inject into the page's MAIN world, does not patch `console`, and does not listen for `error` or `unhandledrejection`; page console output is unrelated to the extension, and the runtime only injects the isolated-world Page Agent.
 
 ### 5.4 Screenshots, cursor, files
 

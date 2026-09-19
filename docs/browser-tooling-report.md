@@ -1,10 +1,10 @@
 # AgentSurf 浏览器运行时：当前状态与已知边界
 
-本文对应当前 `main` 分支的 30 工具版本。旧版工具范围和验证数据已经清理，当前能力以本文、[README](../README.md) 和 [工具参考](reference.md) 为准。
+本文对应当前 `main` 分支的 29 工具版本。旧版工具范围和验证数据已经清理，当前能力以本文、[README](../README.md) 和 [工具参考](reference.md) 为准。
 
 ## 当前工具面
 
-AgentSurf 通过本地 MCP Server 提供 30 个 `browser.*` 工具。
+AgentSurf 通过本地 MCP Server 提供 29 个 `browser.*` 工具。
 
 ### 会话与标签页
 
@@ -27,7 +27,6 @@ AgentSurf 通过本地 MCP Server 提供 30 个 `browser.*` 工具。
 - `browser.get_page`
 - `browser.get_interactives`
 - `browser.get_page_content`
-- `browser.get_console_messages`
 - `browser.screenshot`
 - `browser.observe`
 
@@ -66,7 +65,7 @@ npm run build
 
 - TypeScript 类型检查通过；
 - ESLint 通过；
-- 10 个测试文件、129 项单元测试通过；
+- 10 个测试文件、125 项单元测试通过；
 - 扩展、Native Host、Bridge 和 MCP Server 构建通过。
 
 这些测试主要覆盖协议、参数校验、调度、会话和适配器逻辑。它们不会启动真实 Chrome、安装未打包扩展并操作真实网页。
@@ -90,7 +89,6 @@ Windows 与 macOS 已完成手工真机验证，包括：
 - **iframe 需显式寻址**：默认操作顶层文档，使用 `browser.get_frames` 获取 `frame_id`；跨域框架通常无法注入。
 - **受保护页面不可注入**：包括 `chrome://`、Chrome 应用商店等。
 - **CDP 与 DevTools 互斥**：同一标签页已打开 DevTools 时，截图所需的 debugger attach 可能失败，并显示“Chrome 正在被调试”横幅。
-- **Console 跨导航丢失**：缓冲位于当前页面上下文，刷新或跳转后清空，并且只能看到采集器启动后的输出。
 - **拖拽不携带 `dataTransfer` 数据**：可以触发拖放交互，但不能注入自定义拖拽载荷。
 - **文件上传需要本机绝对路径**。
 - **下载无法可靠关联来源标签页**：只能使用 Chrome Downloads API 提供的元数据。

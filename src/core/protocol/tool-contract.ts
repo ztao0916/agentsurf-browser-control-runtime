@@ -13,7 +13,6 @@ export type ToolName =
   | 'browser.back'
   | 'browser.forward'
   | 'browser.reload'
-  | 'browser.get_console_messages'
   | 'browser.list_downloads'
   | 'browser.wait_for_download'
   | 'browser.set_files'
@@ -118,13 +117,6 @@ export interface ResetSessionsResult {
 
 export interface TabTargetArgs {
   tab_id: number;
-}
-
-export interface GetConsoleMessagesArgs extends TabTargetArgs {
-  after_sequence?: number;
-  limit?: number;
-  levels?: ConsoleLevel[];
-  frame_id?: number;
 }
 
 export type KeyModifier = 'Alt' | 'Control' | 'Meta' | 'Shift';
@@ -331,7 +323,6 @@ export interface ToolArguments {
   'browser.back': TabTargetArgs;
   'browser.forward': TabTargetArgs;
   'browser.reload': TabTargetArgs;
-  'browser.get_console_messages': GetConsoleMessagesArgs;
   'browser.select_text': SelectTextArgs;
   'browser.handle_dialog': HandleDialogArgs;
   'browser.list_downloads': ListDownloadsArgs;
@@ -375,29 +366,6 @@ export interface BrowserSessionResult {
 export interface CloseTabResult {
   tab_id: number;
   closed: true;
-}
-
-export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
-export type ConsoleEntrySource = 'console' | 'exception' | 'unhandledrejection';
-
-export interface ConsoleEntry {
-  sequence: number;
-  level: ConsoleLevel;
-  source: ConsoleEntrySource;
-  message: string;
-  stack: string | null;
-  timestamp: number;
-}
-
-export interface GetConsoleMessagesResult {
-  tab_id: number;
-  /** False when the MAIN-world collector was not present, so an empty list is not proof of silence. */
-  available: boolean;
-  cursor: number;
-  entries: ConsoleEntry[];
-  has_more: boolean;
-  truncated: boolean;
-  dropped: number;
 }
 
 export interface CoordinateActionResult {
@@ -545,7 +513,6 @@ export interface ToolResults {
   'browser.back': SwitchTabResult;
   'browser.forward': SwitchTabResult;
   'browser.reload': SwitchTabResult;
-  'browser.get_console_messages': GetConsoleMessagesResult;
   'browser.select_text': SelectTextResult;
   'browser.handle_dialog': CoordinateActionResult;
   'browser.list_downloads': { downloads: DownloadInfo[] };
@@ -610,7 +577,6 @@ export type PageAgentAction =
   | 'get-page-state'
   | 'get-interactives'
   | 'get-page-content'
-  | 'get-console-messages'
   | 'click'
   | 'double-click'
   | 'type'
@@ -642,7 +608,6 @@ export type PageAgentRequest =
       name_contains?: string;
     })
   | (PageAgentRequestBase & { action: 'get-page-content'; include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number })
-  | (PageAgentRequestBase & { action: 'get-console-messages' })
   | (PageAgentRequestBase & { action: 'click'; element_id: string; modifiers?: KeyModifier[] })
   | (PageAgentRequestBase & { action: 'double-click'; element_id: string; modifiers?: KeyModifier[] })
   | (PageAgentRequestBase & { action: 'type'; element_id: string; text: string })
@@ -704,14 +669,6 @@ export type PageAgentSuccessResponse =
       ok: true;
       action: 'get-page-content';
       result: PageContentResult;
-    }
-  | {
-      kind: 'page-agent-response';
-      protocol_version: typeof PROTOCOL_VERSION;
-      request_id: string;
-      ok: true;
-      action: 'get-console-messages';
-      result: { available: boolean; entries: ConsoleEntry[]; dropped: number };
     }
   | {
       kind: 'page-agent-response';

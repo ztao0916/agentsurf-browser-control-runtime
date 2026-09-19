@@ -27,7 +27,6 @@ import type { TabsAdapter } from '../chrome/tabs-adapter';
 import type { ScreenshotAdapter } from '../chrome/screenshot-adapter';
 import type { DownloadAdapter } from '../chrome/download-adapter';
 import type { FrameAdapter } from '../chrome/frames-adapter';
-import type { ConsoleEntry, GetConsoleMessagesArgs, GetConsoleMessagesResult } from './protocol/tool-contract';
 
 export class BrowserToolRuntime {
   public constructor(
@@ -116,11 +115,6 @@ export class BrowserToolRuntime {
       case 'browser.reload':
         await this.assertSessionAccess(request.session_id, request.args.tab_id);
         return { tab: await this.tabs.reload(request.args.tab_id) };
-      case 'browser.get_console_messages': {
-        await this.requireTabAccess(request.session_id, request.args.tab_id);
-        const collected = await this.pageAgent.getConsoleMessages(request.args.tab_id, request.args.frame_id ?? TOP_FRAME_ID);
-        return { tab_id: request.args.tab_id, ...selectConsoleMessages(collected, request.args) };
-      }
       case 'browser.handle_dialog':
         await this.requireTabAccess(request.session_id, request.args.tab_id);
         await this.requireDebugger().send(request.args.tab_id, 'Page.handleJavaScriptDialog', {
@@ -589,24 +583,4 @@ function getNumber(value: unknown, key: string): number | undefined {
 function getNestedNumber(value: unknown, objectKey: string, numberKey: string): number | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   return getNumber((value as Record<string, unknown>)[objectKey], numberKey);
-}
-
-function selectConsoleMessages(
-  collected: { available: boolean; entries: ConsoleEntry[]; dropped: number },
-  args: GetConsoleMessagesArgs,
-): Omit<GetConsoleMessagesResult, 'tab_id'> {
-  const afterSequence = args.after_sequence ?? 0;
-  const earliest = collected.entries[0]?.sequence ?? 0;
-  const filtered = collected.entries.filter((entry) =>
-    entry.sequence > afterSequence && (args.levels === undefined || args.levels.includes(entry.level)));
-  const entries = filtered.slice(0, Math.min(args.limit ?? 100, 500));
-  return {
-    available: collected.available,
-    cursor: entries.at(-1)?.sequence ?? afterSequence,
-    entries,
-    has_more: filtered.length > entries.length,
-    // The page keeps a bounded buffer, so an old cursor means messages were dropped in between.
-    truncated: afterSequence > 0 && earliest > 0 && afterSequence < earliest - 1,
-    dropped: collected.dropped,
-  };
 }

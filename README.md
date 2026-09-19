@@ -10,7 +10,7 @@
 
 AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome。可以把它理解为 ChatGPT 浏览器插件的通用版本：不绑定某个模型或客户端，任何支持 MCP 的 Agent 都可以接入。
 
-它复用你当前的登录态和标签页，支持读取页面、点击、输入、滚动、截图、文件上传、iframe 和 Console 等常见操作。你不需要换浏览器，也不需要重新登录。
+它复用你当前的登录态和标签页，支持读取页面、点击、输入、滚动、截图、文件上传和 iframe 等常见操作。你不需要换浏览器，也不需要重新登录。
 
 ![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
 

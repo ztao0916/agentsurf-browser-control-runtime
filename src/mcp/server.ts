@@ -28,7 +28,6 @@ const schemas = {
   'browser.back': tabId,
   'browser.forward': tabId,
   'browser.reload': tabId,
-  'browser.get_console_messages': { ...tabId, ...frameId, after_sequence: z.number().int().optional(), limit: z.number().int().positive().optional(), levels: z.array(z.enum(['log', 'info', 'warn', 'error', 'debug'])).optional() },
   'browser.select_text': { ...elementId, ...frameId, text: z.string().optional(), selection_type: z.enum(['text', 'cursor_before', 'cursor_after']).optional() },
   'browser.handle_dialog': { ...tabId, action: z.enum(['accept', 'dismiss']), prompt_text: z.string().optional() },
   'browser.list_downloads': optionalTabId,
@@ -275,8 +274,6 @@ function descriptionFor(tool: ToolName): string {
     'browser.get_page_content': 'Extract readable page text, and optionally HTML, image, and iframe metadata. Covers the top document unless frame_id targets a frame; app shells keep their real content inside an iframe, so check browser_get_frames when the text looks like navigation only.',
     'browser.screenshot': 'Capture a screenshot of a Chrome tab as an image. Works on a background tab. Prefer this over describing a page in text when layout or visual state matters.',
     'browser.observe': 'Capture page state, interactive elements, accessibility data, and a screenshot in one call.',
-
-    'browser.get_console_messages': 'Read page console output, uncaught exceptions, and unhandled rejections. Collection runs only on tabs this session has claimed and restarts on navigation, so available: false means the collector was not running and an empty list is not proof of silence.',
     'browser.click': 'Click an element returned by browser_get_interactives.',
     'browser.double_click': 'Double-click an element returned by browser_get_interactives.',
     'browser.type': 'Type into an editable element returned by browser_get_interactives.',

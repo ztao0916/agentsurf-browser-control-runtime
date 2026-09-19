@@ -10,7 +10,7 @@
 
 AgentSurf lets your AI agent operate the local Chrome browser you are already using. Think of it as a universal version of the ChatGPT browser plugin: it is not tied to one model or client, and any MCP-capable agent can use it.
 
-It reuses your existing sessions and tabs and supports common browser actions such as reading pages, clicking, typing, scrolling, taking screenshots, uploading files, working with iframes, and reading the console. You do not need to switch browsers or sign in again.
+It reuses your existing sessions and tabs and supports common browser actions such as reading pages, clicking, typing, scrolling, taking screenshots, uploading files, and working with iframes. You do not need to switch browsers or sign in again.
 
 ![AgentSurf demo: an agent controls the user's signed-in Chrome through the local runtime](docs/assets/agentsurf-demo.svg)
 

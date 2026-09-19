@@ -14,7 +14,7 @@
 
 ## 1. 工具速查
 
-共 **30** 个工具。
+共 **29** 个工具。
 
 | 目的 | 工具 |
 | --- | --- |
@@ -32,7 +32,6 @@
 | 滚动 | `browser.scroll` |
 | 对话框 | `browser.handle_dialog` |
 | 下载与上传 | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
-| Console | `browser.get_console_messages` |
 | 会话与标签页归属 | `browser.claim_tab` / `browser.reset_sessions`（收尾：解除分组 + 关掉本对话自己开的页签） |
 
 > `browser.start_session` 仍在协议里（脚本、外部客户端可用），但**不作为 MCP 工具暴露**：MCP Server 会为每个对话自动建立会话，见 [README 第 6.5 节](../README.md#65-多对话并行默认自动隔离)。
@@ -42,7 +41,7 @@
 - 支持 `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` 的工具：`browser.press`、`browser.click`、`browser.double_click`；
 - `browser.open` 与 `browser.claim_tab` 接受可选的 `name`（**会话分组名**，建议 12 字以内）：它决定该会话 Chrome 分组的标题，由 Agent 按对话主题填写；省略时用被接管页签的标题兜底（加载中标题即 URL 时改用域名），再退到 `AgentSurf`；
 - `browser.reset_sessions` 可选 `close_opened_tabs`（**默认 `true`**）：除解除分组外，还关掉**本对话自己 `open` 出来的**页签——判据是租约的 `origin` 为 `agent`，因此用户原本就开着的页签（`origin: user`）永远不会被关。传 `false` 则只解除分组；结果里的 `closed_tab_ids` 列出被关掉的页签。`force: true` 只解除分组、**不关任何页签**；
-- 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_interactives`、`browser.get_page_content`、`browser.get_console_messages`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
+- 支持 `frame_id` 的工具：`browser.get_page`、`browser.get_interactives`、`browser.get_page_content`，以及所有元素级动作（`click` / `double_click` / `type` / `press` / `select_text` / `set_checked` / `select_option` / `drag` / `wait_for_element` / `set_files`）；
 - `browser.get_interactives` 支持 `limit`（默认 **150**）、`visible_only`、`tag`、`role`、`name_contains`。**过滤与截断在页面内完成**，结果里始终给出 `total` 与 `truncated`。实测：某重页面 665 个元素，仅靠默认上限就从 ~66,800 tokens 降到 ~15,100，用 `visible_only: true` 降到 ~380；
 - **`truncated: true` 意味着列表不完整**，不能据此判定「页面上没有这个元素」，应该用过滤器缩小范围（而不是把 limit 调大）；
 - **`visible_only` 默认 `false` 是故意的**：折叠面板、未激活 tab、以及**悬停才显形（`opacity: 0`）的按钮**都属于不可见，但 Agent 必须先能发现它们；真去点时仍会由可见性检查把关。注意：**没有坐标级悬停工具**，这类按钮要靠先点击其容器或触发页面自身的交互来唤出；
@@ -191,7 +190,7 @@ npm run bridge:dev    # 先构建再启动
 | --- | --- |
 | `src/core/` | 与 Chrome API 无关的工具契约、参数校验、Runtime 调度 |
 | `src/chrome/` | Chrome API 适配：标签页、CDP、截图、下载、**框架枚举**、会话协调 |
-| `src/content/` | Page Agent、元素注册与 revision 追踪、动作执行、Console 采集、Agent 光标 |
+| `src/content/` | Page Agent、元素注册与 revision 追踪、动作执行、Agent 光标 |
 | `src/transport/` | Native Messaging、Runtime Message 与工具传输协议 |
 | `src/bridge/` | 本机 WebSocket Bridge |
 | `src/mcp/` | MCP Server、Bridge 客户端、Native Host 安装 CLI |
@@ -216,8 +215,7 @@ MutationObserver 只筛选：交互元素增删、已注册元素关键属性变
 - Content Script 以 `all_frames: true` + `match_about_blank: true` 注入，因此 `about:blank` / `srcdoc` 这类同源框架也有 Page Agent；
 - 请求通过 `chrome.tabs.sendMessage(tabId, msg, { frameId })` **定向**发送（广播会让多个 Agent 抢答同一响应）；
 - 按需注入也用 `scripting.executeScript({ target: { tabId, frameIds: [frameId] } })` 定向；
-- MAIN world 的 Console 采集是**尽力而为**：只在 session 认领的 tab 上安装（认领时对该 tab 全部 frame 注入，之后每次导航提交按 frame 重新注入），页面 CSP 可能拦掉它，但不会连带让 Page Agent 失效（此时 `available: false`）；补丁与文档同生命周期，**释放租约不会摘掉它**，要等该 tab 下次导航；
-- 补丁让页面自己的 `console.error` 在 `chrome://extensions` 里被记为**扩展的错误**（调用原生方法的脚本是我们），这正是采集器只在认领的 tab 上安装的原因：没被 agent 操作的页面保持干净的 `console`；
+- AgentSurf 不注入页面的 MAIN world、不接管 `console`、不监听 `error` 或 `unhandledrejection`；网页自身的控制台输出与扩展无关，运行时只注入隔离世界的 Page Agent。
 
 ### 5.4 截图、光标、文件
 

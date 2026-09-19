@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the page Console collector and `browser.get_console_messages`. AgentSurf
+  no longer injects into the page's MAIN world, patches `console`, or listens for
+  page errors and unhandled rejections.
+
 ## [0.1.0] - 2026-09-19
 
 ### Added

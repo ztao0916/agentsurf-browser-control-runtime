@@ -3,7 +3,6 @@ import { parsePageAgentResponse } from '../core/protocol/schemas';
 import {
   PROTOCOL_VERSION,
   DEFAULT_INTERACTIVE_LIMIT,
-  type ConsoleEntry,
   type InteractiveFilterArgs,
   type KeyModifier,
   type PageAgentElementActionResult,
@@ -24,7 +23,6 @@ export interface PageAgentClient {
     frameId: number,
     options: { include_html: boolean; include_images: boolean; include_frames: boolean; max_text_length: number },
   ): Promise<PageContentResult>;
-  getConsoleMessages(tabId: number, frameId: number): Promise<{ available: boolean; entries: ConsoleEntry[]; dropped: number }>;
   click(tabId: number, frameId: number, elementId: string, modifiers?: KeyModifier[]): Promise<PageAgentElementActionResult & { clicked: true }>;
   doubleClick(tabId: number, frameId: number, elementId: string, modifiers?: KeyModifier[]): Promise<PageAgentElementActionResult & { double_clicked: true }>;
   type(tabId: number, frameId: number, elementId: string, text: string): Promise<PageAgentElementActionResult & { typed: true }>;
@@ -96,13 +94,6 @@ export class ChromePageAgentClient implements PageAgentClient {
     const response = await this.send(tabId, frameId, { ...createRequestBase(), action: 'get-page-content', ...options });
     if (!response.ok) throw new ToolFailure(response.error);
     if (response.action !== 'get-page-content') throw this.unexpectedResponse();
-    return response.result;
-  }
-
-  public async getConsoleMessages(tabId: number, frameId: number) {
-    const response = await this.send(tabId, frameId, { ...createRequestBase(), action: 'get-console-messages' });
-    if (!response.ok) throw new ToolFailure(response.error);
-    if (response.action !== 'get-console-messages') throw this.unexpectedResponse();
     return response.result;
   }
 
@@ -315,9 +306,6 @@ export class ChromePageAgentClient implements PageAgentClient {
   }
 
   private async inject(tabId: number, frameId: number): Promise<void> {
-    // Only the Page Agent is injected here. The console collector patches the page's own console and
-    // Chrome therefore reports the page's errors as this extension's, so it belongs to a tab a session
-    // drives, not to every frame the runtime happens to talk to — ChromeConsoleCollector owns it.
     try {
       await chrome.scripting.executeScript({
         target: { tabId, frameIds: [frameId] },
