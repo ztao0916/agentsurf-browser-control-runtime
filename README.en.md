@@ -67,13 +67,13 @@ If it is not connected: click **Disconnect** once, wait a second, then click **C
 
 ### Connect your agent (MCP config)
 
-Paste the JSON printed by the installer into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example (`command` is whatever path the script printed):
+Paste the JSON printed by the installer into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example, the reference demo below uses this machine's actual macOS launcher path (use the path printed by the installer):
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "<absolute path to the launcher printed by the installer>"
+      "command": "/Users/zhangtao/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
     }
   }
 }
