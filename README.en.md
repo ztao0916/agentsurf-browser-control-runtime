@@ -56,6 +56,19 @@ What it does not do:
 - no cloud browser: everything talks over `127.0.0.1`;
 - no CAPTCHA solving or anti-bot evasion.
 
+### How it differs from chrome-devtools MCP
+
+AgentSurf is designed to operate **the Chrome session you are already using**.
+It reuses existing logins and tabs, which makes it suitable for user environments,
+authenticated sites, and workflows that may need human takeover. chrome-devtools
+MCP is a better fit when you need deeper CDP capabilities or a clean, repeatable
+test profile.
+
+The trade-off is that AgentSurf currently has no network response bodies, tracing,
+heap snapshots, or Lighthouse, and its `chrome.debugger` use conflicts with an
+open DevTools session. See the [browser tooling report](docs/browser-tooling-report.md#与-chrome-devtools-mcp-的对比)
+for the full comparison, evidence, and known limitations.
+
 ## 2. How it works
 
 ```text
@@ -590,6 +603,8 @@ For developers, and for anyone integrating below the MCP layer, the following no
 | [3. Development and debugging](docs/reference.en.md#3-development-and-debugging) | Build / lint / test commands, the extension status page, the standalone bridge |
 | [4. External protocol](docs/reference.en.md#4-external-protocol) | Speaking to the local bridge directly instead of going through MCP |
 | [5. Implementation notes](docs/reference.en.md#5-implementation-notes) | Layout, page revisions and `element_id`, frame routing, screenshots and files |
+| [Contributing](CONTRIBUTING.md) | Development setup, required checks, and pull request expectations |
+| [Changelog](CHANGELOG.md) | Release history and notable changes |
 
 ## 12. License
 

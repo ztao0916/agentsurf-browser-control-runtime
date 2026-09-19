@@ -56,6 +56,12 @@ npm run setup
 - 不提供云端浏览器，所有通信都在 `127.0.0.1`；
 - 不绕过验证码、不做反爬对抗。
 
+### 和 chrome-devtools MCP 有什么不同
+
+AgentSurf 解决的是**操作你当前正在使用的 Chrome**：它直接复用现有登录态和标签页，适合需要用户环境、已登录网站或人工接管的流程。chrome-devtools MCP 更适合需要 CDP 深度能力或干净、可重复测试环境的场景。
+
+代价是 AgentSurf 目前没有 network 响应体、性能 trace、堆快照和 Lighthouse；碰到 `chrome.debugger` 时也会与 DevTools 互斥。完整对比、验证证据和已知边界见 [浏览器工具链报告](docs/browser-tooling-report.md#与-chrome-devtools-mcp-的对比)。
+
 ## 2. 工作原理
 
 ```text
@@ -611,6 +617,8 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 | [3. 开发与调试](docs/reference.md#3-开发与调试) | 构建 / lint / 测试命令、扩展状态页、独立 Bridge |
 | [4. 外部调用协议](docs/reference.md#4-外部调用协议) | 不用 MCP，自己写客户端直连本地 Bridge |
 | [5. 实现细节](docs/reference.md#5-实现细节) | 目录结构、page revision 与 `element_id`、frame 路由、截图与文件传输 |
+| [贡献指南](CONTRIBUTING.md) | 开发环境、提交前检查和 Pull Request 要求 |
+| [变更记录](CHANGELOG.md) | 版本发布与重要变更 |
 
 ## 12. 许可证
 

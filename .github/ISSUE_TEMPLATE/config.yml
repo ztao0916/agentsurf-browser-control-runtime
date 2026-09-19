@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ztao0916/agentsurf-browser-control-runtime/security/advisories/new
+    about: Report vulnerabilities privately; do not open a public issue.
+  - name: Ask a question or discuss an idea
+    url: https://github.com/ztao0916/agentsurf-browser-control-runtime/discussions
+    about: Use Discussions for usage questions and open-ended proposals.
