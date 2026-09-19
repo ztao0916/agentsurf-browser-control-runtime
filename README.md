@@ -21,11 +21,10 @@ AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
-npm install
 npm run setup
 ```
 
-`npm run setup` 会构建扩展，提示你把 `dist/` 加载到 `chrome://extensions`，输入扩展 ID 后自动注册 Native Host，并打印可直接粘贴的 MCP 配置 JSON；交互式终端还会可选运行 smoke test。
+`npm run setup` 会安装依赖、构建扩展，提示你把 `dist/` 加载到 `chrome://extensions`，输入扩展 ID 后自动注册 Native Host，并打印可直接粘贴的 MCP 配置 JSON；交互式终端还会可选运行 smoke test。
 
 更细的前置环境与验证说明见[第 4 节](#4-安装)。
 
@@ -133,11 +132,10 @@ Windows 与 macOS 均已真机验证。全程不需要管理员权限，也不�
 在项目目录执行：
 
 ```bash
-npm install
 npm run setup
 ```
 
-向导会自动完成构建与 Native Host 注册，并在过程中提示你：
+向导会自动完成依赖安装、构建与 Native Host 注册，并在过程中提示你：
 
 1. 打开 `chrome://extensions`，开启开发者模式；
 2. 点击“加载已解压的扩展程序”，选择项目里的 `dist/`；

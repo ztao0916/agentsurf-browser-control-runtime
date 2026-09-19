@@ -16,16 +16,15 @@ AgentSurf is a local Chrome control runtime for AI agents. You can think of it a
 
 ## Quick start
 
-Run these commands in the project directory:
+Run this command in the project directory:
 
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
-npm install
 npm run setup
 ```
 
-`npm run setup` builds the extension, asks you to load `dist/` in `chrome://extensions`, registers the native host after you enter the extension ID, and prints the MCP config JSON to paste into your agent. In an interactive terminal it can also run a smoke test.
+`npm run setup` installs dependencies, builds the extension, asks you to load `dist/` in `chrome://extensions`, registers the native host after you enter the extension ID, and prints the MCP config JSON to paste into your agent. In an interactive terminal it can also run a smoke test.
 
 For more detail on prerequisites and verification, see [section 4](#4-installation).
 
@@ -130,14 +129,13 @@ Verified on both Windows and macOS. Nothing here needs administrator rights, and
 
 ### 4.2 Install and register
 
-Run these commands in the project directory:
+Run this command in the project directory:
 
 ```bash
-npm install
 npm run setup
 ```
 
-The wizard builds the extension and registers the native host, prompting you to:
+The wizard installs dependencies, builds the extension, and registers the native host, prompting you to:
 
 1. open `chrome://extensions` and turn on Developer mode;
 2. click **Load unpacked** and select the project's `dist/` folder;
