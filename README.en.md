@@ -90,37 +90,13 @@ Add this MCP configuration to the agent I am currently using, name it agentsurf,
 
 Restart the agent afterwards.
 
-You can also configure it manually. The structure is:
+`npm run setup` prints the MCP configuration for your current system before it finishes. Add the complete output to your agent. The structure is:
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "<absolute path to the launcher printed by the installer>"
-    }
-  }
-}
-```
-
-macOS example (replace `XXX` with your username):
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
-    }
-  }
-}
-```
-
-Windows example (replace `XXX` with your username):
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "C:/Users/XXX/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
+      "command": "<absolute path to the launcher printed by npm run setup>"
     }
   }
 }

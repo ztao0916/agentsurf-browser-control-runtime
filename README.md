@@ -90,37 +90,13 @@ npm run setup
 
 完成后重启 Agent。
 
-也可以手动配置，结构如下：
+`npm run setup` 会在安装结束前打印当前系统对应的 MCP 配置。把完整输出加入你的 Agent 即可，结构如下：
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "<安装脚本打印的启动器绝对路径>"
-    }
-  }
-}
-```
-
-macOS 示例（把 `XXX` 替换为你的用户名）：
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
-    }
-  }
-}
-```
-
-Windows 示例（把 `XXX` 替换为你的用户名）：
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "C:/Users/XXX/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
+      "command": "<npm run setup 打印的启动器绝对路径>"
     }
   }
 }
