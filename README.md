@@ -8,27 +8,26 @@
 
 > 本项目已链接认可 [LINUX DO](https://linux.do/) 社区。
 
-AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器运行时。它复用你当前 Chrome 的登录态，把页面观察、点击、输入、截图、iframe、Console 观测等能力统一成 `browser.*` 工具，通过本地 MCP Server 暴露给任意支持 MCP 的 Agent。它不内置模型调用、任务规划，也不绑定特定 AI 产品。
+AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器运行时。可以把它理解为 ChatGPT 浏览器插件的通用版本：同样是让 AI 直接操作浏览器，但不绑定 ChatGPT，任何支持 MCP 的 Agent 都能接入。它复用你当前 Chrome 的登录态，把页面观察、点击、输入、截图、iframe、Console 观测等能力统一成 `browser.*` 工具，通过本地 MCP Server 暴露给 Agent。它不内置模型调用，也不负责任务规划。
 
 ![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
 
-> 接入方式：从源码构建，以「未打包扩展」加载到 Chrome，再在本机注册 Native Host。
->
-> Windows 与 macOS 均已真机验证；首次接入通常 5–10 分钟，把这段说明交给 AI，让它带你一步步接入即可。
+> 接入方式：MCP Server。Windows 与 macOS 均已真机验证；首次接入通常 5–10 分钟，把这段说明交给 AI，让它带你一步步接入即可。
 
 ## 快速开始
 
-推荐直接用向导完成依赖安装、构建和 Native Host 注册：
+在项目目录执行：
 
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
+npm install
 npm run setup
 ```
 
-向导会依次安装依赖、构建扩展，提示你把 `dist/` 加载到 `chrome://extensions`，输入扩展 ID 后注册 Native Host，并打印可直接粘贴的 MCP 配置 JSON；交互式终端还会可选运行 smoke test。
+`npm run setup` 会构建扩展，提示你把 `dist/` 加载到 `chrome://extensions`，输入扩展 ID 后自动注册 Native Host，并打印可直接粘贴的 MCP 配置 JSON；交互式终端还会可选运行 smoke test。
 
-需要逐步排查或手动安装时，见[第 4 节](#4-安装)。
+更细的前置环境与验证说明见[第 4 节](#4-安装)。
 
 ## 为什么要写这个
 
@@ -40,20 +39,20 @@ npm run setup
 
 ## 使用体验
 
-以下是我自己的实机使用情况，供参考：
+以下是我在三个客户端里的实机体验，供参考：
 
-- **Codex**：接入顺利，工具能被正常识别和调用，日常操作网页体验不错；
-- **Command Code agent**：同样按 MCP 配置接入，过程没有遇到问题；
-- **pi agent**：接入同样顺利，用起来和另外两个客户端没有差别。
+- **Codex**：接入顺利，工具能被正常识别和调用，日常网页操作体验不错；
+- **Command Code agent**：按同样的 MCP 方式接入，整个过程没有遇到问题；
+- **pi agent**：接入同样顺利，使用体验和前两者基本一致。
 
-三个客户端接入过程都没有遇到问题，整体体验比较不错。以上是我个人的主观感受，不同 Agent 的调用风格和效果可能会有差异。
+三个客户端都能正常接入和调用，整体体验比较稳定顺手。以上是我的主观体验，不同 Agent 的调用风格和最终效果可能有所不同。
 
 ## 目录
 
 - [1. 它是什么](#1-它是什么)
 - [2. 工作原理](#2-工作原理)
-- [3. 接入方案选择](#3-接入方案选择)
-- [4. 安装（Windows / macOS）](#4-安装)
+- [3. 接入方式（MCP Server）](#3-接入方式mcp-server)
+- [4. 安装](#4-安装)
 - [5. 验证接入是否成功](#5-验证接入是否成功)
 - [6. 在 Agent 里怎么用](#6-在-agent-里怎么用)
 - [7. 更新、移动目录、卸载](#7-更新移动目录卸载)
@@ -79,12 +78,6 @@ npm run setup
 - 不内置任何大模型、不负责规划任务；
 - 不提供云端浏览器，所有通信都在 `127.0.0.1`；
 - 不绕过验证码、不做反爬对抗。
-
-### 和 chrome-devtools MCP 有什么不同
-
-AgentSurf 解决的是**操作你当前正在使用的 Chrome**：它直接复用现有登录态和标签页，适合需要用户环境、已登录网站或人工接管的流程。chrome-devtools MCP 更适合需要 CDP 深度能力或干净、可重复测试环境的场景。
-
-代价是 AgentSurf 目前没有性能 trace、堆快照和 Lighthouse；碰到 `chrome.debugger` 时也会与 DevTools 互斥。当前能力范围、验证状态和已知边界见 [浏览器运行时报告](docs/browser-tooling-report.md)。
 
 ## 2. 工作原理
 
@@ -114,132 +107,46 @@ AgentSurf 解决的是**操作你当前正在使用的 Chrome**：它直接复�
 - **MCP Server 与 Native Host 共用同一份本机配置**，所以 MCP 侧不需要手工填 token。
 - 只有在“协议开发”场景才需要独立 Bridge，见 [开发与调试](docs/reference.md#3-开发与调试)。
 
-## 3. 接入方案选择
-
-一共有两条接入路径，按需选一条即可。
-
-### 方案 A：MCP Server（推荐，适用绝大多数 Agent）
+## 3. 接入方式（MCP Server）
 
 Agent ↔ `dist/mcp/cli.js`（stdio MCP Server）↔ Bridge ↔ 扩展。
 
-优点：Agent 侧零协议负担，工具与参数由 MCP 自动暴露。
+Agent 侧零协议负担：工具与参数由 MCP 自动暴露，你只需要在客户端的 MCP 配置里填一段 JSON，见 [4.4 接到你的 Agent](#44-接到你的-agentmcp-配置)。
 
-### 方案 B：自研客户端直接连 Bridge
-
-你的程序 ↔ 本机 WebSocket Bridge（自行完成 `auth` 握手与请求封装）。
-
-适用：非 MCP 的运行环境、自己写调度器、或需要精细控制超时与并发。协议见 [外部调用协议](docs/reference.md#4-外部调用协议)。
-
-> 两种方案都需要先完成下面第 4 节的**扩展 + Native Host** 安装，那是所有能力的地基。
+> 接入前需要先完成第 4 节的扩展与 Native Host 安装，那是所有能力的地基。
 
 ## 4. 安装
 
-Windows 和 macOS 都在这一节。先看 4.1 的差异对照表，之后每一步都分成两栏，**照着自己那一栏做**。全程不需要管理员权限，也不会改动你 Chrome 里已有的登录态和设置。
+Windows 与 macOS 均已真机验证。全程不需要管理员权限，也不会改动你 Chrome 里已有的登录态和设置。
 
-### 4.1 两个平台的差异
+### 4.1 前置环境
 
-| 事项 | Windows | macOS |
-| --- | --- | --- |
-| 用哪个命令行 | **PowerShell**（开始菜单搜索 `PowerShell`） | **终端**（`⌘ + 空格` 输入「终端」） |
-| 需要先装什么 | [Node.js LTS](https://nodejs.org/)（自带 npm）、[Git](https://git-scm.com/)、Chrome 116+ | 同上；也可以 `brew install node git` |
-| 注册 Native Host | `npm run native-host:install -- -ExtensionId <扩展ID>` | `npm run native-host:install:macos -- "<扩展ID>"` |
-| 需要管理员权限吗 | 不需要（只写当前用户的注册表项） | **不要加 `sudo`**，否则注册信息会写到错误的位置 |
-| 注册信息写在哪 | 注册表 `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime` | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
-| 运行时目录 | `%LOCALAPPDATA%\BrowserControlRuntime\` | `~/Library/Application Support/BrowserControlRuntime/` |
-| 给 MCP 客户端用的启动器 | `agentsurf-mcp.exe` | `agentsurf-mcp.sh` |
-| 扩展本身 | 完全相同，同一份 `dist/` | 完全相同 |
-
-一句话：**扩展、协议、MCP 配置格式两个平台完全一样，差别只在「命令怎么写」和「文件放在哪」。**
-
-> ✅ Windows 与 macOS 路径均已在真机验证完整链路；Linux 暂未提供安装脚本。
-
-### 4.2 前置环境
-
-| 需要 | 检查命令 | 没有怎么办 |
-| --- | --- | --- |
-| Node.js 20+ | `node -v` | 到 [nodejs.org](https://nodejs.org/) 下载 **LTS**：Windows 选 `.msi`，macOS 选 `.pkg`，一路下一步 |
-| npm 10+ | `npm -v` | 装完 Node 就自带，不用单独装 |
-| Git | `git --version` | Windows 到 [git-scm.com](https://git-scm.com/) 下载安装；macOS 执行这条命令会提示自动安装 |
-| Chrome 116+ | 地址栏输入 `chrome://version` | 升级 Chrome 即可 |
-
-装完 Node 或 Git 后**要重新打开命令行窗口**，否则还是提示找不到命令。
-
-### 4.3 下载并构建
-
-> 也可以直接在项目目录运行 `npm run setup`：它会执行下面的安装、构建，并继续引导扩展 ID 输入与 Native Host 注册。下面保留手动步骤，方便排障。
-
-**Windows（PowerShell）**
-
-```powershell
-cd $HOME\Desktop
-git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
-cd agentsurf-browser-control-runtime
-npm install
-npm run build
-```
-
-**macOS（终端）**
-
-```sh
-cd ~/Desktop
-git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
-cd agentsurf-browser-control-runtime
-npm install
-npm run build
-```
-
-`npm run build` 最后输出 `Done in ...` 就是成功，项目里会多出一个 `dist/` 目录。
-
-三条容易踩的规则：
-
-- Chrome 加载的是 **`dist/`**，不是 `src/`；
-- `dist/` **不进 Git，每台电脑都要自己构建一次**；
-- 改了源码**必须重新 `npm run build`**，Chrome 不会自动更新。
-
-### 4.4 把扩展装进 Chrome
-
-两个平台完全一样：
-
-1. Chrome 地址栏打开 `chrome://extensions`；
-2. 右上角打开 **开发者模式**；
-3. 点 **加载已解压的扩展程序**，选择项目里的 **`dist`** 目录（不是项目根目录）；
-4. 在 AgentSurf 卡片上记下 **扩展 ID**（32 位小写字母，例如 `hpageihlnphdohcplmimhmghljpilbpa`）。
-
-此时卡片上可能显示连不上，**这是正常的**：Native Host 还没注册。
-
-> ⚠️ 换电脑、换项目路径、删除后重新加载，扩展 ID 都可能变化。**永远以 `chrome://extensions` 当前显示的为准**，不要沿用旧文档或聊天记录里的 ID。
-
-### 4.5 注册 Native Host
-
-把 `<扩展ID>` 换成第 4.4 步记下的那串字符。**必须在项目目录里执行**。
-
-**Windows（PowerShell）**
-
-```powershell
-$extensionId = "<扩展ID>"
-npm run native-host:install -- -ExtensionId $extensionId
-```
-
-**macOS（终端）**
-
-```sh
-npm run native-host:install:macos -- "<扩展ID>"
-```
-
-脚本会做四件事（两个平台对应关系见 4.1 的表格）：
-
-| 动作 | 作用 |
+| 需要 | 版本要求与检查命令 |
 | --- | --- |
-| 写配置 `config.json` | 记录端口（默认 `8765`）和随机生成的 64 位 token |
-| 生成 Native Host 启动器 | 固定当前 Node 与项目 `dist/` 的绝对路径 |
-| 写 Native Messaging manifest | `allowed_origins` 只允许你填的这个扩展 ID |
-| 注册到系统 | Windows 写注册表；macOS 写用户目录下的 manifest |
+| Node.js | 20+，`node -v` |
+| npm | 10+，`npm -v` |
+| Git | `git --version` |
+| Chrome | 116+，地址栏打开 `chrome://version` |
 
-跑完后终端会**打印一段现成的 MCP 配置 JSON**：下一步直接整段复制粘贴，不用自己拼路径。
+### 4.2 安装并注册
 
-Windows 上如果提示文件被占用，先在 `chrome://extensions` 里**禁用** AgentSurf（或关掉 Chrome），等一秒再跑一次即可。重新安装会**复用已有的有效 token**，不需要重新配置 MCP。
+在项目目录执行：
 
-### 4.6 重新加载扩展并确认链路
+```bash
+npm install
+npm run setup
+```
+
+向导会自动完成构建与 Native Host 注册，并在过程中提示你：
+
+1. 打开 `chrome://extensions`，开启开发者模式；
+2. 点击“加载已解压的扩展程序”，选择项目里的 `dist/`；
+3. 复制 AgentSurf 卡片上显示的扩展 ID，粘贴回终端；
+4. 复制终端最后打印的 MCP 配置 JSON，下一步会用到。
+
+> 换电脑、移动项目目录或重新加载扩展后，如果扩展 ID 发生变化，重新运行 `npm run setup` 即可。
+
+### 4.3 重新加载扩展并确认链路
 
 1. 回到 `chrome://extensions`，点 AgentSurf 卡片上的 **重新加载**（🔄）；
 2. 打开下面的地址（也可以直接点工具栏上的 AgentSurf 图标，弹的是同一页）：
@@ -259,29 +166,15 @@ Pending   0
 
 显示未连接时：点一次 **Disconnect**，等 1 秒，再点 **Connect**。**不要连续点 Reconnect**，那会造成重连风暴。
 
-### 4.7 接到你的 Agent（MCP 配置）
+### 4.4 接到你的 Agent（MCP 配置）
 
-把第 4.5 步终端打印的那段 JSON 粘到 Agent 的 MCP 配置文件里。以 pi 的 `~/.pi/agent/mcp.json` 为例：
-
-**Windows**
+把第 4.2 步终端打印的那段 JSON 整段粘到 Agent 的 MCP 配置文件里。以 pi 的 `~/.pi/agent/mcp.json` 为例（`command` 用脚本打印的那个路径）：
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "C:/Users/<用户名>/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
-    }
-  }
-}
-```
-
-**macOS**
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "/Users/<用户名>/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+      "command": "<安装脚本打印的启动器绝对路径>"
     }
   }
 }
@@ -293,55 +186,10 @@ Pending   0
 
 - **没有 `args`**。把终端打印出来的那段整段复制，**不要自己拼路径**；
 - 改完配置**要重启 MCP 客户端**（或它的会话），配置只在启动时读一次；
-- 不需要任何环境变量，MCP Server 会自动读取第 4.5 步生成的 `config.json`；
-- 换电脑、移动项目目录、切换 Node 版本后，**重跑第 4.5 步那一条命令**就能重新生成启动器。
+- 不需要任何环境变量，MCP Server 会自动读取第 4.2 步生成的 `config.json`；
+- 换电脑、移动项目目录、切换 Node 版本后，**重新运行第 4.2 步的命令**就能重新生成启动器。
 
-<details>
-<summary>备选写法：不用启动器，直接指向 node 与 cli.js</summary>
-
-如果客户端要求显式给出解释器：
-
-**Windows**
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "C:/Program Files/nodejs/node.exe",
-      "args": ["C:/Users/<用户名>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
-    }
-  }
-}
-```
-
-```powershell
-(Get-Command node).Source            # Node 可执行文件路径
-(Resolve-Path dist/mcp/cli.js).Path  # MCP Server 入口路径
-```
-
-**macOS**
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "/usr/local/bin/node",
-      "args": ["/Users/<用户名>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
-    }
-  }
-}
-```
-
-```sh
-which node                 # Node 可执行文件路径
-realpath dist/mcp/cli.js   # MCP Server 入口路径
-```
-
-代价：两条绝对路径都要自己维护，而且客户端的进程环境里必须能看到 `node`（GUI 客户端不一定）。启动器写法把这些都包在里面了。
-
-</details>
-
-### 4.8 让 Agent 确认工具可用
+### 4.5 让 Agent 确认工具可用
 
 对 Agent 说：
 
@@ -353,18 +201,16 @@ realpath dist/mcp/cli.js   # MCP Server 入口路径
 
 （工具清单由 MCP 客户端从 Server 拿到，没有单独的“查询能力”工具；`browser.get_capabilities` 已移除。）
 
-### 4.9 装完怎么确认真的通了
+### 4.6 装完怎么确认真的通了
 
 - **不经过 MCP 客户端**直接验全链路（在项目目录执行，返回 `ok: true` 和一串标签页就算通）：
 
-```powershell
+```sh
 node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
 ```
 
-  PowerShell 和 bash/zsh 都直接用单引号包住整段 JSON；JSON 里不要有空格，否则 PowerShell 会把参数拆开。
-
 - 这里失败 → 链路问题，看[第 8 节 排障](#8-排障)；
-- 这里成功但 Agent 里失败 → MCP 配置问题，回第 4.7 步检查路径与客户端重启；
+- 这里成功但 Agent 里失败 → MCP 配置问题，回第 4.4 步检查路径与客户端重启；
 - 更完整的验证清单（Bridge 是否监听、端到端冒烟）见[第 5 节](#5-验证接入是否成功)。
 
 ## 5. 验证接入是否成功
@@ -628,18 +474,19 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 - **会话隔离由 MCP Server 自动启用**：每个对话会获得独立会话，打开的标签页会自动认领；显式传入 `session_id` 仅适用于直接调用底层协议的场景；
 - **文件上传/下载限制**：上传需本机绝对路径；下载只能拿到 Chrome Downloads API 提供的元数据，且无法可靠关联来源标签页；
 - **平台覆盖**：Windows 与 macOS 均已真机验证；Linux 未提供安装脚本；
-- **尚无真实 Chrome 自动化 E2E**：CI 覆盖类型检查、lint、单元测试和构建；扩展注入、截图、CDP、iframe 等真机链路仍依赖手工冒烟验证；
+- **尚无真实 Chrome 自动化 E2E**：CI 覆盖类型检查、lint、单元测试和构建；扩展注入、截图、CDP、iframe 等真机链路仍依赖手工冒烟验证。
+
+完整的能力范围、验证状态与已知边界见 [浏览器运行时报告](docs/browser-tooling-report.md)。
 
 ## 11. 深入参考
 
-面向开发者、以及需要绕开 MCP 直接对接协议的场景，以下内容已拆到单独文件 [docs/reference.md](docs/reference.md)：
+面向开发者的补充内容已拆到单独文件 [docs/reference.md](docs/reference.md)：
 
 | 内容 | 说明 |
 | --- | --- |
 | [1. 工具速查](docs/reference.md#1-工具速查) | 30 个 `browser.*` 工具的分组清单、`frame_id` / `modifiers` 支持范围、`get_interactives` 的过滤与截断语义 |
 | [2. 错误码与重试语义](docs/reference.md#2-错误码与重试语义) | 结构化错误对象、每个 `code` 是否可重试、建议动作 |
 | [3. 开发与调试](docs/reference.md#3-开发与调试) | 构建 / lint / 测试命令、扩展状态页、独立 Bridge |
-| [4. 外部调用协议](docs/reference.md#4-外部调用协议) | 不用 MCP，自己写客户端直连本地 Bridge |
 | [5. 实现细节](docs/reference.md#5-实现细节) | 目录结构、page revision 与 `element_id`、frame 路由、截图与文件传输 |
 | [贡献指南](CONTRIBUTING.md) | 开发环境、提交前检查和 Pull Request 要求 |
 | [变更记录](CHANGELOG.md) | 版本发布与重要变更 |

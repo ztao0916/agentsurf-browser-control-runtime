@@ -8,27 +8,26 @@
 
 > This project is linked with and recognizes the [LINUX DO](https://linux.do/) community.
 
-AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls, no task planning, and no vendor lock-in.
+AgentSurf is a local Chrome control runtime for AI agents. You can think of it as a universal version of the ChatGPT browser extension: the same idea of letting AI drive a browser, but without being tied to ChatGPT — any MCP-capable agent can connect. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls and no task planning.
 
 ![AgentSurf animated demo: an agent operating the user's signed-in Chrome through a local runtime](docs/assets/agentsurf-demo.svg)
 
-> How to install: build from source, load the extension as an unpacked extension in Chrome, then register the native host locally.
->
-> Verified on both Windows and macOS. First setup usually takes 5–10 minutes — hand this section to your AI agent and let it walk you through it.
+> Integration: MCP server. Verified on both Windows and macOS. First setup usually takes 5–10 minutes — hand this section to your AI agent and let it walk you through it.
 
 ## Quick start
 
-Use the setup wizard for dependency installation, build, and native-host registration:
+Run these commands in the project directory:
 
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
 cd agentsurf-browser-control-runtime
+npm install
 npm run setup
 ```
 
-The wizard installs dependencies, builds the extension, asks you to load `dist/` in `chrome://extensions`, registers the native host after you enter the extension ID, and prints the MCP config JSON to paste into your agent. In an interactive terminal it can also run a smoke test.
+`npm run setup` builds the extension, asks you to load `dist/` in `chrome://extensions`, registers the native host after you enter the extension ID, and prints the MCP config JSON to paste into your agent. In an interactive terminal it can also run a smoke test.
 
-For manual installation or step-by-step troubleshooting, see [section 4](#4-installation).
+For more detail on prerequisites and verification, see [section 4](#4-installation).
 
 ## Why this exists
 
@@ -40,20 +39,20 @@ So AgentSurf is not trying to be a feature-complete browser automation framework
 
 ## Usage experience
 
-These are my own hands-on notes, for reference:
+These are my hands-on notes from three clients:
 
-- **Codex**: connected without issues; the tools are discovered and called correctly, and operating pages from it feels good day to day.
-- **Command Code agent**: connected the same way through the MCP config, with no problems along the way.
-- **pi agent**: setup went just as smoothly, and it behaves no differently from the other two.
+- **Codex**: connected cleanly; the tools were discovered and called correctly, and everyday page operations felt smooth.
+- **Command Code agent**: connected through the same MCP setup with no issues.
+- **pi agent**: setup was equally smooth, and the experience was broadly the same as the other two.
 
-All three clients connected without problems, and the overall experience has been good. This is just my personal impression — different agents may call the tools in different ways and get different results.
+All three clients connected and called the tools reliably, and the overall experience was stable and pleasant. This is just my personal impression — different agents may call the tools in different ways and get different results.
 
 ## Table of contents
 
 - [1. What it is](#1-what-it-is)
 - [2. How it works](#2-how-it-works)
-- [3. Choosing an integration path](#3-choosing-an-integration-path)
-- [4. Installation (Windows / macOS)](#4-installation)
+- [3. MCP server integration](#3-mcp-server-integration)
+- [4. Installation](#4-installation)
 - [5. Verifying the setup](#5-verifying-the-setup)
 - [6. Driving it from an agent](#6-driving-it-from-an-agent)
 - [7. Updating, moving, uninstalling](#7-updating-moving-uninstalling)
@@ -79,19 +78,6 @@ What it does not do:
 - no built-in model, no task planning;
 - no cloud browser: everything talks over `127.0.0.1`;
 - no CAPTCHA solving or anti-bot evasion.
-
-### How it differs from chrome-devtools MCP
-
-AgentSurf is designed to operate **the Chrome session you are already using**.
-It reuses existing logins and tabs, which makes it suitable for user environments,
-authenticated sites, and workflows that may need human takeover. chrome-devtools
-MCP is a better fit when you need deeper CDP capabilities or a clean, repeatable
-test profile.
-
-The trade-off is that AgentSurf currently has no tracing, heap snapshots, or
-Lighthouse, and its `chrome.debugger` use conflicts with an open DevTools
-session. See the [browser runtime report](docs/browser-tooling-report.md) for
-the current scope, verification status, and known limitations.
 
 ## 2. How it works
 
@@ -121,126 +107,46 @@ Key consequences:
 - The MCP server and the native host **share the same local config**, so you do not copy tokens between them.
 - A standalone bridge exists only for protocol development — see [Development and debugging](docs/reference.en.md#3-development-and-debugging).
 
-## 3. Choosing an integration path
+## 3. MCP server integration
 
-### Option A: MCP server (recommended)
+Agent ↔ `dist/mcp/cli.js` (stdio MCP server) ↔ Bridge ↔ extension.
 
-Agent ↔ `dist/mcp/cli.js` (stdio MCP server) ↔ Bridge ↔ extension. The agent gets every tool and its schema for free.
+The agent carries no protocol burden: the MCP server exposes every tool and its schema, so all you do is paste one JSON block into your client's MCP config — see [step 4.4](#44-connect-your-agent-mcp-config).
 
-### Option B: your own client against the Bridge
-
-Your program ↔ the local WebSocket bridge, doing the `auth` handshake and request framing itself. Use this for non-MCP runtimes or when you need fine control over timeouts and concurrency. Protocol: [External protocol](docs/reference.en.md#4-external-protocol).
-
-Both options still require the extension + native host from section 4 — that is the foundation.
+> The extension and native host from section 4 must be installed first; that is the foundation for everything else.
 
 ## 4. Installation
 
-Windows and macOS are both covered here. Read the comparison table in 4.1 first; from then on every step has one block per platform, so **follow the block for your system**. Nothing needs administrator rights, and nothing changes the logins or settings you already have in Chrome.
+Verified on both Windows and macOS. Nothing here needs administrator rights, and nothing changes the logins or settings you already have in Chrome.
 
-### 4.1 How the two platforms differ
+### 4.1 Prerequisites
 
-| | Windows | macOS |
-| --- | --- | --- |
-| Command line | **PowerShell** (search for `PowerShell` in the Start menu) | **Terminal** (`⌘ + Space`, type "Terminal") |
-| Install first | [Node.js LTS](https://nodejs.org/) (includes npm), [Git](https://git-scm.com/), Chrome 116+ | The same, or `brew install node git` |
-| Register the native host | `npm run native-host:install -- -ExtensionId <extension ID>` | `npm run native-host:install:macos -- "<extension ID>"` |
-| Administrator rights | Not needed (writes to the current user's registry hive) | **Do not add `sudo`** — it registers the manifest for the wrong user |
-| Where registration goes | Registry `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime` | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.browsercontrol.runtime.json` |
-| Runtime directory | `%LOCALAPPDATA%\BrowserControlRuntime\` | `~/Library/Application Support/BrowserControlRuntime/` |
-| Launcher for the MCP client | `agentsurf-mcp.exe` | `agentsurf-mcp.sh` |
-| The extension itself | Identical — the same `dist/` | Identical |
-
-In one sentence: **the extension, the protocol, and the MCP config format are the same on both platforms; only the commands and the file locations differ.**
-
-> ✅ The full chain has been verified on both Windows and macOS; there is no Linux installer yet.
-
-### 4.2 Prerequisites
-
-| Needed | Check | If it is missing |
-| --- | --- | --- |
-| Node.js 20+ | `node -v` | Download **LTS** from [nodejs.org](https://nodejs.org/): `.msi` on Windows, `.pkg` on macOS, then click through the installer |
-| npm 10+ | `npm -v` | It ships with Node, nothing extra to install |
-| Git | `git --version` | Windows: install from [git-scm.com](https://git-scm.com/); macOS: this command offers to install it |
-| Chrome 116+ | open `chrome://version` | Update Chrome |
-
-After installing Node or Git, **open a new terminal window** — otherwise the command is still not found.
-
-### 4.3 Clone and build
-
-> You can also run `npm run setup` in the project directory: it performs the install and build below, then guides you through the extension ID and native-host registration. The manual steps remain here for troubleshooting.
-
-**Windows (PowerShell)**
-
-```powershell
-cd $HOME\Desktop
-git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
-cd agentsurf-browser-control-runtime
-npm install
-npm run build
-```
-
-**macOS (Terminal)**
-
-```sh
-cd ~/Desktop
-git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
-cd agentsurf-browser-control-runtime
-npm install
-npm run build
-```
-
-`npm run build` ending with `Done in ...` means it worked, and the project now contains a `dist/` folder.
-
-Three rules that are easy to get wrong:
-
-- Chrome loads **`dist/`**, not `src/`;
-- `dist/` is **not committed to Git** and has to be built once on every machine;
-- after changing the source you **must run `npm run build` again** — Chrome does not pick it up by itself.
-
-### 4.4 Load the extension into Chrome
-
-Identical on both platforms:
-
-1. Open `chrome://extensions` in Chrome;
-2. turn on **Developer mode** in the top right;
-3. click **Load unpacked** and pick the **`dist`** folder in the project (not the project root);
-4. note the **extension ID** on the AgentSurf card (32 lowercase letters, e.g. `hpageihlnphdohcplmimhmghljpilbpa`).
-
-The card may show that it cannot connect — **that is expected**, the native host is not registered yet.
-
-> ⚠️ The extension ID can change when you switch machines, move the project, or remove and re-add the extension. **Always use the ID currently shown in `chrome://extensions`**, not one copied from older docs or chat logs.
-
-### 4.5 Register the native host
-
-Replace `<extension ID>` with the value from step 4.4. **Run this inside the project directory.**
-
-**Windows (PowerShell)**
-
-```powershell
-$extensionId = "<extension ID>"
-npm run native-host:install -- -ExtensionId $extensionId
-```
-
-**macOS (Terminal)**
-
-```sh
-npm run native-host:install:macos -- "<extension ID>"
-```
-
-The installer does four things (see the table in 4.1 for the per-platform locations):
-
-| Action | Purpose |
+| Needed | Version and check command |
 | --- | --- |
-| Writes `config.json` | Records the port (default `8765`) and a random 64-character token |
-| Generates the native host launcher | Pins the absolute paths of your Node install and the project `dist/` |
-| Writes the native messaging manifest | `allowed_origins` allows only the extension ID you passed |
-| Registers it with the system | Windows: registry; macOS: a manifest under your home directory |
+| Node.js | 20+, `node -v` |
+| npm | 10+, `npm -v` |
+| Git | `git --version` |
+| Chrome | 116+, open `chrome://version` in the address bar |
 
-When it finishes, it **prints a ready-made MCP config JSON block** — copy that whole block in the next step instead of assembling paths yourself.
+### 4.2 Install and register
 
-On Windows, if the installer reports that a file is in use, **disable** AgentSurf in `chrome://extensions` (or close Chrome), wait a second, and run the command again. Reinstalling **reuses the existing valid token**, so you do not have to reconfigure MCP.
+Run these commands in the project directory:
 
-### 4.6 Reload the extension and confirm the link
+```bash
+npm install
+npm run setup
+```
+
+The wizard builds the extension and registers the native host, prompting you to:
+
+1. open `chrome://extensions` and turn on Developer mode;
+2. click **Load unpacked** and select the project's `dist/` folder;
+3. copy the extension ID shown on the AgentSurf card and paste it into the terminal;
+4. copy the MCP config JSON printed at the end for the next step.
+
+> If the extension ID changes after switching machines, moving the project, or reloading the extension, run `npm run setup` again.
+
+### 4.3 Reload the extension and confirm the link
 
 1. Back in `chrome://extensions`, click the **reload** button (🔄) on the AgentSurf card;
 2. open the address below (or just click the AgentSurf icon in the toolbar — it opens the same page):
@@ -260,29 +166,15 @@ Pending   0
 
 If it is not connected: click **Disconnect** once, wait a second, then click **Connect**. **Do not click Reconnect repeatedly** — that produces a reconnect storm.
 
-### 4.7 Connect your agent (MCP config)
+### 4.4 Connect your agent (MCP config)
 
-Paste the JSON the installer printed in step 4.5 into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example:
-
-**Windows**
+Paste the JSON the installer printed in step 4.2 into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example (`command` is whatever path the script printed):
 
 ```json
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "C:/Users/<username>/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
-    }
-  }
-}
-```
-
-**macOS**
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "/Users/<username>/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+      "command": "<absolute path to the launcher printed by the installer>"
     }
   }
 }
@@ -294,55 +186,10 @@ Four things to know:
 
 - there are **no `args`**. Copy the printed block verbatim — **do not assemble the path yourself**;
 - **restart the MCP client** (or its session) after editing the config; it is only read at startup;
-- no environment variables are needed; the MCP server reads the `config.json` written in step 4.5;
-- after switching machines, moving the project, or changing your Node install, **re-run the single command from step 4.5** to regenerate the launcher.
+- no environment variables are needed; the MCP server reads the `config.json` written in step 4.2;
+- after switching machines, moving the project, or changing your Node install, **re-run the command from step 4.2** to regenerate the launcher.
 
-<details>
-<summary>Alternative: skip the launcher and point straight at node and cli.js</summary>
-
-If your client insists on an explicit interpreter:
-
-**Windows**
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "C:/Program Files/nodejs/node.exe",
-      "args": ["C:/Users/<username>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
-    }
-  }
-}
-```
-
-```powershell
-(Get-Command node).Source            # path to the Node executable
-(Resolve-Path dist/mcp/cli.js).Path  # path to the MCP server entry point
-```
-
-**macOS**
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "/usr/local/bin/node",
-      "args": ["/Users/<username>/Desktop/agentsurf-browser-control-runtime/dist/mcp/cli.js"]
-    }
-  }
-}
-```
-
-```sh
-which node                 # path to the Node executable
-realpath dist/mcp/cli.js   # path to the MCP server entry point
-```
-
-The cost: you maintain two absolute paths yourself, and the client's process environment must be able to see `node` (GUI clients often cannot). The launcher wraps all of that.
-
-</details>
-
-### 4.8 Confirm the tools are available
+### 4.5 Confirm the tools are available
 
 Ask your agent:
 
@@ -354,18 +201,16 @@ You should see **30** tools, including `browser_get_frames`, `browser_select_tex
 
 (The client gets the tool list from the server, so there is no separate capability-query tool; `browser.get_capabilities` was removed.)
 
-### 4.9 How to tell it really works
+### 4.6 How to tell it really works
 
 - Verify the whole link **without the MCP client** (run it in the project directory; `ok: true` plus a list of tabs means the link is fine):
 
-```powershell
+```sh
 node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
 ```
 
-  PowerShell, bash, and zsh all take the JSON in single quotes; do not put spaces inside the JSON or PowerShell will split the argument.
-
 - Fails here → the link is the problem, see [section 8, Troubleshooting](#8-troubleshooting);
-- Works here but fails inside the agent → MCP config problem, check the path and the client restart in step 4.7;
+- Works here but fails inside the agent → MCP config problem, check the path and the client restart in step 4.4;
 - Full verification checklist (is the bridge listening, end-to-end smoke test): see [section 5](#5-verifying-the-setup).
 
 ## 5. Verifying the setup
@@ -616,16 +461,17 @@ These are **instructions for the agent**, not an enforced approval layer. The ca
 - **Platform coverage**: verified on both Windows and macOS; no Linux installer.
 - **No automated real-Chrome E2E yet**: CI covers type-checking, lint, unit tests, and builds; real-browser behaviour (injection, screenshots, CDP, iframes) still needs manual smoke verification.
 
+The full capability range, verification status, and known boundaries are in the [browser runtime report](docs/browser-tooling-report.md).
+
 ## 11. Further reference
 
-For developers, and for anyone integrating below the MCP layer, the following now lives in a separate file: [docs/reference.en.md](docs/reference.en.md).
+Developer-focused reference material now lives in a separate file: [docs/reference.en.md](docs/reference.en.md).
 
 | Content | What is in it |
 | --- | --- |
 | [1. Tool reference](docs/reference.en.md#1-tool-reference) | The 30 `browser.*` tools grouped by purpose, where `frame_id` / `modifiers` apply, and the filtering and truncation semantics of `get_interactives` |
 | [2. Error codes and retry semantics](docs/reference.en.md#2-error-codes-and-retry-semantics) | The structured error object, whether each `code` is retryable, and the suggested action |
 | [3. Development and debugging](docs/reference.en.md#3-development-and-debugging) | Build / lint / test commands, the extension status page, the standalone bridge |
-| [4. External protocol](docs/reference.en.md#4-external-protocol) | Speaking to the local bridge directly instead of going through MCP |
 | [5. Implementation notes](docs/reference.en.md#5-implementation-notes) | Layout, page revisions and `element_id`, frame routing, screenshots and files |
 | [Contributing](CONTRIBUTING.md) | Development setup, required checks, and pull request expectations |
 | [Changelog](CHANGELOG.md) | Release history and notable changes |
