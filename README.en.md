@@ -109,7 +109,7 @@ You should see **30** tools, including `browser_get_frames`, `browser_select_tex
 node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
 ```
 
-- Fails here → the link is the problem, see [section 7, Troubleshooting](#7-troubleshooting);
+- Fails here → the link is the problem;
 - Works here but fails inside the agent → MCP config problem, check the path in [Connect your agent](#connect-your-agent-mcp-config) and restart the client;
 - Full verification checklist (is the bridge listening, end-to-end smoke test): see [section 4](#4-verifying-the-setup).
 
@@ -138,12 +138,8 @@ All three clients connected and called the tools reliably, and the overall exper
 - [3. MCP server integration](#3-mcp-server-integration)
 - [4. Verifying the setup](#4-verifying-the-setup)
 - [5. Driving it from an agent](#5-driving-it-from-an-agent)
-- [6. Updating, moving, uninstalling](#6-updating-moving-uninstalling)
-- [7. Troubleshooting](#7-troubleshooting)
-- [8. Safety boundaries](#8-safety-boundaries)
-- [9. Current limitations](#9-current-limitations)
-- [10. Further reference](#10-further-reference)
-- [11. License](#11-license)
+- [6. Safety boundaries](#6-safety-boundaries)
+- [7. License](#7-license)
 
 ## 1. What it is
 
@@ -236,7 +232,7 @@ This step is the dividing line for troubleshooting:
 
 | Result | Conclusion |
 | --- | --- |
-| Fails here | link problem — see [section 7](#7-troubleshooting) |
+| Fails here | link problem |
 | Works here, fails in MCP | MCP config problem (paths, Node, client not restarted) |
 
 ### 4.3 End-to-end smoke test
@@ -335,93 +331,7 @@ Caveats:
 - **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
 - **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs, and note that **`force` only ungroups — it never closes tabs**, because that would destroy work another conversation is still doing.
 
-## 6. Updating, moving, uninstalling
-
-### 6.1 What to do for each kind of change
-
-| Change | Action |
-| --- | --- |
-| extension / content script / page agent code | `npm run build` → reload the extension |
-| **manifest.json (e.g. content_scripts)** | `npm run build` → **must** reload the extension; refreshing a page is not enough |
-| native host source or installer | disable extension → build → reinstall native host → re-enable |
-| MCP server code | build → restart the MCP client |
-| project path / extension ID / Node path | re-register the native host |
-
-A running host never picks up new JS on its own; restart it by reloading the extension.
-
-### 6.2 Full update (Windows)
-
-```powershell
-# 1. disable AgentSurf in chrome://extensions and let the old host exit
-# 2. in the project
-git pull
-npm install
-npm run build
-$extensionId = "<current extension id>"
-npm run native-host:install -- -ExtensionId $extensionId
-# 3. re-enable in chrome://extensions, confirm connected in debug.html
-# 4. restart the MCP client
-```
-
-On macOS, replace step 2's last command with `npm run native-host:install:macos -- "<EXTENSION_ID>"`.
-
-For a transient connection problem with no code change, skip all of this: use Disconnect / Connect in `debug.html` or reload the extension.
-
-### 6.3 Moving the project
-
-The launcher hard-codes the project path recorded at install time (`<project>/dist/native-host/host.js`). After moving or renaming:
-
-1. disable the old extension;
-2. in the new location: `npm install && npm run build`;
-3. load the new `dist/` in Chrome and copy the new extension ID;
-4. run `native-host:install` from the new location;
-5. reload the extension and restart the MCP client.
-
-> Verified detail: the `host.js` copy in `%LOCALAPPDATA%\BrowserControlRuntime\` is a **stale leftover that nothing references** (the launcher points at the repo's `dist/`). Do not let it mislead you while debugging.
-
-### 6.4 Uninstalling
-
-```powershell
-npm run native-host:uninstall              # Windows
-npm run native-host:uninstall:macos        # macOS
-```
-
-This removes the native host registration and launcher, **keeps the config**, and touches neither the Chrome extension nor the project. To clean up fully: remove the extension in `chrome://extensions`, then delete the project directory and `%LOCALAPPDATA%\BrowserControlRuntime` (`~/Library/Application Support/BrowserControlRuntime` on macOS).
-
-## 7. Troubleshooting
-
-### 7.1 Symptom table
-
-| Symptom | Meaning and fix |
-| --- | --- |
-| `ECONNREFUSED 127.0.0.1:8765` | Nothing is listening: extension disabled, host not installed, or the extension has not finished connecting. **Check `debug.html` first.** |
-| `Chrome Extension is not connected` | The bridge is alive but no extension is attached. Check `debug.html`, the host handshake, and whether `dist` is current. |
-| `EADDRINUSE` | Port 8765 is taken: a stray standalone bridge, an old host, or another profile's copy of the extension. |
-| `frame_not_found` | The target frame no longer exists (navigation/rebuild). Retry after `browser_get_frames`. |
-| `stale_element` | The element ID is outdated **or you are looking in the wrong place** (e.g. missing `frame_id`). Re-run `browser_get_interactives`. |
-| `element_not_visible` / `element_disabled` / `element_not_editable` | The element exists but cannot be acted on yet. Inspect the real page state. |
-| `unsupported_page` | Chrome forbids injecting a Page Agent there (`chrome://`, Web Store). Use a normal HTTP/HTTPS page. |
-| `screenshot_unavailable` | The capture call failed: the fallback path needs an active tab, or Chrome itself failed. **A page that changes during capture is no longer an error** — the result carries `page_changed: true`. |
-| `tool is unsupported` | That tool does not exist in this runtime. Compare against the tool list your agent has. |
-| `native-host.exe` in use during install | Disable the extension, let the old host exit, then install. Do **not** kill every `node.exe`. |
-
-### 7.2 Order of investigation
-
-1. `chrome://extensions` — enabled? any error?
-2. `debug.html` (or the toolbar icon) — connection state and recent events;
-3. is anything listening on the port (4.1);
-4. `node scripts/call-tool.mjs ...` (4.2) to separate a link problem from an MCP config problem;
-5. the extension's **Service Worker inspector** for native messaging errors.
-
-### 7.3 The three most common mistakes
-
-1. **Editing `manifest.json` and only refreshing the page** — reload the extension instead.
-2. **Using a stale extension ID** — the host's `allowed_origins` will not match and Chrome refuses the connection.
-3. **Switching Node versions (nvm)** — the launcher's recorded Node path goes stale; re-run the installer.
-
-Redact the token and any sensitive page data before sharing logs.
-
-## 8. Safety boundaries
+## 6. Safety boundaries
 
 AgentSurf acts on your logged-in pages, and file upload is powerful. Encode these rules in your agent's instructions:
 
@@ -433,34 +343,6 @@ AgentSurf acts on your logged-in pages, and file upload is powerful. Encode thes
 
 These are **instructions for the agent**, not an enforced approval layer. The caller still owns the authorization boundary.
 
-## 9. Current limitations
-
-- **No OCR**: text inside images needs screenshots plus the model's own vision.
-- **No Shadow DOM support**: open shadow roots contribute text to page content, but their elements do not appear in `get_interactives`.
-- **Frames are explicit**: the top document is the default; use `browser.get_frames`. Cross-origin frames cannot be driven.
-- **Protected pages cannot be injected**: `chrome://`, the Chrome Web Store, and similar.
-- **CDP conflicts with DevTools**: attaching fails if DevTools is already open on that tab, and shows a debug banner.
-- **Console buffers are per document and lost on navigation**, and only cover the period after the collector started.
-- **Session isolation is automatic in the MCP server**: each conversation gets its own session and tabs; passing `session_id` explicitly is only for lower-level protocol callers.
-- **Files and downloads**: uploads need absolute local paths; downloads expose only Chrome Downloads API metadata and cannot be reliably tied to a source tab.
-- **Platform coverage**: verified on both Windows and macOS; no Linux installer.
-- **No automated real-Chrome E2E yet**: CI covers type-checking, lint, unit tests, and builds; real-browser behaviour (injection, screenshots, CDP, iframes) still needs manual smoke verification.
-
-The full capability range, verification status, and known boundaries are in the [browser runtime report](docs/browser-tooling-report.md).
-
-## 10. Further reference
-
-Developer-focused reference material now lives in a separate file: [docs/reference.en.md](docs/reference.en.md).
-
-| Content | What is in it |
-| --- | --- |
-| [1. Tool reference](docs/reference.en.md#1-tool-reference) | The 30 `browser.*` tools grouped by purpose, where `frame_id` / `modifiers` apply, and the filtering and truncation semantics of `get_interactives` |
-| [2. Error codes and retry semantics](docs/reference.en.md#2-error-codes-and-retry-semantics) | The structured error object, whether each `code` is retryable, and the suggested action |
-| [3. Development and debugging](docs/reference.en.md#3-development-and-debugging) | Build / lint / test commands, the extension status page, the standalone bridge |
-| [5. Implementation notes](docs/reference.en.md#5-implementation-notes) | Layout, page revisions and `element_id`, frame routing, screenshots and files |
-| [Contributing](CONTRIBUTING.md) | Development setup, required checks, and pull request expectations |
-| [Changelog](CHANGELOG.md) | Release history and notable changes |
-
-## 11. License
+## 7. License
 
 AgentSurf is licensed under the [Apache License 2.0](LICENSE), including the patent grant in Section 3.

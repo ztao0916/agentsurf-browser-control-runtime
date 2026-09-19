@@ -109,7 +109,7 @@ Pending   0
 node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
 ```
 
-- 这里失败 → 链路问题，看[第 7 节 排障](#7-排障)；
+- 这里失败 → 链路问题；
 - 这里成功但 Agent 里失败 → MCP 配置问题，回到 [MCP 配置](#接到你的-agentmcp-配置)检查路径并重启客户端；
 - 更完整的验证清单（Bridge 是否监听、端到端冒烟）见[第 4 节](#4-验证接入是否成功)。
 
@@ -138,12 +138,8 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 - [3. 接入方式（MCP Server）](#3-接入方式mcp-server)
 - [4. 验证接入是否成功](#4-验证接入是否成功)
 - [5. 在 Agent 里怎么用](#5-在-agent-里怎么用)
-- [6. 更新、移动目录、卸载](#6-更新移动目录卸载)
-- [7. 排障](#7-排障)
-- [8. 安全边界](#8-安全边界)
-- [9. 当前限制](#9-当前限制)
-- [10. 深入参考](#10-深入参考)
-- [11. 许可证](#11-许可证)
+- [6. 安全边界](#6-安全边界)
+- [7. 许可证](#7-许可证)
 
 ## 1. 它是什么
 
@@ -236,7 +232,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 
 | 现象 | 结论 |
 | --- | --- |
-| 这里失败 | 链路问题，看[第 7 节](#7-排障) |
+| 这里失败 | 链路问题 |
 | 这里成功、MCP 里失败 | MCP 配置问题（路径、Node、是否重启客户端） |
 
 ### 4.3 端到端冒烟
@@ -345,98 +341,7 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**�
 - **重载/重启后的收尾**：重新加载扩展或重启 Chrome 会清空租约（Chrome 行为），此时运行时会在启动时把“会话还在、租约已无”的漏网分组一并解除，不会留下无主的分组；有租约（正在干活）的页签不动；
 - **手动兜底**：`browser.reset_sessions` 默认只释放**本对话自己的**会话与租约，并顺带清掉“拥有者已不存在”的租约（正是页签被消失的对话卡住的情形）；它**不会**动别的对话，返回值里的 `other_sessions_kept` 会告诉你还有几个会话没动。确实需要清全局（会释放并解除所有人的分组）时才传 `force: true`——**`force` 只解除分组、绝不关页签**，因为那会毁掉别的对话正在做的事。
 
-## 6. 更新、移动目录、卸载
-
-### 6.1 按改动范围决定动作
-
-| 你改了什么 | 需要做什么 |
-| --- | --- |
-| 扩展代码、Page Agent、Content Script | `npm run build` → 重新加载扩展 |
-| **manifest.json（content_scripts 等）** | `npm run build` → **必须**重新加载扩展；刷新页面无效 |
-| Native Host 源码或安装脚本 | 先禁用扩展 → 构建 → 重新安装 Native Host → 再启用 |
-| MCP Server 代码 | 构建 → 重启 MCP 客户端 |
-| 项目路径 / 扩展 ID / Node 路径 | 重新注册 Native Host |
-
-已经启动的 Host 不会自动加载新 JS，必须让它重启（禁用/启用扩展，或重新加载扩展）。
-
-### 6.2 完整更新流程（Windows）
-
-```powershell
-# 1. 先在 chrome://extensions 禁用 AgentSurf，等旧 Host 退出
-# 2. 在项目目录
-git pull
-npm install
-npm run build
-$extensionId = "<当前扩展ID>"
-npm run native-host:install -- -ExtensionId $extensionId
-# 3. 回到 chrome://extensions 重新启用，并在 debug.html 确认 connected
-# 4. 重启 MCP 客户端
-```
-
-macOS 把第 2 步换成 `npm run native-host:install:macos -- "<扩展ID>"`。
-
-只是连接临时异常、没改代码时，**不需要**重新构建安装：在 `debug.html` 里 Disconnect / Connect，或重新加载扩展即可。
-
-### 6.3 移动目录
-
-启动器里写死的是**安装时**的项目路径（`<项目>/dist/native-host/host.js`）。移动或重命名项目后：
-
-1. 禁用旧扩展；
-2. 在新目录 `npm install && npm run build`；
-3. 在 Chrome 加载新目录的 `dist/`，记录新的扩展 ID；
-4. 在新目录重新执行 `native-host:install`；
-5. 重新加载扩展，重启 MCP 客户端。
-
-> 补充一个实测结论：`%LOCALAPPDATA%\BrowserControlRuntime\` 下的 `host.js` 是**历史遗留副本，没有任何东西引用它**（启动器指向仓库 `dist/` 里的那份）。排查问题时不要被它误导。
-
-### 6.4 卸载
-
-```powershell
-# Windows
-npm run native-host:uninstall
-```
-
-```sh
-# macOS
-npm run native-host:uninstall:macos
-```
-
-卸载只移除 Native Host 注册与启动器，**保留配置**；不会删除 Chrome 扩展，也不会删除项目目录。要彻底清理：先在 `chrome://extensions` 移除扩展，再删除项目目录与 `%LOCALAPPDATA%\BrowserControlRuntime`（macOS 为 `~/Library/Application Support/BrowserControlRuntime`）。
-
-## 7. 排障
-
-### 7.1 常见现象对照
-
-| 现象 | 含义与处理 |
-| --- | --- |
-| `ECONNREFUSED 127.0.0.1:8765` | 没有任何进程在监听。扩展未启用、Host 未安装，或扩展还没完成连接。**先看 `debug.html` 状态** |
-| `Chrome Extension is not connected` | Bridge 活着，但没有扩展接进来。检查 `debug.html`、Host 握手，以及 `dist` 是否是当前构建 |
-| `EADDRINUSE` | 8765 被占用：排查误启动的独立 Bridge、上个未退出的 Host、或另一个 Chrome 配置里的同名扩展 |
-| `frame_not_found` | 目标框架已不存在（框架导航/重建）。可重试：重新 `browser_get_frames` |
-| `stale_element` | 元素 ID 过期（页面变更），或**你在错的地方找它**（例如忘了带 `frame_id`）。重新 `browser_get_interactives` |
-| `element_not_visible` / `element_disabled` / `element_not_editable` | 元素存在但不满足操作前提。不要强行点，先看页面实际状态 |
-| `unsupported_page` | Chrome 不允许在该页面注入 Page Agent（`chrome://`、应用商店页等）。换普通 HTTP/HTTPS 页面 |
-| `screenshot_unavailable` | 截图调用失败：降级路径下目标不是活动标签页，或 Chrome 截图本身报错。**页面在截图期间变化不再算失败**，结果会带 `page_changed: true` |
-| `tool is unsupported` | 工具名不被当前运行时支持。对照 Agent 手上的工具清单，不要急着重装 |
-| 安装时报 `native-host.exe` 被占用 | 先禁用扩展、等旧 Host 退出再安装。**不要**批量结束 `node.exe` |
-
-### 7.2 定位顺序
-
-1. `chrome://extensions`：扩展是否启用？有没有报错？
-2. `debug.html`（或点工具栏图标）：连接状态与最近事件；
-3. 端口是否有监听（见 4.1）；
-4. `node scripts/call-tool.mjs ...`（见 4.2）区分链路问题与 MCP 配置问题；
-5. 必要时打开扩展的 **Service Worker 检查窗口**看 Native Messaging 报错。
-
-### 7.3 三个最容易踩的坑
-
-1. **改了 manifest 只刷新页面** → 不生效。`content_scripts`、权限这类改动**必须重新加载扩展**。
-2. **用旧扩展 ID** → Host 注册的 `allowed_origins` 不匹配，连接会被 Chrome 拒绝。以 `chrome://extensions` 当前显示为准。
-3. **切过 Node 版本（nvm）** → 启动器里记录的 Node 绝对路径失效，重新跑一次安装命令。
-
-分享日志前请移除 token 与敏感页面数据。
-
-## 8. 安全边界
+## 6. 安全边界
 
 AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建议在 Agent 的使用规则里写死：
 
@@ -448,34 +353,6 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 
 以上是**给 Agent 的使用约束**，不代表运行时已实现人工审批；调用方仍需自己管理授权边界。
 
-## 9. 当前限制
-
-- **无 OCR**：图片里的文字需要靠截图 + 模型自身视觉能力；
-- **无 Shadow DOM 专门支持**：开放 Shadow Root 的文本会并入页面正文，但元素不会进入 `get_interactives`；
-- **iframe 需显式寻址**：默认只作用于顶层文档，必须配合 `browser.get_frames`；跨域框架通常无法注入；
-- **受保护页面不可注入**：`chrome://`、Chrome 应用商店等；
-- **CDP 与 DevTools 互斥**：同一标签页已开 DevTools 时 `attach` 会失败；attach 期间会有调试横幅；
-- **Console 跨导航丢失**：缓冲在页面内，刷新/跳转后清空；且只能看到采集器在场之后的输出；
-- **会话隔离由 MCP Server 自动启用**：每个对话会获得独立会话，打开的标签页会自动认领；显式传入 `session_id` 仅适用于直接调用底层协议的场景；
-- **文件上传/下载限制**：上传需本机绝对路径；下载只能拿到 Chrome Downloads API 提供的元数据，且无法可靠关联来源标签页；
-- **平台覆盖**：Windows 与 macOS 均已真机验证；Linux 未提供安装脚本；
-- **尚无真实 Chrome 自动化 E2E**：CI 覆盖类型检查、lint、单元测试和构建；扩展注入、截图、CDP、iframe 等真机链路仍依赖手工冒烟验证。
-
-完整的能力范围、验证状态与已知边界见 [浏览器运行时报告](docs/browser-tooling-report.md)。
-
-## 10. 深入参考
-
-面向开发者的补充内容已拆到单独文件 [docs/reference.md](docs/reference.md)：
-
-| 内容 | 说明 |
-| --- | --- |
-| [1. 工具速查](docs/reference.md#1-工具速查) | 30 个 `browser.*` 工具的分组清单、`frame_id` / `modifiers` 支持范围、`get_interactives` 的过滤与截断语义 |
-| [2. 错误码与重试语义](docs/reference.md#2-错误码与重试语义) | 结构化错误对象、每个 `code` 是否可重试、建议动作 |
-| [3. 开发与调试](docs/reference.md#3-开发与调试) | 构建 / lint / 测试命令、扩展状态页、独立 Bridge |
-| [5. 实现细节](docs/reference.md#5-实现细节) | 目录结构、page revision 与 `element_id`、frame 路由、截图与文件传输 |
-| [贡献指南](CONTRIBUTING.md) | 开发环境、提交前检查和 Pull Request 要求 |
-| [变更记录](CHANGELOG.md) | 版本发布与重要变更 |
-
-## 11. 许可证
+## 7. 许可证
 
 本项目采用 [Apache License 2.0](LICENSE)，包含第 3 节专利授权。
