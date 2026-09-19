@@ -5,85 +5,65 @@ import { access } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { getMessages } from './i18n.mjs';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const options = parseArgs(process.argv.slice(2));
+const { setup: text } = await getMessages();
+const options = parseArgs(process.argv.slice(2), text);
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 if (options.help) {
-  printUsage();
+  printUsage(text);
   process.exit(0);
 }
 
 if (Number(process.versions.node.split('.')[0]) < 20) {
-  throw new Error('AgentSurf requires Node.js 20 or newer.');
+  throw new Error(text.nodeVersion);
 }
 if (process.platform !== 'win32' && process.platform !== 'darwin') {
-  throw new Error('The setup command currently supports Windows and macOS.');
+  throw new Error(text.unsupportedPlatform);
 }
 if (options.extensionId !== undefined && !isExtensionId(options.extensionId)) {
-  throw new Error('Extension ID must be 32 lowercase letters from a to p.');
+  throw new Error(text.invalidExtensionId);
 }
 
-console.log('AgentSurf setup');
+console.log(text.title);
 console.log('');
-console.log('Step 1/4: installing dependencies');
+console.log(text.installingDependencies);
 await run(npmCommand, ['install']);
 
 console.log('');
-console.log('Step 2/4: building the extension and MCP server');
+console.log(text.building);
 await run(npmCommand, ['run', 'build']);
 await access(join(projectRoot, 'dist', 'manifest.json'));
 
 console.log('');
-console.log('Step 3/4: loading the Chrome extension');
-console.log('  1. Open chrome://extensions');
-console.log('  2. Turn on Developer mode');
-console.log('  3. Click "Load unpacked" and select:');
+console.log(text.loadingExtension);
+console.log(text.openExtensions);
+console.log(text.enableDeveloperMode);
+console.log(text.loadUnpacked);
 console.log(`     ${join(projectRoot, 'dist')}`);
-console.log('  4. Copy the AgentSurf extension ID shown by Chrome');
+console.log(text.copyExtensionId);
 
 const terminal = process.stdin.isTTY && process.stdout.isTTY
   ? createInterface({ input: process.stdin, output: process.stdout })
   : null;
 
 try {
-  const extensionId = options.extensionId ?? await promptForExtensionId(terminal);
+  const extensionId = options.extensionId ?? await promptForExtensionId(terminal, text);
 
   console.log('');
-  console.log('Step 4/4: registering the Native Host');
-  await installNativeHost(extensionId, options.port);
+  console.log(text.registeringNativeHost);
+  await installNativeHost(extensionId, options.port, text);
 
   console.log('');
-  console.log('Setup complete. Copy the MCP JSON printed above into your agent configuration.');
-  console.log('Then reload AgentSurf in chrome://extensions and restart your MCP client.');
-
-  if (terminal !== null) {
-    await terminal.question('After AgentSurf shows "connected", press Enter to run the smoke test.');
-    const smokeRequest = JSON.stringify({
-      protocol_version: '1',
-      request_id: 'setup-smoke',
-      tool: 'browser.list_tabs',
-      args: {},
-    });
-    try {
-      await run(process.execPath, [join(projectRoot, 'scripts', 'call-tool.mjs'), smokeRequest]);
-      console.log('Smoke test passed: AgentSurf can reach the current Chrome session.');
-    } catch {
-      console.error('');
-      console.error('The Native Host is installed, but the smoke test did not complete.');
-      console.error('Open the AgentSurf status page and make sure it shows "connected", then run:');
-      console.error(`  node scripts/call-tool.mjs '${smokeRequest}'`);
-      process.exitCode = 1;
-    }
-  } else {
-    console.log('Non-interactive terminal: skipped the final smoke test.');
-  }
+  console.log(text.complete);
+  console.log(text.reload);
 } finally {
   terminal?.close();
 }
 
-function parseArgs(values) {
+function parseArgs(values, text) {
   let extensionId;
   let port = 8765;
   let help = false;
@@ -97,19 +77,19 @@ function parseArgs(values) {
     if (arg === '--extension-id' || arg === '--port') {
       const value = values[index + 1];
       if (value === undefined || value.startsWith('--')) {
-        throw new Error(`Missing value for ${arg}.`);
+        throw new Error(text.missingOptionValue(arg));
       }
       index += 1;
       if (arg === '--extension-id') extensionId = value;
       else {
         port = Number(value);
         if (!Number.isInteger(port) || port < 1 || port > 65535) {
-          throw new Error('Port must be between 1 and 65535.');
+          throw new Error(text.invalidPort);
         }
       }
       continue;
     }
-    throw new Error(`Unknown option: ${arg}`);
+    throw new Error(text.unknownOption(arg));
   }
 
   return { extensionId, port, help };
@@ -119,18 +99,18 @@ function isExtensionId(value) {
   return /^[a-p]{32}$/.test(value);
 }
 
-async function promptForExtensionId(terminal) {
+async function promptForExtensionId(terminal, text) {
   if (terminal === null) {
-    throw new Error('No interactive terminal. Re-run with --extension-id <extension-id>.');
+    throw new Error(text.noInteractiveTerminal);
   }
   while (true) {
-    const value = (await terminal.question('Extension ID: ')).trim();
+    const value = (await terminal.question(text.extensionIdPrompt)).trim();
     if (isExtensionId(value)) return value;
-    console.error('That does not look like a Chrome extension ID. Expected 32 lowercase letters from a to p.');
+    console.error(text.invalidExtensionId);
   }
 }
 
-async function installNativeHost(extensionId, port) {
+async function installNativeHost(extensionId, port, text) {
   if (process.platform === 'win32') {
     await run('powershell', [
       '-NoProfile',
@@ -153,12 +133,8 @@ async function installNativeHost(extensionId, port) {
   ]);
 }
 
-function printUsage() {
-  console.log(
-    'Usage:\n'
-      + '  npm run setup\n'
-      + '  npm run setup -- --extension-id <extension-id> [--port <port>]\n',
-  );
+function printUsage(text) {
+  console.log(`${text.usage.join('\n')}\n`);
 }
 
 function run(command, commandArgs) {
@@ -175,7 +151,7 @@ function run(command, commandArgs) {
         return;
       }
       const reason = signal === null ? `exit code ${code}` : `signal ${signal}`;
-      rejectPromise(new Error(`${command} failed with ${reason}.`));
+      rejectPromise(new Error(text.commandFailed(command, reason)));
     });
   });
 }

@@ -9,9 +9,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'i18n.ps1')
+$text = Get-AgentSurfText
 $hostScript = Join-Path $projectRoot 'dist\native-host\host.js'
 if (-not (Test-Path -LiteralPath $hostScript)) {
-  throw "Native Host build not found: $hostScript. Run npm run build first."
+  throw ($text.NativeHostBuildMissing -f $hostScript)
 }
 
 $nodePath = (Get-Command node -ErrorAction Stop).Source
@@ -121,8 +123,7 @@ try {
   }
   Add-Type -TypeDefinition $launcherSource -Language CSharp -OutputAssembly $launcherPath -OutputType ConsoleApplication
 } catch {
-  throw "Cannot replace $launcherPath because the running native host keeps the file locked. " +
-    'Disable AgentSurf in chrome://extensions (or close Chrome), wait a second, then run this command again.'
+  throw ($text.NativeHostReplaceLocked -f $launcherPath)
 }
 
 Write-Utf8NoBomJson -Path $manifestPath -Value @{
@@ -140,7 +141,7 @@ Write-Utf8NoBomJson -Path $manifestPath -Value @{
 # project or a switched Node version needs anyway.
 $mcpScript = Join-Path $projectRoot 'dist\mcp\cli.js'
 if (-not (Test-Path -LiteralPath $mcpScript)) {
-  throw "MCP server build not found: $mcpScript. Run npm run build first."
+  throw ($text.McpBuildMissing -f $mcpScript)
 }
 $mcpLauncherPath = Join-Path $runtimeDirectory 'agentsurf-mcp.exe'
 $escapedMcpScript = $mcpScript.Replace('\', '\\').Replace('"', '\"')
@@ -210,7 +211,7 @@ try {
   }
   Add-Type -TypeDefinition $mcpLauncherSource -Language CSharp -OutputAssembly $mcpLauncherPath -OutputType ConsoleApplication
 } catch {
-  throw "Cannot build the MCP launcher at $mcpLauncherPath : $($_.Exception.Message)"
+  throw ($text.McpLauncherBuildFailed -f $mcpLauncherPath, $_.Exception.Message)
 }
 
 # Fail the install instead of shipping a launcher that cannot start the server. The CLI prints its
@@ -222,20 +223,20 @@ $ErrorActionPreference = 'Continue'
 $probeExitCode = $LASTEXITCODE
 $ErrorActionPreference = $probePreference
 if ($probeExitCode -ne 0) {
-  throw "MCP launcher self-check failed: $mcpLauncherPath (exit $probeExitCode). Check the Node and script paths."
+  throw ($text.McpLauncherSelfCheckFailed -f $mcpLauncherPath, $probeExitCode)
 }
 
 $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime'
 New-Item -Path $registryPath -Force | Out-Null
 Set-Item -Path $registryPath -Value $manifestPath
 
-Write-Host "Native Host installed for extension $ExtensionId"
-Write-Host "Manifest: $manifestPath"
-Write-Host "Config:   $configPath"
-Write-Host "Bridge:   ws://127.0.0.1:$Port"
-Write-Host 'Reload AgentSurf in Chrome. Reinstall after moving the project or changing the Node installation path.'
+Write-Host ($text.Installed -f $ExtensionId)
+Write-Host ($text.Manifest -f $manifestPath)
+Write-Host ($text.Config -f $configPath)
+Write-Host ($text.Bridge -f $Port)
+Write-Host $text.Reload
 Write-Host ''
-Write-Host 'Add this to your MCP client configuration:'
+Write-Host $text.McpConfig
 Write-Host ''
 Write-Host (@"
 {

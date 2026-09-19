@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'i18n.ps1')
+$text = Get-AgentSurfText
 $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime'
 if (Test-Path -LiteralPath $registryPath) {
   Remove-Item -LiteralPath $registryPath -Force
@@ -10,5 +12,5 @@ foreach ($launcher in @('native-host.exe', 'native-host.cmd', 'agentsurf-mcp.exe
     Remove-Item -LiteralPath $launcherPath -Force
   }
 }
-Write-Host 'Browser Control Runtime Native Host registration removed.'
-Write-Host 'Local configuration was preserved in %LOCALAPPDATA%\BrowserControlRuntime.'
+Write-Host $text.UninstallRemoved
+Write-Host $text.UninstallPreserved

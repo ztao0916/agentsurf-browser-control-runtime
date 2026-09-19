@@ -5,16 +5,18 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { getMessages } from './i18n.mjs';
 
 const run = promisify(execFile);
+const { nativeHost: text } = await getMessages();
 
-if (process.platform !== 'darwin') throw new Error('This installer is for macOS only.');
+if (process.platform !== 'darwin') throw new Error(text.macOnly);
 const [extensionId, portValue = '8765', ...extra] = process.argv.slice(2);
 if (!/^[a-p]{32}$/.test(extensionId ?? '') || extra.length > 0) {
-  throw new Error('Usage: npm run native-host:install:macos -- <extension-id> [port]');
+  throw new Error(text.usage);
 }
 const port = Number(portValue);
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Port must be between 1 and 65535.');
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(text.invalidPort);
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hostScript = join(projectRoot, 'dist', 'native-host', 'host.js');
@@ -32,7 +34,7 @@ let token;
 try {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   if (typeof config.token !== 'string' || config.token.length < 16) {
-    throw new Error(`Invalid token in existing configuration: ${configPath}`);
+    throw new Error(text.invalidToken(configPath));
   }
   token = config.token;
 } catch (error) {
@@ -62,7 +64,7 @@ await chmod(mcpLauncherPath, 0o700);
 try {
   await run(mcpLauncherPath, ['help']);
 } catch (error) {
-  throw new Error(`MCP launcher self-check failed: ${mcpLauncherPath} (${error instanceof Error ? error.message : String(error)}). Check the Node and script paths.`);
+  throw new Error(text.launcherCheckFailed(mcpLauncherPath, error instanceof Error ? error.message : String(error)));
 }
 
 await writeFile(manifestPath, `${JSON.stringify({
@@ -73,12 +75,12 @@ await writeFile(manifestPath, `${JSON.stringify({
   allowed_origins: [`chrome-extension://${extensionId}/`],
 }, null, 2)}\n`);
 
-console.log(`Native Host installed for Chrome extension ${extensionId}`);
-console.log(`Manifest: ${manifestPath}`);
-console.log(`Config: ${configPath}`);
-console.log(`Bridge: ws://127.0.0.1:${port}`);
-console.log('Reload AgentSurf in Chrome. Reinstall after moving the project or changing the Node installation path.');
+console.log(text.installed(extensionId));
+console.log(text.manifest(manifestPath));
+console.log(text.config(configPath));
+console.log(text.bridge(port));
+console.log(text.reload);
 console.log('');
-console.log('Add this to your MCP client configuration:');
+console.log(text.mcpConfig);
 console.log('');
 console.log(JSON.stringify({ mcpServers: { agentsurf: { command: mcpLauncherPath } } }, null, 2));
