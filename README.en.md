@@ -171,95 +171,9 @@ The agent carries no protocol burden: the MCP server exposes every tool and its 
 
 ## 4. Driving it from an agent
 
-### 4.1 Read-only pass first
+Ask the agent in the conversation to operate the browser, for example to open a page, read its content, or take a screenshot.
 
-```text
-1. browser_list_tabs                                  # see what exists before touching anything
-2. browser_open {"url":"https://example.com","activate":true}
-3. browser_get_page {"tab_id":...}                    # URL, load state, revision
-4. browser_get_page_content {"tab_id":...}            # body text
-```
-
-`browser_get_page` returns **metadata, not article text**. To open a URL use `browser_open`; there is **no** `browser_navigate`.
-
-### 4.2 Element actions (the `element_id` model)
-
-```text
-1. browser_get_interactives {"tab_id":...}            # snapshot
-2. browser_click {"tab_id":..., "element_id":"el_..."}
-```
-
-Rules:
-
-- **Only use `element_id` values returned by `browser_get_interactives`.** Never invent selectors or IDs.
-- An `element_id` is bound to a document, a page revision, and a frame. When the page changes it goes stale (`stale_element`) — call `get_interactives` again and retry.
-- Modifier keys:
-
-```json
-{"tab_id": 123, "element_id": "el_...", "key": "a", "modifiers": ["Control"]}
-```
-
-- Text selection inside an editable element:
-
-```json
-{"tab_id": 123, "element_id": "el_...", "text": "text to select"}
-{"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
-```
-
-### 4.3 iframes (important)
-
-Many admin systems (ZenTao, legacy consoles, embedded payment pages) render the real content **inside an iframe**, with the outer document being just navigation chrome. Without a frame target you will only see that chrome.
-
-```text
-1. browser_get_frames {"tab_id": 123}
-   → [{frame_id: 0, is_top: true, ...},
-      {frame_id: 561, is_top: false, url: "about:blank", parent_frame_id: 0}]
-
-2. browser_get_interactives {"tab_id": 123, "frame_id": 561}
-3. browser_get_page_content  {"tab_id": 123, "frame_id": 561}
-4. browser_click {"tab_id": 123, "frame_id": 561, "element_id": "el_..."}
-```
-
-Rules and behaviours:
-
-- **An `element_id` is only valid inside the frame that produced it.** Always pass the same `frame_id` on the follow-up action.
-- Omitting `frame_id` targets the top document, so the request usually fails with `stale_element`.
-- A frame that navigated away is gone: you get a retryable `frame_not_found`; call `browser_get_frames` again.
-- `about:blank` / `srcdoc` frames are supported (that is how app shells work), which is why the content scripts run in `all_frames` with `match_about_blank`.
-- Cross-origin frames can be listed and their URL reported, but their content cannot be driven.
-
-### 4.4 Observability
-
-```text
-browser_get_console_messages {"tab_id": 123}                 # console output, exceptions, rejections
-browser_get_console_messages {"tab_id": 123, "frame_id": 561}
-browser_observe {"tab_id": 123}                              # state + interactives + AX + screenshot
-```
-
-Console collection runs in the page's MAIN world so it sees the page's own output. It is installed **only on tabs a session has claimed, and re-injected after every navigation**: a page the agent never touched keeps its own `console` untouched. `available: false` means **the collector was not present — an empty list is not proof of silence**.
-
-### 4.5 Parallel conversations (isolated by default)
-
-Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
-
-- tabs it opens with `browser_open` are claimed automatically and put in **this conversation's Chrome tab group**; the title **defaults to the title of the first page the conversation touches** (for example "ZenTao - Task 17824", or its hostname while the tab is still loading), falling back to `AgentSurf` when that page gives nothing;
-- **to make the group read as the task**, pass `session_name` on any call (for example `{"tab_id": 123, "session_name": "ZenTao 17824"}`): it sticks for the conversation, renames an existing group on the spot, and stops page titles from overriding it;
-- another conversation is refused those tabs (`tab_in_use`), so conversations stop stepping on each other;
-- use `browser_claim_tab` to take over a tab the user already had open: it claims and, by default, groups it (pass `group: false` to claim without moving it);
-- `browser_list_tabs` returns this conversation's tabs plus unclaimed ones and reports the rest in `other_session_tabs`; pass `include_all: true` to see every tab (for scripts and troubleshooting);
-- **leases apply to every caller**: a session-less call (a script, the CLI) is refused with `tab_in_use` on a tab another conversation holds instead of silently bypassing the check — a script that wants such a tab calls `browser.start_session` (still in the protocol, just not advertised to agents) and claims it;
-- `browser_reset_sessions` ungroups, releases this conversation's leases, and **closes the tabs this conversation opened itself** — never a tab the user already had open.
-
-Caveats:
-
-- automatic isolation assumes **one conversation = one MCP server process** (PiDeck starts a separate process per conversation, which satisfies this). If a client multiplexes several conversations through one process, they share a session and you must pass an explicit `session_id` to separate them;
-- `browser_open` on an existing `tab_id` claims that tab but deliberately leaves the tab bar alone;
-- leases live in the extension's `storage.session` (**restarting Chrome clears them**), while session records persist in `storage.local`;
-- **idle reclaim**: if a conversation is closed without a clean finish, the tabs it claimed are freed **and ungrouped** after **30 minutes of inactivity**, and another conversation can take them over, while a session that keeps using its tab keeps refreshing the lease;
-- **finish the job**: call `browser_reset_sessions` when the work is done — it ungroups, releases the leases, and **closes the tabs this conversation opened itself** immediately (a tab the user already had open is only ungrouped, not closed); otherwise the group stays until the idle timeout. Pass `close_opened_tabs: false` to keep the tabs, and read `closed_tab_ids` to see which ones went;
-- **process-exit backstop**: ending a conversation kills the MCP server process (or closes its stdin), so the process makes one best-effort `reset_sessions` before it exits. A SIGKILL cannot be caught, and that case still falls to the idle reclaim below;
-- **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
-- **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs, and note that **`force` only ungroups — it never closes tabs**, because that would destroy work another conversation is still doing.
+If it can do that, the setup is working.
 
 ## 5. Safety boundaries
 
