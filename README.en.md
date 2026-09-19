@@ -30,6 +30,16 @@ The wizard installs dependencies, builds the extension, asks you to load `dist/`
 
 For manual installation or step-by-step troubleshooting, see [section 4](#4-installation).
 
+## Usage experience
+
+These are my own hands-on notes, for reference:
+
+- **Codex**: connected without issues; the tools are discovered and called correctly, and operating pages from it feels good day to day.
+- **Command Code agent**: connected the same way through the MCP config, with no problems along the way.
+- **pi agent**: setup went just as smoothly, and it behaves no differently from the other two.
+
+All three clients connected without problems, and the overall experience has been good. This is just my personal impression — different agents may call the tools in different ways and get different results.
+
 ## Table of contents
 
 - [1. What it is](#1-what-it-is)
