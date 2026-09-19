@@ -122,7 +122,7 @@ If it can open the page and return the title, AgentSurf is working. You can then
 
 - Start in read-only mode; require your explicit approval before submitting, saving, deleting, publishing, uploading, or sending anything;
 - Never send passwords, verification codes, cookies, or tokens to an agent;
-- Screenshots show a “Chrome is being debugged” banner; reload the tab afterwards to remove it;
+- When AgentSurf starts debugging the browser, Chrome may show “AgentSurf started debugging this browser”; the “Chrome is being debugged” banner shown during screenshots is expected. Reload the tab after you finish to remove it.
 - For your first run, test on an ordinary page before using AgentSurf on important pages.
 
 AgentSurf is licensed under the [Apache License 2.0](LICENSE).
