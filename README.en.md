@@ -6,7 +6,9 @@
 
 [中文](README.md) ｜ **English**
 
-AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console/network inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls, no task planning, and no vendor lock-in.
+> This project is linked with and recognizes the [LINUX DO](https://linux.do/) community.
+
+AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls, no task planning, and no vendor lock-in.
 
 ![AgentSurf animated demo: an agent operating the user's signed-in Chrome through a local runtime](docs/assets/agentsurf-demo.svg)
 
@@ -68,10 +70,10 @@ authenticated sites, and workflows that may need human takeover. chrome-devtools
 MCP is a better fit when you need deeper CDP capabilities or a clean, repeatable
 test profile.
 
-The trade-off is that AgentSurf currently has no network response bodies, tracing,
-heap snapshots, or Lighthouse, and its `chrome.debugger` use conflicts with an
-open DevTools session. See the [browser tooling report](docs/browser-tooling-report.md#与-chrome-devtools-mcp-的对比)
-for the full comparison, evidence, and known limitations.
+The trade-off is that AgentSurf currently has no tracing, heap snapshots, or
+Lighthouse, and its `chrome.debugger` use conflicts with an open DevTools
+session. See the [browser runtime report](docs/browser-tooling-report.md) for
+the current scope, verification status, and known limitations.
 
 ## 2. How it works
 
@@ -591,10 +593,10 @@ These are **instructions for the agent**, not an enforced approval layer. The ca
 - **Protected pages cannot be injected**: `chrome://`, the Chrome Web Store, and similar.
 - **CDP conflicts with DevTools**: attaching fails if DevTools is already open on that tab, and shows a debug banner.
 - **Console buffers are per document and lost on navigation**, and only cover the period after the collector started.
-- **Session isolation is cooperative**: it requires `session_id` on every call for that session.
+- **Session isolation is automatic in the MCP server**: each conversation gets its own session and tabs; passing `session_id` explicitly is only for lower-level protocol callers.
 - **Files and downloads**: uploads need absolute local paths; downloads expose only Chrome Downloads API metadata and cannot be reliably tied to a source tab.
 - **Platform coverage**: verified on both Windows and macOS; no Linux installer.
-- Unit tests cover protocol and dispatch logic; real-browser behaviour (injection, screenshots, CDP, iframes) was verified manually — see `docs/`.
+- **No automated real-Chrome E2E yet**: CI covers type-checking, lint, unit tests, and builds; real-browser behaviour (injection, screenshots, CDP, iframes) still needs manual smoke verification.
 
 ## 11. Further reference
 

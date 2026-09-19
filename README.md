@@ -6,7 +6,9 @@
 
 **中文** ｜ [English](README.en.md)
 
-AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器运行时。它复用你当前 Chrome 的登录态，把页面观察、点击、输入、截图、iframe、Console/Network 观测等能力统一成 `browser.*` 工具，通过本地 MCP Server 暴露给任意支持 MCP 的 Agent。它不内置模型调用、任务规划，也不绑定特定 AI 产品。
+> 本项目已链接认可 [LINUX DO](https://linux.do/) 社区。
+
+AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器运行时。它复用你当前 Chrome 的登录态，把页面观察、点击、输入、截图、iframe、Console 观测等能力统一成 `browser.*` 工具，通过本地 MCP Server 暴露给任意支持 MCP 的 Agent。它不内置模型调用、任务规划，也不绑定特定 AI 产品。
 
 ![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
 
@@ -64,7 +66,7 @@ npm run setup
 
 AgentSurf 解决的是**操作你当前正在使用的 Chrome**：它直接复用现有登录态和标签页，适合需要用户环境、已登录网站或人工接管的流程。chrome-devtools MCP 更适合需要 CDP 深度能力或干净、可重复测试环境的场景。
 
-代价是 AgentSurf 目前没有 network 响应体、性能 trace、堆快照和 Lighthouse；碰到 `chrome.debugger` 时也会与 DevTools 互斥。完整对比、验证证据和已知边界见 [浏览器工具链报告](docs/browser-tooling-report.md#与-chrome-devtools-mcp-的对比)。
+代价是 AgentSurf 目前没有性能 trace、堆快照和 Lighthouse；碰到 `chrome.debugger` 时也会与 DevTools 互斥。当前能力范围、验证状态和已知边界见 [浏览器运行时报告](docs/browser-tooling-report.md)。
 
 ## 2. 工作原理
 
@@ -605,10 +607,10 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 - **受保护页面不可注入**：`chrome://`、Chrome 应用商店等；
 - **CDP 与 DevTools 互斥**：同一标签页已开 DevTools 时 `attach` 会失败；attach 期间会有调试横幅；
 - **Console 跨导航丢失**：缓冲在页面内，刷新/跳转后清空；且只能看到采集器在场之后的输出；
-- **会话隔离是协作式的**：必须每次调用都带 `session_id` 才生效；
+- **会话隔离由 MCP Server 自动启用**：每个对话会获得独立会话，打开的标签页会自动认领；显式传入 `session_id` 仅适用于直接调用底层协议的场景；
 - **文件上传/下载限制**：上传需本机绝对路径；下载只能拿到 Chrome Downloads API 提供的元数据，且无法可靠关联来源标签页；
 - **平台覆盖**：Windows 与 macOS 均已真机验证；Linux 未提供安装脚本；
-- 单元测试覆盖协议与调度逻辑，真机链路（注入、截图、CDP、iframe）依赖手工验证，见 `docs/`。
+- **尚无真实 Chrome 自动化 E2E**：CI 覆盖类型检查、lint、单元测试和构建；扩展注入、截图、CDP、iframe 等真机链路仍依赖手工冒烟验证；
 
 ## 11. 深入参考
 
