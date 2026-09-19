@@ -16,7 +16,20 @@ AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器
 
 ## 快速开始
 
-在项目目录执行：
+Windows 与 macOS 均已真机验证。全程不需要管理员权限，也不会改动你 Chrome 里已有的登录态和设置。
+
+### 前置环境
+
+| 需要 | 版本要求与检查命令 |
+| --- | --- |
+| Node.js | 20+，`node -v` |
+| npm | 10+，`npm -v` |
+| Git | `git --version` |
+| Chrome | 116+，地址栏打开 `chrome://version` |
+
+### 安装并注册
+
+首次安装依次执行：
 
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
@@ -24,9 +37,81 @@ cd agentsurf-browser-control-runtime
 npm run setup
 ```
 
-`npm run setup` 会安装依赖、构建扩展，提示你把 `dist/` 加载到 `chrome://extensions`，输入扩展 ID 后自动注册 Native Host，并打印可直接粘贴的 MCP 配置 JSON；交互式终端还会可选运行 smoke test。
+向导会自动完成依赖安装、构建与 Native Host 注册，并在过程中提示你：
 
-更细的前置环境与验证说明见[第 4 节](#4-安装)。
+1. 打开 `chrome://extensions`，开启开发者模式；
+2. 点击“加载已解压的扩展程序”，选择项目里的 `dist/`；
+3. 复制 AgentSurf 卡片上显示的扩展 ID，粘贴回终端；
+4. 复制终端最后打印的 MCP 配置 JSON，下一步会用到。
+
+> 换电脑、移动项目目录或重新加载扩展后，如果扩展 ID 发生变化，重新运行 `npm run setup` 即可。
+
+### 重新加载扩展并确认链路
+
+1. 回到 `chrome://extensions`，点 AgentSurf 卡片上的 **重新加载**（🔄）；
+2. 打开下面的地址（也可以直接点工具栏上的 AgentSurf 图标，弹的是同一页）：
+
+```text
+chrome-extension://<扩展ID>/debug.html
+```
+
+3. 期望看到：
+
+```text
+● connected
+Host      com.browsercontrol.runtime
+Endpoint  ws://127.0.0.1:8765
+Pending   0
+```
+
+显示未连接时：点一次 **Disconnect**，等 1 秒，再点 **Connect**。**不要连续点 Reconnect**，那会造成重连风暴。
+
+### 接到你的 Agent（MCP 配置）
+
+把安装脚本终端打印的那段 JSON 整段粘到 Agent 的 MCP 配置文件里。以 pi 的 `~/.pi/agent/mcp.json` 为例（`command` 用脚本打印的那个路径）：
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "<安装脚本打印的启动器绝对路径>"
+    }
+  }
+}
+```
+
+> 其他 MCP 客户端同理，只是配置文件的**位置**不同，粘贴的 JSON 内容完全一样。
+
+四个要点：
+
+- **没有 `args`**。把终端打印出来的那段整段复制，**不要自己拼路径**；
+- 改完配置**要重启 MCP 客户端**（或它的会话），配置只在启动时读一次；
+- 不需要任何环境变量，MCP Server 会自动读取安装时生成的 `config.json`；
+- 换电脑、移动项目目录、切换 Node 版本后，**重新运行 `npm run setup`** 就能重新生成启动器。
+
+### 让 Agent 确认工具可用
+
+对 Agent 说：
+
+```text
+列出你现在可用的 browser_* 工具。
+```
+
+应看到 **30** 个工具，其中包括 `browser_get_frames`、`browser_select_text`、`browser_get_console_messages`、`browser_screenshot`。
+
+（工具清单由 MCP 客户端从 Server 拿到，没有单独的“查询能力”工具；`browser.get_capabilities` 已移除。）
+
+### 装完怎么确认真的通了
+
+- **不经过 MCP 客户端**直接验全链路（在项目目录执行，返回 `ok: true` 和一串标签页就算通）：
+
+```sh
+node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
+```
+
+- 这里失败 → 链路问题，看[第 7 节 排障](#7-排障)；
+- 这里成功但 Agent 里失败 → MCP 配置问题，回到 [MCP 配置](#接到你的-agentmcp-配置)检查路径并重启客户端；
+- 更完整的验证清单（Bridge 是否监听、端到端冒烟）见[第 4 节](#4-验证接入是否成功)。
 
 ## 为什么要写这个
 
@@ -51,15 +136,14 @@ npm run setup
 - [1. 它是什么](#1-它是什么)
 - [2. 工作原理](#2-工作原理)
 - [3. 接入方式（MCP Server）](#3-接入方式mcp-server)
-- [4. 安装](#4-安装)
-- [5. 验证接入是否成功](#5-验证接入是否成功)
-- [6. 在 Agent 里怎么用](#6-在-agent-里怎么用)
-- [7. 更新、移动目录、卸载](#7-更新移动目录卸载)
-- [8. 排障](#8-排障)
-- [9. 安全边界](#9-安全边界)
-- [10. 当前限制](#10-当前限制)
-- [11. 深入参考](#11-深入参考)
-- [12. 许可证](#12-许可证)
+- [4. 验证接入是否成功](#4-验证接入是否成功)
+- [5. 在 Agent 里怎么用](#5-在-agent-里怎么用)
+- [6. 更新、移动目录、卸载](#6-更新移动目录卸载)
+- [7. 排障](#7-排障)
+- [8. 安全边界](#8-安全边界)
+- [9. 当前限制](#9-当前限制)
+- [10. 深入参考](#10-深入参考)
+- [11. 许可证](#11-许可证)
 
 ## 1. 它是什么
 
@@ -110,112 +194,15 @@ npm run setup
 
 Agent ↔ `dist/mcp/cli.js`（stdio MCP Server）↔ Bridge ↔ 扩展。
 
-Agent 侧零协议负担：工具与参数由 MCP 自动暴露，你只需要在客户端的 MCP 配置里填一段 JSON，见 [4.4 接到你的 Agent](#44-接到你的-agentmcp-配置)。
+Agent 侧零协议负担：工具与参数由 MCP 自动暴露，你只需要在客户端的 MCP 配置里填一段 JSON，见[快速开始中的 MCP 配置](#接到你的-agentmcp-配置)。
 
-> 接入前需要先完成第 4 节的扩展与 Native Host 安装，那是所有能力的地基。
+> 接入前需要先完成[快速开始](#快速开始)中的扩展与 Native Host 安装，那是所有能力的地基。
 
-## 4. 安装
-
-Windows 与 macOS 均已真机验证。全程不需要管理员权限，也不会改动你 Chrome 里已有的登录态和设置。
-
-### 4.1 前置环境
-
-| 需要 | 版本要求与检查命令 |
-| --- | --- |
-| Node.js | 20+，`node -v` |
-| npm | 10+，`npm -v` |
-| Git | `git --version` |
-| Chrome | 116+，地址栏打开 `chrome://version` |
-
-### 4.2 安装并注册
-
-在项目目录执行：
-
-```bash
-npm run setup
-```
-
-向导会自动完成依赖安装、构建与 Native Host 注册，并在过程中提示你：
-
-1. 打开 `chrome://extensions`，开启开发者模式；
-2. 点击“加载已解压的扩展程序”，选择项目里的 `dist/`；
-3. 复制 AgentSurf 卡片上显示的扩展 ID，粘贴回终端；
-4. 复制终端最后打印的 MCP 配置 JSON，下一步会用到。
-
-> 换电脑、移动项目目录或重新加载扩展后，如果扩展 ID 发生变化，重新运行 `npm run setup` 即可。
-
-### 4.3 重新加载扩展并确认链路
-
-1. 回到 `chrome://extensions`，点 AgentSurf 卡片上的 **重新加载**（🔄）；
-2. 打开下面的地址（也可以直接点工具栏上的 AgentSurf 图标，弹的是同一页）：
-
-```text
-chrome-extension://<扩展ID>/debug.html
-```
-
-3. 期望看到：
-
-```text
-● connected
-Host      com.browsercontrol.runtime
-Endpoint  ws://127.0.0.1:8765
-Pending   0
-```
-
-显示未连接时：点一次 **Disconnect**，等 1 秒，再点 **Connect**。**不要连续点 Reconnect**，那会造成重连风暴。
-
-### 4.4 接到你的 Agent（MCP 配置）
-
-把第 4.2 步终端打印的那段 JSON 整段粘到 Agent 的 MCP 配置文件里。以 pi 的 `~/.pi/agent/mcp.json` 为例（`command` 用脚本打印的那个路径）：
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "<安装脚本打印的启动器绝对路径>"
-    }
-  }
-}
-```
-
-> 其他 MCP 客户端同理，只是配置文件的**位置**不同，粘贴的 JSON 内容完全一样。
-
-四个要点：
-
-- **没有 `args`**。把终端打印出来的那段整段复制，**不要自己拼路径**；
-- 改完配置**要重启 MCP 客户端**（或它的会话），配置只在启动时读一次；
-- 不需要任何环境变量，MCP Server 会自动读取第 4.2 步生成的 `config.json`；
-- 换电脑、移动项目目录、切换 Node 版本后，**重新运行第 4.2 步的命令**就能重新生成启动器。
-
-### 4.5 让 Agent 确认工具可用
-
-对 Agent 说：
-
-```text
-列出你现在可用的 browser_* 工具。
-```
-
-应看到 **30** 个工具，其中包括 `browser_get_frames`、`browser_select_text`、`browser_get_console_messages`、`browser_screenshot`。
-
-（工具清单由 MCP 客户端从 Server 拿到，没有单独的“查询能力”工具；`browser.get_capabilities` 已移除。）
-
-### 4.6 装完怎么确认真的通了
-
-- **不经过 MCP 客户端**直接验全链路（在项目目录执行，返回 `ok: true` 和一串标签页就算通）：
-
-```sh
-node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
-```
-
-- 这里失败 → 链路问题，看[第 8 节 排障](#8-排障)；
-- 这里成功但 Agent 里失败 → MCP 配置问题，回第 4.4 步检查路径与客户端重启；
-- 更完整的验证清单（Bridge 是否监听、端到端冒烟）见[第 5 节](#5-验证接入是否成功)。
-
-## 5. 验证接入是否成功
+## 4. 验证接入是否成功
 
 按“从里到外”的顺序验证，出问题时最容易定位。
 
-### 5.1 Bridge 是否在监听
+### 4.1 Bridge 是否在监听
 
 ```powershell
 # Windows
@@ -230,7 +217,7 @@ lsof -nP -iTCP:8765 -sTCP:LISTEN
 
 有监听 = Bridge 已启动（Chrome 扩展成功拉起了 Host）。
 
-### 5.2 全链路是否通（不经过 MCP 客户端）
+### 4.2 全链路是否通（不经过 MCP 客户端）
 
 仓库自带一个模拟外部 Agent 的脚本，直接连 Bridge 发一个请求：
 
@@ -249,10 +236,10 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 
 | 现象 | 结论 |
 | --- | --- |
-| 这里失败 | 链路问题，看[第 8 节](#8-排障) |
+| 这里失败 | 链路问题，看[第 7 节](#7-排障) |
 | 这里成功、MCP 里失败 | MCP 配置问题（路径、Node、是否重启客户端） |
 
-### 5.3 端到端冒烟
+### 4.3 端到端冒烟
 
 在 Agent 里依次让它做：
 
@@ -260,9 +247,9 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 2. `browser_get_page_content`（带某个普通网页的 `tab_id`）—— 能读到正文；
 3. `browser_screenshot` —— 能拿到图片（截图依赖 CDP，会附加调试器，页面上出现“Chrome 正在被调试”横幅；重新加载该页签即可去掉）。
 
-## 6. 在 Agent 里怎么用
+## 5. 在 Agent 里怎么用
 
-### 6.1 只读流程（推荐先跑一遍）
+### 5.1 只读流程（推荐先跑一遍）
 
 ```text
 1. browser_list_tabs                      # 先看清有哪些标签页，避免动到用户正在用的页面
@@ -275,7 +262,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 
 注意：**`browser_get_page` 只返回页面元信息，不是正文抓取工具**；打开网址用 `browser_open`（**没有** `browser_navigate`）。
 
-### 6.2 元素操作流程（element_id 模式）
+### 5.2 元素操作流程（element_id 模式）
 
 ```text
 1. browser_get_interactives {"tab_id":...}     # 拿到元素快照
@@ -300,7 +287,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 {"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
 ```
 
-### 6.3 iframe / 子框架（重要）
+### 5.3 iframe / 子框架（重要）
 
 很多后台系统（禅道、旧版管理台、嵌入式支付页）把**真正的正文放在 iframe 里**，外层只是一个导航外壳。此时：
 
@@ -325,7 +312,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 - 支持的框架包括 `about:blank` / `srcdoc` 这类**无 src 的同源框架**——外壳型系统几乎都是这种；
 - 跨域框架：能列出、能报告 URL，但通常无法注入 Page Agent 操作其内容。
 
-### 6.4 观测与排错
+### 5.4 观测与排错
 
 ```text
 browser_get_console_messages {"tab_id": 123}          # console.log/error、未捕获异常、未处理 rejection
@@ -335,7 +322,7 @@ browser_observe {"tab_id": 123}                       # 一次拿 状态+交互�
 
 Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**采集器只在 agent 认领的 tab 上安装，并在每次导航后重新注入**：没被 agent 操作过的页面完全不碰它的 `console`。查询结果里 **`available: false` 表示当时采集器不在场，不能当成「页面没有报错」**。
 
-### 6.5 多对话并行（默认自动隔离）
+### 5.5 多对话并行（默认自动隔离）
 
 每个对话的 MCP Server 进程会自带一个会话，**Agent 不需要手动开会话，也不需要每次传 `session_id`**：
 
@@ -358,9 +345,9 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**�
 - **重载/重启后的收尾**：重新加载扩展或重启 Chrome 会清空租约（Chrome 行为），此时运行时会在启动时把“会话还在、租约已无”的漏网分组一并解除，不会留下无主的分组；有租约（正在干活）的页签不动；
 - **手动兜底**：`browser.reset_sessions` 默认只释放**本对话自己的**会话与租约，并顺带清掉“拥有者已不存在”的租约（正是页签被消失的对话卡住的情形）；它**不会**动别的对话，返回值里的 `other_sessions_kept` 会告诉你还有几个会话没动。确实需要清全局（会释放并解除所有人的分组）时才传 `force: true`——**`force` 只解除分组、绝不关页签**，因为那会毁掉别的对话正在做的事。
 
-## 7. 更新、移动目录、卸载
+## 6. 更新、移动目录、卸载
 
-### 7.1 按改动范围决定动作
+### 6.1 按改动范围决定动作
 
 | 你改了什么 | 需要做什么 |
 | --- | --- |
@@ -372,7 +359,7 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**�
 
 已经启动的 Host 不会自动加载新 JS，必须让它重启（禁用/启用扩展，或重新加载扩展）。
 
-### 7.2 完整更新流程（Windows）
+### 6.2 完整更新流程（Windows）
 
 ```powershell
 # 1. 先在 chrome://extensions 禁用 AgentSurf，等旧 Host 退出
@@ -390,7 +377,7 @@ macOS 把第 2 步换成 `npm run native-host:install:macos -- "<扩展ID>"`。
 
 只是连接临时异常、没改代码时，**不需要**重新构建安装：在 `debug.html` 里 Disconnect / Connect，或重新加载扩展即可。
 
-### 7.3 移动目录
+### 6.3 移动目录
 
 启动器里写死的是**安装时**的项目路径（`<项目>/dist/native-host/host.js`）。移动或重命名项目后：
 
@@ -402,7 +389,7 @@ macOS 把第 2 步换成 `npm run native-host:install:macos -- "<扩展ID>"`。
 
 > 补充一个实测结论：`%LOCALAPPDATA%\BrowserControlRuntime\` 下的 `host.js` 是**历史遗留副本，没有任何东西引用它**（启动器指向仓库 `dist/` 里的那份）。排查问题时不要被它误导。
 
-### 7.4 卸载
+### 6.4 卸载
 
 ```powershell
 # Windows
@@ -416,9 +403,9 @@ npm run native-host:uninstall:macos
 
 卸载只移除 Native Host 注册与启动器，**保留配置**；不会删除 Chrome 扩展，也不会删除项目目录。要彻底清理：先在 `chrome://extensions` 移除扩展，再删除项目目录与 `%LOCALAPPDATA%\BrowserControlRuntime`（macOS 为 `~/Library/Application Support/BrowserControlRuntime`）。
 
-## 8. 排障
+## 7. 排障
 
-### 8.1 常见现象对照
+### 7.1 常见现象对照
 
 | 现象 | 含义与处理 |
 | --- | --- |
@@ -433,15 +420,15 @@ npm run native-host:uninstall:macos
 | `tool is unsupported` | 工具名不被当前运行时支持。对照 Agent 手上的工具清单，不要急着重装 |
 | 安装时报 `native-host.exe` 被占用 | 先禁用扩展、等旧 Host 退出再安装。**不要**批量结束 `node.exe` |
 
-### 8.2 定位顺序
+### 7.2 定位顺序
 
 1. `chrome://extensions`：扩展是否启用？有没有报错？
 2. `debug.html`（或点工具栏图标）：连接状态与最近事件；
-3. 端口是否有监听（见 5.1）；
-4. `node scripts/call-tool.mjs ...`（见 5.2）区分链路问题与 MCP 配置问题；
+3. 端口是否有监听（见 4.1）；
+4. `node scripts/call-tool.mjs ...`（见 4.2）区分链路问题与 MCP 配置问题；
 5. 必要时打开扩展的 **Service Worker 检查窗口**看 Native Messaging 报错。
 
-### 8.3 三个最容易踩的坑
+### 7.3 三个最容易踩的坑
 
 1. **改了 manifest 只刷新页面** → 不生效。`content_scripts`、权限这类改动**必须重新加载扩展**。
 2. **用旧扩展 ID** → Host 注册的 `allowed_origins` 不匹配，连接会被 Chrome 拒绝。以 `chrome://extensions` 当前显示为准。
@@ -449,7 +436,7 @@ npm run native-host:uninstall:macos
 
 分享日志前请移除 token 与敏感页面数据。
 
-## 9. 安全边界
+## 8. 安全边界
 
 AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建议在 Agent 的使用规则里写死：
 
@@ -461,7 +448,7 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 
 以上是**给 Agent 的使用约束**，不代表运行时已实现人工审批；调用方仍需自己管理授权边界。
 
-## 10. 当前限制
+## 9. 当前限制
 
 - **无 OCR**：图片里的文字需要靠截图 + 模型自身视觉能力；
 - **无 Shadow DOM 专门支持**：开放 Shadow Root 的文本会并入页面正文，但元素不会进入 `get_interactives`；
@@ -476,7 +463,7 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 
 完整的能力范围、验证状态与已知边界见 [浏览器运行时报告](docs/browser-tooling-report.md)。
 
-## 11. 深入参考
+## 10. 深入参考
 
 面向开发者的补充内容已拆到单独文件 [docs/reference.md](docs/reference.md)：
 
@@ -489,6 +476,6 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 | [贡献指南](CONTRIBUTING.md) | 开发环境、提交前检查和 Pull Request 要求 |
 | [变更记录](CHANGELOG.md) | 版本发布与重要变更 |
 
-## 12. 许可证
+## 11. 许可证
 
 本项目采用 [Apache License 2.0](LICENSE)，包含第 3 节专利授权。

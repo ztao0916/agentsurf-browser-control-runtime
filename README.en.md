@@ -16,7 +16,20 @@ AgentSurf is a local Chrome control runtime for AI agents. You can think of it a
 
 ## Quick start
 
-Run this command in the project directory:
+Verified on both Windows and macOS. Nothing here needs administrator rights, and nothing changes the logins or settings you already have in Chrome.
+
+### Prerequisites
+
+| Needed | Version and check command |
+| --- | --- |
+| Node.js | 20+, `node -v` |
+| npm | 10+, `npm -v` |
+| Git | `git --version` |
+| Chrome | 116+, open `chrome://version` in the address bar |
+
+### Install and register
+
+For a first-time install, run:
 
 ```bash
 git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
@@ -24,9 +37,81 @@ cd agentsurf-browser-control-runtime
 npm run setup
 ```
 
-`npm run setup` installs dependencies, builds the extension, asks you to load `dist/` in `chrome://extensions`, registers the native host after you enter the extension ID, and prints the MCP config JSON to paste into your agent. In an interactive terminal it can also run a smoke test.
+The wizard installs dependencies, builds the extension, and registers the native host, prompting you to:
 
-For more detail on prerequisites and verification, see [section 4](#4-installation).
+1. open `chrome://extensions` and turn on Developer mode;
+2. click **Load unpacked** and select the project's `dist/` folder;
+3. copy the extension ID shown on the AgentSurf card and paste it into the terminal;
+4. copy the MCP config JSON printed at the end for the next step.
+
+> If the extension ID changes after switching machines, moving the project, or reloading the extension, run `npm run setup` again.
+
+### Reload the extension and confirm the link
+
+1. Back in `chrome://extensions`, click the **reload** button (🔄) on the AgentSurf card;
+2. open the address below (or just click the AgentSurf icon in the toolbar — it opens the same page):
+
+```text
+chrome-extension://<extension ID>/debug.html
+```
+
+3. You should see:
+
+```text
+● connected
+Host      com.browsercontrol.runtime
+Endpoint  ws://127.0.0.1:8765
+Pending   0
+```
+
+If it is not connected: click **Disconnect** once, wait a second, then click **Connect**. **Do not click Reconnect repeatedly** — that produces a reconnect storm.
+
+### Connect your agent (MCP config)
+
+Paste the JSON printed by the installer into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example (`command` is whatever path the script printed):
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "<absolute path to the launcher printed by the installer>"
+    }
+  }
+}
+```
+
+> Other MCP clients work the same way; only the **location** of the config file differs, and the JSON you paste is identical.
+
+Four things to know:
+
+- there are **no `args`**. Copy the printed block verbatim — **do not assemble the path yourself**;
+- **restart the MCP client** (or its session) after editing the config; it is only read at startup;
+- no environment variables are needed; the MCP server reads the `config.json` written during installation;
+- after switching machines, moving the project, or changing your Node install, **re-run `npm run setup`** to regenerate the launcher.
+
+### Confirm the tools are available
+
+Ask your agent:
+
+```text
+List the browser_* tools you have available.
+```
+
+You should see **30** tools, including `browser_get_frames`, `browser_select_text`, `browser_get_console_messages`, and `browser_screenshot`.
+
+(The client gets the tool list from the server, so there is no separate capability-query tool; `browser.get_capabilities` was removed.)
+
+### How to tell it really works
+
+- Verify the whole link **without the MCP client** (run it in the project directory; `ok: true` plus a list of tabs means the link is fine):
+
+```sh
+node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
+```
+
+- Fails here → the link is the problem, see [section 7, Troubleshooting](#7-troubleshooting);
+- Works here but fails inside the agent → MCP config problem, check the path in [Connect your agent](#connect-your-agent-mcp-config) and restart the client;
+- Full verification checklist (is the bridge listening, end-to-end smoke test): see [section 4](#4-verifying-the-setup).
 
 ## Why this exists
 
@@ -51,15 +136,14 @@ All three clients connected and called the tools reliably, and the overall exper
 - [1. What it is](#1-what-it-is)
 - [2. How it works](#2-how-it-works)
 - [3. MCP server integration](#3-mcp-server-integration)
-- [4. Installation](#4-installation)
-- [5. Verifying the setup](#5-verifying-the-setup)
-- [6. Driving it from an agent](#6-driving-it-from-an-agent)
-- [7. Updating, moving, uninstalling](#7-updating-moving-uninstalling)
-- [8. Troubleshooting](#8-troubleshooting)
-- [9. Safety boundaries](#9-safety-boundaries)
-- [10. Current limitations](#10-current-limitations)
-- [11. Further reference](#11-further-reference)
-- [12. License](#12-license)
+- [4. Verifying the setup](#4-verifying-the-setup)
+- [5. Driving it from an agent](#5-driving-it-from-an-agent)
+- [6. Updating, moving, uninstalling](#6-updating-moving-uninstalling)
+- [7. Troubleshooting](#7-troubleshooting)
+- [8. Safety boundaries](#8-safety-boundaries)
+- [9. Current limitations](#9-current-limitations)
+- [10. Further reference](#10-further-reference)
+- [11. License](#11-license)
 
 ## 1. What it is
 
@@ -110,112 +194,15 @@ Key consequences:
 
 Agent ↔ `dist/mcp/cli.js` (stdio MCP server) ↔ Bridge ↔ extension.
 
-The agent carries no protocol burden: the MCP server exposes every tool and its schema, so all you do is paste one JSON block into your client's MCP config — see [step 4.4](#44-connect-your-agent-mcp-config).
+The agent carries no protocol burden: the MCP server exposes every tool and its schema, so all you do is paste one JSON block into your client's MCP config — see [Connect your agent](#connect-your-agent-mcp-config) in Quick start.
 
-> The extension and native host from section 4 must be installed first; that is the foundation for everything else.
+> The extension and native host in [Quick start](#quick-start) must be installed first; that is the foundation for everything else.
 
-## 4. Installation
-
-Verified on both Windows and macOS. Nothing here needs administrator rights, and nothing changes the logins or settings you already have in Chrome.
-
-### 4.1 Prerequisites
-
-| Needed | Version and check command |
-| --- | --- |
-| Node.js | 20+, `node -v` |
-| npm | 10+, `npm -v` |
-| Git | `git --version` |
-| Chrome | 116+, open `chrome://version` in the address bar |
-
-### 4.2 Install and register
-
-Run this command in the project directory:
-
-```bash
-npm run setup
-```
-
-The wizard installs dependencies, builds the extension, and registers the native host, prompting you to:
-
-1. open `chrome://extensions` and turn on Developer mode;
-2. click **Load unpacked** and select the project's `dist/` folder;
-3. copy the extension ID shown on the AgentSurf card and paste it into the terminal;
-4. copy the MCP config JSON printed at the end for the next step.
-
-> If the extension ID changes after switching machines, moving the project, or reloading the extension, run `npm run setup` again.
-
-### 4.3 Reload the extension and confirm the link
-
-1. Back in `chrome://extensions`, click the **reload** button (🔄) on the AgentSurf card;
-2. open the address below (or just click the AgentSurf icon in the toolbar — it opens the same page):
-
-```text
-chrome-extension://<extension ID>/debug.html
-```
-
-3. You should see:
-
-```text
-● connected
-Host      com.browsercontrol.runtime
-Endpoint  ws://127.0.0.1:8765
-Pending   0
-```
-
-If it is not connected: click **Disconnect** once, wait a second, then click **Connect**. **Do not click Reconnect repeatedly** — that produces a reconnect storm.
-
-### 4.4 Connect your agent (MCP config)
-
-Paste the JSON the installer printed in step 4.2 into your agent's MCP config file. Using pi's `~/.pi/agent/mcp.json` as the example (`command` is whatever path the script printed):
-
-```json
-{
-  "mcpServers": {
-    "agentsurf": {
-      "command": "<absolute path to the launcher printed by the installer>"
-    }
-  }
-}
-```
-
-> Other MCP clients work the same way; only the **location** of the config file differs, and the JSON you paste is identical.
-
-Four things to know:
-
-- there are **no `args`**. Copy the printed block verbatim — **do not assemble the path yourself**;
-- **restart the MCP client** (or its session) after editing the config; it is only read at startup;
-- no environment variables are needed; the MCP server reads the `config.json` written in step 4.2;
-- after switching machines, moving the project, or changing your Node install, **re-run the command from step 4.2** to regenerate the launcher.
-
-### 4.5 Confirm the tools are available
-
-Ask your agent:
-
-```text
-List the browser_* tools you have available.
-```
-
-You should see **30** tools, including `browser_get_frames`, `browser_select_text`, `browser_get_console_messages`, and `browser_screenshot`.
-
-(The client gets the tool list from the server, so there is no separate capability-query tool; `browser.get_capabilities` was removed.)
-
-### 4.6 How to tell it really works
-
-- Verify the whole link **without the MCP client** (run it in the project directory; `ok: true` plus a list of tabs means the link is fine):
-
-```sh
-node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
-```
-
-- Fails here → the link is the problem, see [section 8, Troubleshooting](#8-troubleshooting);
-- Works here but fails inside the agent → MCP config problem, check the path and the client restart in step 4.4;
-- Full verification checklist (is the bridge listening, end-to-end smoke test): see [section 5](#5-verifying-the-setup).
-
-## 5. Verifying the setup
+## 4. Verifying the setup
 
 Verify from the inside out; this is what makes failures easy to localize.
 
-### 5.1 Is the bridge listening?
+### 4.1 Is the bridge listening?
 
 ```powershell
 # Windows
@@ -230,7 +217,7 @@ lsof -nP -iTCP:8765 -sTCP:LISTEN
 
 A listener means the bridge is up (the extension successfully spawned the host).
 
-### 5.2 Does the whole link work without the MCP client?
+### 4.2 Does the whole link work without the MCP client?
 
 The repo ships a script that acts as a minimal external agent:
 
@@ -249,16 +236,16 @@ This step is the dividing line for troubleshooting:
 
 | Result | Conclusion |
 | --- | --- |
-| Fails here | link problem — see [section 8](#8-troubleshooting) |
+| Fails here | link problem — see [section 7](#7-troubleshooting) |
 | Works here, fails in MCP | MCP config problem (paths, Node, client not restarted) |
 
-### 5.3 End-to-end smoke test
+### 4.3 End-to-end smoke test
 
 In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on a normal page, then `browser_screenshot`. Screenshots go through CDP, so the tab shows a "Chrome is being debugged" banner; reloading that tab removes it.
 
-## 6. Driving it from an agent
+## 5. Driving it from an agent
 
-### 6.1 Read-only pass first
+### 5.1 Read-only pass first
 
 ```text
 1. browser_list_tabs                                  # see what exists before touching anything
@@ -269,7 +256,7 @@ In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on 
 
 `browser_get_page` returns **metadata, not article text**. To open a URL use `browser_open`; there is **no** `browser_navigate`.
 
-### 6.2 Element actions (the `element_id` model)
+### 5.2 Element actions (the `element_id` model)
 
 ```text
 1. browser_get_interactives {"tab_id":...}            # snapshot
@@ -293,7 +280,7 @@ Rules:
 {"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
 ```
 
-### 6.3 iframes (important)
+### 5.3 iframes (important)
 
 Many admin systems (ZenTao, legacy consoles, embedded payment pages) render the real content **inside an iframe**, with the outer document being just navigation chrome. Without a frame target you will only see that chrome.
 
@@ -315,7 +302,7 @@ Rules and behaviours:
 - `about:blank` / `srcdoc` frames are supported (that is how app shells work), which is why the content scripts run in `all_frames` with `match_about_blank`.
 - Cross-origin frames can be listed and their URL reported, but their content cannot be driven.
 
-### 6.4 Observability
+### 5.4 Observability
 
 ```text
 browser_get_console_messages {"tab_id": 123}                 # console output, exceptions, rejections
@@ -325,7 +312,7 @@ browser_observe {"tab_id": 123}                              # state + interacti
 
 Console collection runs in the page's MAIN world so it sees the page's own output. It is installed **only on tabs a session has claimed, and re-injected after every navigation**: a page the agent never touched keeps its own `console` untouched. `available: false` means **the collector was not present — an empty list is not proof of silence**.
 
-### 6.5 Parallel conversations (isolated by default)
+### 5.5 Parallel conversations (isolated by default)
 
 Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
 
@@ -348,9 +335,9 @@ Caveats:
 - **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
 - **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs, and note that **`force` only ungroups — it never closes tabs**, because that would destroy work another conversation is still doing.
 
-## 7. Updating, moving, uninstalling
+## 6. Updating, moving, uninstalling
 
-### 7.1 What to do for each kind of change
+### 6.1 What to do for each kind of change
 
 | Change | Action |
 | --- | --- |
@@ -362,7 +349,7 @@ Caveats:
 
 A running host never picks up new JS on its own; restart it by reloading the extension.
 
-### 7.2 Full update (Windows)
+### 6.2 Full update (Windows)
 
 ```powershell
 # 1. disable AgentSurf in chrome://extensions and let the old host exit
@@ -380,7 +367,7 @@ On macOS, replace step 2's last command with `npm run native-host:install:macos 
 
 For a transient connection problem with no code change, skip all of this: use Disconnect / Connect in `debug.html` or reload the extension.
 
-### 7.3 Moving the project
+### 6.3 Moving the project
 
 The launcher hard-codes the project path recorded at install time (`<project>/dist/native-host/host.js`). After moving or renaming:
 
@@ -392,7 +379,7 @@ The launcher hard-codes the project path recorded at install time (`<project>/di
 
 > Verified detail: the `host.js` copy in `%LOCALAPPDATA%\BrowserControlRuntime\` is a **stale leftover that nothing references** (the launcher points at the repo's `dist/`). Do not let it mislead you while debugging.
 
-### 7.4 Uninstalling
+### 6.4 Uninstalling
 
 ```powershell
 npm run native-host:uninstall              # Windows
@@ -401,9 +388,9 @@ npm run native-host:uninstall:macos        # macOS
 
 This removes the native host registration and launcher, **keeps the config**, and touches neither the Chrome extension nor the project. To clean up fully: remove the extension in `chrome://extensions`, then delete the project directory and `%LOCALAPPDATA%\BrowserControlRuntime` (`~/Library/Application Support/BrowserControlRuntime` on macOS).
 
-## 8. Troubleshooting
+## 7. Troubleshooting
 
-### 8.1 Symptom table
+### 7.1 Symptom table
 
 | Symptom | Meaning and fix |
 | --- | --- |
@@ -418,15 +405,15 @@ This removes the native host registration and launcher, **keeps the config**, an
 | `tool is unsupported` | That tool does not exist in this runtime. Compare against the tool list your agent has. |
 | `native-host.exe` in use during install | Disable the extension, let the old host exit, then install. Do **not** kill every `node.exe`. |
 
-### 8.2 Order of investigation
+### 7.2 Order of investigation
 
 1. `chrome://extensions` — enabled? any error?
 2. `debug.html` (or the toolbar icon) — connection state and recent events;
-3. is anything listening on the port (5.1);
-4. `node scripts/call-tool.mjs ...` (5.2) to separate a link problem from an MCP config problem;
+3. is anything listening on the port (4.1);
+4. `node scripts/call-tool.mjs ...` (4.2) to separate a link problem from an MCP config problem;
 5. the extension's **Service Worker inspector** for native messaging errors.
 
-### 8.3 The three most common mistakes
+### 7.3 The three most common mistakes
 
 1. **Editing `manifest.json` and only refreshing the page** — reload the extension instead.
 2. **Using a stale extension ID** — the host's `allowed_origins` will not match and Chrome refuses the connection.
@@ -434,7 +421,7 @@ This removes the native host registration and launcher, **keeps the config**, an
 
 Redact the token and any sensitive page data before sharing logs.
 
-## 9. Safety boundaries
+## 8. Safety boundaries
 
 AgentSurf acts on your logged-in pages, and file upload is powerful. Encode these rules in your agent's instructions:
 
@@ -446,7 +433,7 @@ AgentSurf acts on your logged-in pages, and file upload is powerful. Encode thes
 
 These are **instructions for the agent**, not an enforced approval layer. The caller still owns the authorization boundary.
 
-## 10. Current limitations
+## 9. Current limitations
 
 - **No OCR**: text inside images needs screenshots plus the model's own vision.
 - **No Shadow DOM support**: open shadow roots contribute text to page content, but their elements do not appear in `get_interactives`.
@@ -461,7 +448,7 @@ These are **instructions for the agent**, not an enforced approval layer. The ca
 
 The full capability range, verification status, and known boundaries are in the [browser runtime report](docs/browser-tooling-report.md).
 
-## 11. Further reference
+## 10. Further reference
 
 Developer-focused reference material now lives in a separate file: [docs/reference.en.md](docs/reference.en.md).
 
@@ -474,6 +461,6 @@ Developer-focused reference material now lives in a separate file: [docs/referen
 | [Contributing](CONTRIBUTING.md) | Development setup, required checks, and pull request expectations |
 | [Changelog](CHANGELOG.md) | Release history and notable changes |
 
-## 12. License
+## 11. License
 
 AgentSurf is licensed under the [Apache License 2.0](LICENSE), including the patent grant in Section 3.
