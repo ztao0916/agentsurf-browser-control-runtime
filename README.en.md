@@ -30,6 +30,14 @@ The wizard installs dependencies, builds the extension, asks you to load `dist/`
 
 For manual installation or step-by-step troubleshooting, see [section 4](#4-installation).
 
+## Why this exists
+
+The reason is practical: browser control in recent Codex versions kept failing for me. Rather than wait for a fix, I wrote a more reliable path myself.
+
+The design bet is simple: instead of having an agent open a fresh browser and move your logins into it, let it use the Chrome you already have. Logins, tabs, and extensions are all in place, so there is one less setup step — and one less class of errors.
+
+So AgentSurf is not trying to be a feature-complete browser automation framework. The goal is to make "an agent controlling a browser" dependable: the chain can be verified, failures can be located, and the context in your Chrome is reused directly. The same idea is not limited to Codex — any MCP-capable agent can use this path.
+
 ## Usage experience
 
 These are my own hands-on notes, for reference:
