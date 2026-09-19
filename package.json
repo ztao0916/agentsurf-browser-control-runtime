@@ -2,6 +2,7 @@
   "name": "@agentsurf/mcp-server",
   "version": "0.1.0",
   "description": "Local MCP server and Chrome browser control runtime for AI agents.",
+  "license": "Apache-2.0",
   "keywords": ["mcp", "browser-automation", "chrome", "agentsurf"],
   "bin": {
     "agentsurf-mcp": "./dist/mcp/cli.js"
@@ -14,6 +15,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/generate-icons.mjs && node scripts/build.mjs",
+    "setup": "node scripts/setup.mjs",
     "bridge": "node dist/bridge/server.js",
     "bridge:dev": "npm run build && node dist/bridge/server.js",
     "bridge:call": "node scripts/call-tool.mjs",

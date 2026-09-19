@@ -4,21 +4,25 @@
 
 AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器运行时。它复用你当前 Chrome 的登录态，把页面观察、点击、输入、截图、iframe、Console/Network 观测等能力统一成 `browser.*` 工具，通过本地 MCP Server 暴露给任意支持 MCP 的 Agent。它不内置模型调用、任务规划，也不绑定特定 AI 产品。
 
+![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
+
 > 本项目**不通过 Chrome 应用商店分发**，也没有发布公开 npm 包。接入方式是从源码构建、以「未打包扩展」加载到 Chrome，再在本机注册 Native Host。
 >
-> 第一次接入大约 10 分钟。下面的步骤不假设你会写代码：每一步都写了**在哪个窗口执行**、**会看到什么**、**失败了去哪查**。
+> Windows 与 macOS 均已真机验证；Linux 暂未提供安装脚本。首次接入通常 5–10 分钟，步骤会写清**在哪个窗口执行**、**会看到什么**、**失败了去哪查**。
 
 ## 快速开始
 
-三步，详细步骤见[第 4 节](#4-安装)：
+推荐直接用向导完成依赖安装、构建和 Native Host 注册：
 
-1. **构建**：`npm install && npm run build`
-2. **装扩展**：打开 `chrome://extensions` → 打开「开发者模式」→ 点「加载已解压的扩展程序」→ 选项目里的 `dist` 目录
-3. **注册并接线**：
-   - Windows（PowerShell）：`npm run native-host:install -- -ExtensionId <扩展ID>`
-   - macOS（终端）：`npm run native-host:install:macos -- "<扩展ID>"`
+```bash
+git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+cd agentsurf-browser-control-runtime
+npm run setup
+```
 
-   然后把终端打印出来的 MCP 配置 JSON 粘到 Agent 的配置文件里，重启 Agent。
+向导会依次安装依赖、构建扩展，提示你把 `dist/` 加载到 `chrome://extensions`，输入扩展 ID 后注册 Native Host，并打印可直接粘贴的 MCP 配置 JSON；交互式终端还会可选运行 smoke test。
+
+需要逐步排查或手动安装时，见[第 4 节](#4-安装)。
 
 ## 目录
 
@@ -33,6 +37,7 @@ AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器
 - [9. 安全边界](#9-安全边界)
 - [10. 当前限制](#10-当前限制)
 - [11. 深入参考](#11-深入参考)
+- [12. 许可证](#12-许可证)
 
 ## 1. 它是什么
 
@@ -116,7 +121,7 @@ Windows 和 macOS 都在这一节。先看 4.1 的差异对照表，之后每一
 
 一句话：**扩展、协议、MCP 配置格式两个平台完全一样，差别只在「命令怎么写」和「文件放在哪」。**
 
-> ⚠️ macOS 安装脚本已随仓库提供，但**尚未在真实 Mac 上完整验证链路**；Windows 路径已在真机验证。
+> ✅ Windows 与 macOS 路径均已在真机验证完整链路；Linux 暂未提供安装脚本。
 
 ### 4.2 前置环境
 
@@ -130,6 +135,8 @@ Windows 和 macOS 都在这一节。先看 4.1 的差异对照表，之后每一
 装完 Node 或 Git 后**要重新打开命令行窗口**，否则还是提示找不到命令。
 
 ### 4.3 下载并构建
+
+> 也可以直接在项目目录运行 `npm run setup`：它会执行下面的安装、构建，并继续引导扩展 ID 输入与 Native Host 注册。下面保留手动步骤，方便排障。
 
 **Windows（PowerShell）**
 
@@ -590,7 +597,7 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 - **Console 跨导航丢失**：缓冲在页面内，刷新/跳转后清空；且只能看到采集器在场之后的输出；
 - **会话隔离是协作式的**：必须每次调用都带 `session_id` 才生效；
 - **文件上传/下载限制**：上传需本机绝对路径；下载只能拿到 Chrome Downloads API 提供的元数据，且无法可靠关联来源标签页；
-- **平台覆盖**：Windows 已实测；**macOS 脚本已提供但未在真机验证**；Linux 未提供安装脚本；
+- **平台覆盖**：Windows 与 macOS 均已真机验证；Linux 未提供安装脚本；
 - 单元测试覆盖协议与调度逻辑，真机链路（注入、截图、CDP、iframe）依赖手工验证，见 `docs/`。
 
 ## 11. 深入参考
@@ -604,3 +611,7 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 | [3. 开发与调试](docs/reference.md#3-开发与调试) | 构建 / lint / 测试命令、扩展状态页、独立 Bridge |
 | [4. 外部调用协议](docs/reference.md#4-外部调用协议) | 不用 MCP，自己写客户端直连本地 Bridge |
 | [5. 实现细节](docs/reference.md#5-实现细节) | 目录结构、page revision 与 `element_id`、frame 路由、截图与文件传输 |
+
+## 12. 许可证
+
+本项目采用 [Apache License 2.0](LICENSE)，包含第 3 节专利授权。
