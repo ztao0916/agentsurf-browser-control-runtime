@@ -12,9 +12,9 @@ AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrom
 
 ![AgentSurf animated demo: an agent operating the user's signed-in Chrome through a local runtime](docs/assets/agentsurf-demo.svg)
 
-> This project is **not distributed through the Chrome Web Store** and publishes no public npm package. The supported path is: build from source, load the extension as an unpacked extension, and register the native host locally.
+> How to install: build from source, load the extension as an unpacked extension in Chrome, then register the native host locally.
 >
-> The full chain has been verified on both Windows and macOS; there is no Linux installer yet. First setup usually takes 5–10 minutes, and the steps say **which window to use**, **what you should see**, and **where to look when it fails**.
+> Verified on both Windows and macOS. First setup usually takes 5–10 minutes — hand this section to your AI agent and let it walk you through it.
 
 ## Quick start
 

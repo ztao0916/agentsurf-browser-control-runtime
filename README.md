@@ -12,9 +12,9 @@ AgentSurf 是一个让 AI Agent 控制**你自己的本机 Chrome** 的浏览器
 
 ![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
 
-> 本项目**不通过 Chrome 应用商店分发**，也没有发布公开 npm 包。接入方式是从源码构建、以「未打包扩展」加载到 Chrome，再在本机注册 Native Host。
+> 接入方式：从源码构建，以「未打包扩展」加载到 Chrome，再在本机注册 Native Host。
 >
-> Windows 与 macOS 均已真机验证；Linux 暂未提供安装脚本。首次接入通常 5–10 分钟，步骤会写清**在哪个窗口执行**、**会看到什么**、**失败了去哪查**。
+> Windows 与 macOS 均已真机验证；首次接入通常 5–10 分钟，把这段说明交给 AI，让它带你一步步接入即可。
 
 ## 快速开始
 
