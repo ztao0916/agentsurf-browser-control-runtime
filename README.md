@@ -69,11 +69,12 @@ Pending   0
 
 把安装脚本终端打印的那段 JSON 整段粘到 Agent 的 MCP 配置文件里。以 pi 的 `~/.pi/agent/mcp.json` 为例（`command` 用脚本打印的那个路径）：
 
-```json
+```jsonc
 {
   "mcpServers": {
     "agentsurf": {
-      "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+      "command": "安装脚本打印的启动器的绝对路径"
+      // 例如："command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
     }
   }
 }
