@@ -1,5 +1,9 @@
 # AgentSurf
 
+[![CI](https://github.com/ztao0916/agentsurf-browser-control-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/ztao0916/agentsurf-browser-control-runtime/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/ztao0916/agentsurf-browser-control-runtime?label=License)](LICENSE)
+[![Open Source](https://img.shields.io/badge/Open%20Source-Yes-2ea44f)](https://opensource.org/license/apache-2-0)
+
 [中文](README.md) ｜ **English**
 
 AgentSurf is a local Chrome control runtime for AI agents. It drives **the Chrome you already use**, so it keeps your existing logins, and exposes page reading, clicking, typing, screenshots, iframes, and console/network inspection as a uniform set of `browser.*` tools through a local MCP server. It ships no model calls, no task planning, and no vendor lock-in.
