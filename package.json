@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Local MCP server and Chrome browser control runtime for AI agents.",
   "license": "Apache-2.0",
+  "author": "ztao",
+  "repository": "https://github.com/ztao0916/agentsurf-browser-control-runtime",
+  "bugs": "https://github.com/ztao0916/agentsurf-browser-control-runtime/issues",
   "keywords": ["mcp", "browser-automation", "chrome", "agentsurf"],
   "bin": {
     "agentsurf-mcp": "./dist/mcp/cli.js"
@@ -13,6 +16,7 @@
   },
   "prepublishOnly": "npm run build",
   "type": "module",
+  "engines": { "node": ">=20" },
   "scripts": {
     "build": "node scripts/generate-icons.mjs && node scripts/build.mjs",
     "setup": "node scripts/setup.mjs",
