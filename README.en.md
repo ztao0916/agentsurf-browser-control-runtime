@@ -24,7 +24,6 @@ Verified on both Windows and macOS. Nothing here needs administrator rights, and
 | --- | --- |
 | Node.js | 20+, `node -v` |
 | npm | 10+, `npm -v` |
-| Git | `git --version` |
 | Chrome | 116+, open `chrome://version` in the address bar |
 
 ### Install and register

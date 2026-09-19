@@ -24,7 +24,6 @@ Windows 与 macOS 均已真机验证。全程不需要管理员权限，也不�
 | --- | --- |
 | Node.js | 20+，`node -v` |
 | npm | 10+，`npm -v` |
-| Git | `git --version` |
 | Chrome | 116+，地址栏打开 `chrome://version` |
 
 ### 安装并注册
