@@ -16,6 +16,12 @@ It reuses your existing sessions and tabs and supports common browser actions su
 
 > Tested with Codex, Command Code agent, and pi agent; all connected and worked correctly. Windows and macOS have both been tested on real machines, and first-time setup usually takes 5–10 minutes.
 
+## Tested use cases
+
+- **Pinterest**: Upload an image and fill in Pin details in your signed-in account, then stop for confirmation before publishing.
+- **ZenTao**: Read tasks you have access to and summarize pending work, owners, and priorities; ask before making changes.
+- **Google Trends**: Switch between terms, regions, and date ranges, then summarize notable changes from the page.
+
 ## Quick start
 
 Give this README to an agent that can operate your computer and let it guide you through setup, or follow the steps below manually.

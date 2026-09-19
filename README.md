@@ -16,6 +16,12 @@ AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome。可�
 
 > 已在 Codex、Command Code agent 和 pi agent 实测，均可正常接入和操作。Windows 与 macOS 均已真机验证；首次接入通常需要 5–10 分钟。
 
+## 实测场景
+
+- **Pinterest**：在已登录的 Pinterest 中上传图片、填写 Pin 信息，并在发布前停下来等待确认。
+- **禅道**：读取你有权限访问的任务，汇总待办、负责人和优先级；修改任务前仍需确认。
+- **Google Trends**：切换关键词、地区和日期范围，读取趋势页面并整理关键变化。
+
 ## 快速开始
 
 把本 README 交给能操作电脑的 Agent，让它带你完成安装；也可以按下面的步骤手动操作。
