@@ -112,10 +112,9 @@ All three clients connected and called the tools reliably, and the overall exper
 - [1. What it is](#1-what-it-is)
 - [2. How it works](#2-how-it-works)
 - [3. MCP server integration](#3-mcp-server-integration)
-- [4. Verifying the setup](#4-verifying-the-setup)
-- [5. Driving it from an agent](#5-driving-it-from-an-agent)
-- [6. Safety boundaries](#6-safety-boundaries)
-- [7. License](#7-license)
+- [4. Driving it from an agent](#4-driving-it-from-an-agent)
+- [5. Safety boundaries](#5-safety-boundaries)
+- [6. License](#6-license)
 
 ## 1. What it is
 
@@ -170,54 +169,9 @@ The agent carries no protocol burden: the MCP server exposes every tool and its 
 
 > The extension and native host in [Quick start](#quick-start) must be installed first; that is the foundation for everything else.
 
-## 4. Verifying the setup
+## 4. Driving it from an agent
 
-Verify from the inside out; this is what makes failures easy to localize.
-
-### 4.1 Is the bridge listening?
-
-```powershell
-# Windows
-Get-NetTCPConnection -LocalPort 8765 -State Listen |
-  Select-Object LocalAddress, LocalPort, OwningProcess
-```
-
-```sh
-# macOS
-lsof -nP -iTCP:8765 -sTCP:LISTEN
-```
-
-A listener means the bridge is up (the extension successfully spawned the host).
-
-### 4.2 Does the whole link work without the MCP client?
-
-The repo ships a script that acts as a minimal external agent:
-
-```powershell
-node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
-```
-
-> Single quotes work in both PowerShell and bash/zsh. Keep the JSON free of spaces, or PowerShell will split the argument.
-
-Getting your real tab list back (`ok: true`) proves the whole path
-**bridge → native host → extension → Chrome APIs**.
-
-> This step carries no session, so the list only shows unclaimed tabs: anything another conversation holds is hidden and counted in `other_session_tabs`; add `include_all: true` to see everything. That is only the visible scope — the link check itself is unaffected.
-
-This step is the dividing line for troubleshooting:
-
-| Result | Conclusion |
-| --- | --- |
-| Fails here | link problem |
-| Works here, fails in MCP | MCP config problem (paths, Node, client not restarted) |
-
-### 4.3 End-to-end smoke test
-
-In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on a normal page, then `browser_screenshot`. Screenshots go through CDP, so the tab shows a "Chrome is being debugged" banner; reloading that tab removes it.
-
-## 5. Driving it from an agent
-
-### 5.1 Read-only pass first
+### 4.1 Read-only pass first
 
 ```text
 1. browser_list_tabs                                  # see what exists before touching anything
@@ -228,7 +182,7 @@ In the agent, in order: `browser_list_tabs`, then `browser_get_page_content` on 
 
 `browser_get_page` returns **metadata, not article text**. To open a URL use `browser_open`; there is **no** `browser_navigate`.
 
-### 5.2 Element actions (the `element_id` model)
+### 4.2 Element actions (the `element_id` model)
 
 ```text
 1. browser_get_interactives {"tab_id":...}            # snapshot
@@ -252,7 +206,7 @@ Rules:
 {"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
 ```
 
-### 5.3 iframes (important)
+### 4.3 iframes (important)
 
 Many admin systems (ZenTao, legacy consoles, embedded payment pages) render the real content **inside an iframe**, with the outer document being just navigation chrome. Without a frame target you will only see that chrome.
 
@@ -274,7 +228,7 @@ Rules and behaviours:
 - `about:blank` / `srcdoc` frames are supported (that is how app shells work), which is why the content scripts run in `all_frames` with `match_about_blank`.
 - Cross-origin frames can be listed and their URL reported, but their content cannot be driven.
 
-### 5.4 Observability
+### 4.4 Observability
 
 ```text
 browser_get_console_messages {"tab_id": 123}                 # console output, exceptions, rejections
@@ -284,7 +238,7 @@ browser_observe {"tab_id": 123}                              # state + interacti
 
 Console collection runs in the page's MAIN world so it sees the page's own output. It is installed **only on tabs a session has claimed, and re-injected after every navigation**: a page the agent never touched keeps its own `console` untouched. `available: false` means **the collector was not present — an empty list is not proof of silence**.
 
-### 5.5 Parallel conversations (isolated by default)
+### 4.5 Parallel conversations (isolated by default)
 
 Each conversation's MCP server process owns a session, so **the agent does not have to create one or pass `session_id`**:
 
@@ -307,7 +261,7 @@ Caveats:
 - **after a reload or restart**: reloading the extension or restarting Chrome clears the leases (a Chrome behaviour), so on startup the runtime also ungroups any group whose owner no longer holds a lease, leaving no orphaned groups behind; tabs with a live lease are left alone;
 - **manual escape hatch**: `browser_reset_sessions` releases this conversation's own session and any lease whose owner is gone — which is what recovers tabs stuck on a vanished conversation. Other conversations are untouched, and `other_sessions_kept` reports how many were left alone; pass `force: true` only when you really mean to release every session and ungroup their tabs, and note that **`force` only ungroups — it never closes tabs**, because that would destroy work another conversation is still doing.
 
-## 6. Safety boundaries
+## 5. Safety boundaries
 
 AgentSurf acts on your logged-in pages, and file upload is powerful. Encode these rules in your agent's instructions:
 
@@ -319,6 +273,6 @@ AgentSurf acts on your logged-in pages, and file upload is powerful. Encode thes
 
 These are **instructions for the agent**, not an enforced approval layer. The caller still owns the authorization boundary.
 
-## 7. License
+## 6. License
 
 AgentSurf is licensed under the [Apache License 2.0](LICENSE), including the patent grant in Section 3.

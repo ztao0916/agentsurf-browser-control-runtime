@@ -112,10 +112,9 @@ Pending   0
 - [1. 它是什么](#1-它是什么)
 - [2. 工作原理](#2-工作原理)
 - [3. 接入方式（MCP Server）](#3-接入方式mcp-server)
-- [4. 验证接入是否成功](#4-验证接入是否成功)
-- [5. 在 Agent 里怎么用](#5-在-agent-里怎么用)
-- [6. 安全边界](#6-安全边界)
-- [7. 许可证](#7-许可证)
+- [4. 在 Agent 里怎么用](#4-在-agent-里怎么用)
+- [5. 安全边界](#5-安全边界)
+- [6. 许可证](#6-许可证)
 
 ## 1. 它是什么
 
@@ -170,58 +169,9 @@ Agent 侧零协议负担：工具与参数由 MCP 自动暴露，你只需要在
 
 > 接入前需要先完成[快速开始](#快速开始)中的扩展与 Native Host 安装，那是所有能力的地基。
 
-## 4. 验证接入是否成功
+## 4. 在 Agent 里怎么用
 
-按“从里到外”的顺序验证，出问题时最容易定位。
-
-### 4.1 Bridge 是否在监听
-
-```powershell
-# Windows
-Get-NetTCPConnection -LocalPort 8765 -State Listen |
-  Select-Object LocalAddress, LocalPort, OwningProcess
-```
-
-```sh
-# macOS
-lsof -nP -iTCP:8765 -sTCP:LISTEN
-```
-
-有监听 = Bridge 已启动（Chrome 扩展成功拉起了 Host）。
-
-### 4.2 全链路是否通（不经过 MCP 客户端）
-
-仓库自带一个模拟外部 Agent 的脚本，直接连 Bridge 发一个请求：
-
-```powershell
-node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":"browser.list_tabs","args":{}}'
-```
-
-> PowerShell 与 bash / zsh 都直接用单引号包住整段 JSON。JSON 里不要放空格，否则 PowerShell 会把参数拆开。
-
-返回你当前 Chrome 的标签页列表（`ok: true`）就说明：
-**Bridge → Native Host → 扩展 → Chrome API** 全链路打通。
-
-> 这一步不带会话，所以列表里只会有“未归属”的页签：被别的对话占用的会少显示，并以 `other_session_tabs` 告诉你数量；加 `include_all: true` 可以看全部。这只是可见范围，链路验证不受影响。
-
-这一步与 MCP 客户端无关，是排查“到底是链路问题还是 MCP 配置问题”的分水岭：
-
-| 现象 | 结论 |
-| --- | --- |
-| 这里失败 | 链路问题 |
-| 这里成功、MCP 里失败 | MCP 配置问题（路径、Node、是否重启客户端） |
-
-### 4.3 端到端冒烟
-
-在 Agent 里依次让它做：
-
-1. `browser_list_tabs` —— 能列出标签页；
-2. `browser_get_page_content`（带某个普通网页的 `tab_id`）—— 能读到正文；
-3. `browser_screenshot` —— 能拿到图片（截图依赖 CDP，会附加调试器，页面上出现“Chrome 正在被调试”横幅；重新加载该页签即可去掉）。
-
-## 5. 在 Agent 里怎么用
-
-### 5.1 只读流程（推荐先跑一遍）
+### 4.1 只读流程（推荐先跑一遍）
 
 ```text
 1. browser_list_tabs                      # 先看清有哪些标签页，避免动到用户正在用的页面
@@ -234,7 +184,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 
 注意：**`browser_get_page` 只返回页面元信息，不是正文抓取工具**；打开网址用 `browser_open`（**没有** `browser_navigate`）。
 
-### 5.2 元素操作流程（element_id 模式）
+### 4.2 元素操作流程（element_id 模式）
 
 ```text
 1. browser_get_interactives {"tab_id":...}     # 拿到元素快照
@@ -259,7 +209,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 {"tab_id": 123, "element_id": "el_...", "selection_type": "cursor_after"}
 ```
 
-### 5.3 iframe / 子框架（重要）
+### 4.3 iframe / 子框架（重要）
 
 很多后台系统（禅道、旧版管理台、嵌入式支付页）把**真正的正文放在 iframe 里**，外层只是一个导航外壳。此时：
 
@@ -284,7 +234,7 @@ node scripts/call-tool.mjs '{"protocol_version":"1","request_id":"smoke","tool":
 - 支持的框架包括 `about:blank` / `srcdoc` 这类**无 src 的同源框架**——外壳型系统几乎都是这种；
 - 跨域框架：能列出、能报告 URL，但通常无法注入 Page Agent 操作其内容。
 
-### 5.4 观测与排错
+### 4.4 观测与排错
 
 ```text
 browser_get_console_messages {"tab_id": 123}          # console.log/error、未捕获异常、未处理 rejection
@@ -294,7 +244,7 @@ browser_observe {"tab_id": 123}                       # 一次拿 状态+交互�
 
 Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**采集器只在 agent 认领的 tab 上安装，并在每次导航后重新注入**：没被 agent 操作过的页面完全不碰它的 `console`。查询结果里 **`available: false` 表示当时采集器不在场，不能当成「页面没有报错」**。
 
-### 5.5 多对话并行（默认自动隔离）
+### 4.5 多对话并行（默认自动隔离）
 
 每个对话的 MCP Server 进程会自带一个会话，**Agent 不需要手动开会话，也不需要每次传 `session_id`**：
 
@@ -317,7 +267,7 @@ Console 采集运行在页面 MAIN world，能捕获页面自身的输出。**�
 - **重载/重启后的收尾**：重新加载扩展或重启 Chrome 会清空租约（Chrome 行为），此时运行时会在启动时把“会话还在、租约已无”的漏网分组一并解除，不会留下无主的分组；有租约（正在干活）的页签不动；
 - **手动兜底**：`browser.reset_sessions` 默认只释放**本对话自己的**会话与租约，并顺带清掉“拥有者已不存在”的租约（正是页签被消失的对话卡住的情形）；它**不会**动别的对话，返回值里的 `other_sessions_kept` 会告诉你还有几个会话没动。确实需要清全局（会释放并解除所有人的分组）时才传 `force: true`——**`force` 只解除分组、绝不关页签**，因为那会毁掉别的对话正在做的事。
 
-## 6. 安全边界
+## 5. 安全边界
 
 AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建议在 Agent 的使用规则里写死：
 
@@ -329,6 +279,6 @@ AgentSurf 能操作你登录态下的页面，文件上传等能力很强。建�
 
 以上是**给 Agent 的使用约束**，不代表运行时已实现人工审批；调用方仍需自己管理授权边界。
 
-## 7. 许可证
+## 6. 许可证
 
 本项目采用 [Apache License 2.0](LICENSE)，包含第 3 节专利授权。
