@@ -118,7 +118,7 @@ Open https://example.com and tell me the page title.
 
 If it can open the page and return the title, AgentSurf is working. You can then ask it to read, click, type, take screenshots, or perform other browser actions.
 
-> Seeing “Chrome is being debugged” or “AgentSurf started debugging this browser” is expected during screenshots. Reload the tab after you finish to remove it.
+> Seeing “Chrome is being debugged” or “AgentSurf started debugging this browser” is expected during screenshots.
 
 > For your first run, use an ordinary page. Start in read-only mode, review and approve actions such as submitting, saving, deleting, publishing, uploading, or sending, and never send passwords, verification codes, cookies, or tokens to an agent.
 
