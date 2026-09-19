@@ -52,19 +52,45 @@ npm run setup
 3. 复制 AgentSurf 卡片上显示的扩展 ID，粘贴回终端；
 4. 保存终端最后打印的 MCP 配置 JSON。
 
+![在 Chrome 扩展卡片上获取 AgentSurf 扩展 ID](docs/assets/agentsurf-extension-id.png)
+
+> 图中 **ID** 就是安装向导需要填写的 AgentSurf 扩展 ID。
+
 ### 3. 检查扩展连接
 
 1. 回到 `chrome://extensions`，点 AgentSurf 卡片上的 **重新加载**；
 2. 点击 Chrome 工具栏里的 AgentSurf 图标；
 3. 看到 `● connected` 就表示扩展已连接。
 
+![npm run setup 成功后 AgentSurf 扩展显示 connected](docs/assets/agentsurf-extension-connected.png)
+
 如果没有连接：点一次 **Disconnect**，等 1 秒，再点 **Connect**。
 
 ### 4. 接入你的 Agent（MCP 配置）
 
-把安装脚本最后打印的 JSON 整段复制到 Agent 的 MCP 配置里，然后重启 Agent。不同客户端的配置文件位置不同；不知道怎么改时，可以直接把安装脚本输出交给 Agent，让它帮你配置。
+安装脚本最后会打印一段 MCP 配置，核心是启动器的绝对路径。选择下面任意一种方式接入：
 
-下面只是配置结构示例，实际使用时以安装脚本打印的内容为准：
+**方式 A：通过 [CC Switch](https://github.com/farion1231/cc-switch)**
+
+1. 打开 CC Switch，点击顶部的 **MCP**；
+2. 点击右上角 **+**，选择 **自定义**；
+3. 服务器 ID 填 `agentsurf`，传输类型选 `stdio`，把安装脚本打印的 `command` 路径填入 **命令**；
+4. 保存后，打开对应 Agent 的同步开关（如 Claude、Codex、Gemini）；
+5. 重启对应 Agent。
+
+> 如果 CC Switch 的同步列表里没有你正在用的 Agent，使用方式 B。
+
+**方式 B：交给 AI Agent 自动配置**
+
+把安装脚本的完整输出发给正在使用的 Agent，然后直接说：
+
+```text
+请把这段 MCP 配置加入你当前使用的 Agent，名称用 agentsurf，完成后告诉我如何重启和验证。
+```
+
+完成后重启 Agent。
+
+也可以手动配置，结构如下：
 
 ```json
 {
@@ -83,6 +109,18 @@ macOS 示例（把 `XXX` 替换为你的用户名）：
   "mcpServers": {
     "agentsurf": {
       "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+    }
+  }
+}
+```
+
+Windows 示例（把 `XXX` 替换为你的用户名）：
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "C:/Users/XXX/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
     }
   }
 }

@@ -52,19 +52,45 @@ The setup wizard installs dependencies, builds the project, registers the native
 3. Copy the extension ID shown on the AgentSurf card and paste it back into the terminal;
 4. Save the MCP config JSON printed by the setup wizard.
 
+![Getting the AgentSurf extension ID from its Chrome extension card](docs/assets/agentsurf-extension-id.png)
+
+> The **ID** shown in the extension card is the AgentSurf extension ID requested by the setup wizard.
+
 ### 3. Check the extension connection
 
 1. Return to `chrome://extensions` and click **Reload** on the AgentSurf card;
 2. Click the AgentSurf icon in Chrome's toolbar;
 3. Seeing `● connected` means the extension is connected.
 
+![AgentSurf extension showing connected after a successful npm run setup](docs/assets/agentsurf-extension-connected.png)
+
 If it is not connected: click **Disconnect** once, wait one second, then click **Connect**.
 
 ### 4. Connect your agent (MCP config)
 
-Copy the complete JSON printed by the installer into your agent's MCP config, then restart the agent. The config file location differs by client; if you are unsure, give the installer output to your agent and ask it to configure the client for you.
+The installer prints an MCP config block whose key value is the absolute launcher path. Choose either option:
 
-The block below is only a structure example. Always use the JSON printed by the installer:
+**Option A: Add it through [CC Switch](https://github.com/farion1231/cc-switch)**
+
+1. Open CC Switch and click **MCP** in the top navigation;
+2. Click **+** and choose **Custom**;
+3. Set the server ID to `agentsurf`, choose `stdio`, and enter the `command` path printed by the installer;
+4. Save it, then enable sync for the target agent (for example, Claude, Codex, or Gemini);
+5. Restart that agent.
+
+> If your agent is not one of CC Switch's synced apps, use Option B.
+
+**Option B: Ask your AI agent to configure it**
+
+Give the complete installer output to the agent you are using, then say:
+
+```text
+Add this MCP configuration to the agent I am currently using, name it agentsurf, and tell me how to restart and verify it.
+```
+
+Restart the agent afterwards.
+
+You can also configure it manually. The structure is:
 
 ```json
 {
@@ -83,6 +109,18 @@ macOS example (replace `XXX` with your username):
   "mcpServers": {
     "agentsurf": {
       "command": "/Users/XXX/Library/Application Support/BrowserControlRuntime/agentsurf-mcp.sh"
+    }
+  }
+}
+```
+
+Windows example (replace `XXX` with your username):
+
+```json
+{
+  "mcpServers": {
+    "agentsurf": {
+      "command": "C:/Users/XXX/AppData/Local/BrowserControlRuntime/agentsurf-mcp.exe"
     }
   }
 }
