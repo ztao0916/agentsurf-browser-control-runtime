@@ -125,6 +125,27 @@ npm run setup -- --browser all
 }
 ```
 
+## 同时使用多个浏览器
+
+浏览器由 MCP Server 名称选择，不是在 `browser.*` 工具参数里填写浏览器名称。
+
+- 旧的 `agentsurf` 和显式的 `agentsurf-chrome` 都操作 Chrome；
+- `agentsurf-edge` 操作 Edge；
+- 两个浏览器拥有独立的标签页、页面 revision 和会话，不要把 Chrome 的 `tab_id` 或 `element_id` 传给 Edge；
+- `browser.reset_sessions` 也只清理当前 MCP Server 对应的浏览器。
+
+在支持选择 MCP Server 的 Agent 中，可以直接用自然语言指定目标：
+
+```text
+用 agentsurf 打开 https://example.com，并告诉我 Chrome 中的页面标题。
+```
+
+```text
+用 agentsurf-edge 打开 https://example.com，并告诉我 Edge 中的页面标题。
+```
+
+如果 Agent 会把工具名前缀写成 Server 名称，则分别选择 `agentsurf` / `agentsurf-chrome` 和 `agentsurf-edge` 下的 `browser_list_tabs`、`browser_open` 等工具。不要连续把同一组标签页操作切换给不同 Server；每个 Server 只会看到自己浏览器中的标签页。
+
 ## 使用与检查
 
 在对话里直接对 Agent 说：

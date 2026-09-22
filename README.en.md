@@ -125,6 +125,27 @@ Restart the agent afterwards.
 }
 ```
 
+## Using multiple browsers
+
+The MCP server name selects the browser. Browser names are not part of the `browser.*` tool arguments.
+
+- The legacy `agentsurf` and explicit `agentsurf-chrome` servers both control Chrome;
+- `agentsurf-edge` controls Edge;
+- Each browser has its own tabs, page revisions, and sessions. Do not pass a Chrome `tab_id` or `element_id` to Edge;
+- `browser.reset_sessions` only cleans up the browser selected by that MCP server.
+
+With an agent that can choose an MCP server, state the target directly:
+
+```text
+Use agentsurf to open https://example.com and tell me the page title in Chrome.
+```
+
+```text
+Use agentsurf-edge to open https://example.com and tell me the page title in Edge.
+```
+
+If the client prefixes tool names with the server name, choose `browser_list_tabs`, `browser_open`, and other tools under `agentsurf` / `agentsurf-chrome` or `agentsurf-edge`. Keep a sequence of tab operations on the same server; each server only sees the tabs in its own browser.
+
 ## Use and verify
 
 In the conversation, tell your agent:
