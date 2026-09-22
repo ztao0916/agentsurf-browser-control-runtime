@@ -1,32 +1,52 @@
 param(
+  [ValidateSet('chrome', 'edge')]
+  [string]$Browser = 'chrome',
+
+  [switch]$MultiBrowser,
+
   [Parameter(Mandatory = $true)]
   [ValidatePattern('^[a-p]{32}$')]
   [string]$ExtensionId,
 
-  [ValidateRange(1, 65535)]
-  [int]$Port = 8765
+  [ValidateRange(0, 65535)]
+  [int]$Port = 0
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'i18n.ps1')
 $text = Get-AgentSurfText
+$legacy = -not $MultiBrowser -and $Browser -eq 'chrome'
+if ($Port -eq 0) {
+  $Port = if ($Browser -eq 'edge') { 8766 } else { 8765 }
+}
+$browserLabel = if ($Browser -eq 'edge') { 'Edge' } else { 'Chrome' }
+$mcpName = if ($legacy) { 'agentsurf' } else { "agentsurf-$Browser" }
 $hostScript = Join-Path $projectRoot 'dist\native-host\host.js'
 if (-not (Test-Path -LiteralPath $hostScript)) {
   throw ($text.NativeHostBuildMissing -f $hostScript)
 }
 
 $nodePath = (Get-Command node -ErrorAction Stop).Source
-$runtimeDirectory = Join-Path $env:LOCALAPPDATA 'BrowserControlRuntime'
+$runtimeRoot = Join-Path $env:LOCALAPPDATA 'BrowserControlRuntime'
+$runtimeDirectory = if ($legacy) { $runtimeRoot } else { Join-Path $runtimeRoot $Browser }
 $configPath = Join-Path $runtimeDirectory 'config.json'
+$legacyConfigPath = if ($legacy) { $null } else { Join-Path $runtimeRoot 'config.json' }
 $launcherPath = Join-Path $runtimeDirectory 'native-host.exe'
-$legacyLauncherPath = Join-Path $runtimeDirectory 'native-host.cmd'
+$legacyLauncherPath = if ($legacy) { Join-Path $runtimeRoot 'native-host.cmd' } else { $null }
 $manifestPath = Join-Path $runtimeDirectory 'com.browsercontrol.runtime.json'
 New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 
 $token = $null
-if (Test-Path -LiteralPath $configPath) {
-  $existingConfig = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+$existingConfigPath = if (Test-Path -LiteralPath $configPath) {
+  $configPath
+} elseif ($null -ne $legacyConfigPath -and $Browser -eq 'chrome' -and (Test-Path -LiteralPath $legacyConfigPath)) {
+  $legacyConfigPath
+} else {
+  $null
+}
+if ($null -ne $existingConfigPath) {
+  $existingConfig = Get-Content -Raw -LiteralPath $existingConfigPath | ConvertFrom-Json
   if ($existingConfig.token -is [string] -and $existingConfig.token.Length -ge 16) {
     $token = $existingConfig.token
   }
@@ -114,7 +134,7 @@ internal static class NativeHostLauncher
 }
 "@
 
-if (Test-Path -LiteralPath $legacyLauncherPath) {
+if ($null -ne $legacyLauncherPath -and (Test-Path -LiteralPath $legacyLauncherPath)) {
   Remove-Item -LiteralPath $legacyLauncherPath -Force
 }
 try {
@@ -128,7 +148,7 @@ try {
 
 Write-Utf8NoBomJson -Path $manifestPath -Value @{
   name = 'com.browsercontrol.runtime'
-  description = 'AgentSurf native messaging host'
+  description = "AgentSurf native messaging host for $browserLabel"
   path = $launcherPath
   type = 'stdio'
   allowed_origins = @("chrome-extension://$ExtensionId/")
@@ -156,6 +176,7 @@ internal static class McpServerLauncher
 {
     private const string NodePath = "$escapedNodePath";
     private const string McpScript = "$escapedMcpScript";
+    private const string ConfigPath = "$($configPath.Replace('\', '\\').Replace('"', '\"'))";
 
     private static string Quote(string value)
     {
@@ -188,6 +209,7 @@ internal static class McpServerLauncher
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        startInfo.EnvironmentVariables["BROWSER_BRIDGE_CONFIG"] = ConfigPath;
         using (var process = Process.Start(startInfo))
         {
             if (process == null) return 1;
@@ -226,22 +248,26 @@ if ($probeExitCode -ne 0) {
   throw ($text.McpLauncherSelfCheckFailed -f $mcpLauncherPath, $probeExitCode)
 }
 
-$registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime'
+$registryPath = if ($Browser -eq 'edge') {
+  'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.browsercontrol.runtime'
+} else {
+  'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.browsercontrol.runtime'
+}
 New-Item -Path $registryPath -Force | Out-Null
 Set-Item -Path $registryPath -Value $manifestPath
 
-Write-Host ($text.Installed -f $ExtensionId)
+Write-Host ($text.Installed -f $browserLabel, $ExtensionId)
 Write-Host ($text.Manifest -f $manifestPath)
 Write-Host ($text.Config -f $configPath)
 Write-Host ($text.Bridge -f $Port)
-Write-Host $text.Reload
+Write-Host ($text.Reload -f $browserLabel)
 Write-Host ''
-Write-Host $text.McpConfig
+Write-Host ($text.McpConfig -f $browserLabel)
 Write-Host ''
 Write-Host (@"
 {
   "mcpServers": {
-    "agentsurf": {
+    "$mcpName": {
       "command": "$($mcpLauncherPath.Replace('\', '/'))"
     }
   }

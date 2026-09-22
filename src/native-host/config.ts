@@ -8,22 +8,24 @@ export interface NativeHostConfig {
   token: string;
 }
 
-export function getDefaultConfigPath(): string {
+function getRuntimeRoot(): string {
   if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'BrowserControlRuntime', 'config.json');
+    return join(homedir(), 'Library', 'Application Support', 'BrowserControlRuntime');
   }
   const localAppData = process.env.LOCALAPPDATA;
   const base = localAppData && localAppData.length > 0
     ? localAppData
     : join(homedir(), 'AppData', 'Local');
-  return join(base, 'BrowserControlRuntime', 'config.json');
+  return join(base, 'BrowserControlRuntime');
+}
+
+export function getDefaultConfigPath(): string {
+  return join(getRuntimeRoot(), 'config.json');
 }
 
 export async function readConfig(path = process.env.BROWSER_BRIDGE_CONFIG || getDefaultConfigPath()): Promise<NativeHostConfig> {
   try {
-    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
-    if (isNativeHostConfig(parsed)) return parsed;
-    throw new Error(`Native Host config is invalid: ${path}`);
+    return await readConfigFile(path);
   } catch (error: unknown) {
     if (isMissingFile(error)) {
       throw new Error(`AgentSurf is not installed on this machine. Native Host config not found: ${path}`);
@@ -34,9 +36,7 @@ export async function readConfig(path = process.env.BROWSER_BRIDGE_CONFIG || get
 
 export async function loadOrCreateConfig(path = process.env.BROWSER_BRIDGE_CONFIG || getDefaultConfigPath()): Promise<NativeHostConfig> {
   try {
-    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
-    if (isNativeHostConfig(parsed)) return parsed;
-    throw new Error(`Native Host config is invalid: ${path}`);
+    return await readConfigFile(path);
   } catch (error: unknown) {
     if (!isMissingFile(error)) throw error;
     const config: NativeHostConfig = {
@@ -47,6 +47,12 @@ export async function loadOrCreateConfig(path = process.env.BROWSER_BRIDGE_CONFI
     await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     return config;
   }
+}
+
+async function readConfigFile(path: string): Promise<NativeHostConfig> {
+  const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+  if (isNativeHostConfig(parsed)) return parsed;
+  throw new Error(`Native Host config is invalid: ${path}`);
 }
 
 function isNativeHostConfig(value: unknown): value is NativeHostConfig {

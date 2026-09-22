@@ -27,7 +27,7 @@ function printUsage(): void {
   process.stderr.write(
     'Usage:\n'
       + '  agentsurf-mcp\n'
-      + '  agentsurf-mcp install-native-host --extension-id <extension-id> [--port <port>]\n',
+      + '  agentsurf-mcp install-native-host --extension-id <extension-id> [--browser chrome|edge] [--port <port>]\n',
   );
 }
 

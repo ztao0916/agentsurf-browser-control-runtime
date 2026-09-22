@@ -8,9 +8,9 @@
 
 > 本项目已在 [LINUX DO](https://linux.do/) 社区发布。
 
-AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome。可以把它理解为 ChatGPT 浏览器插件的通用版本：不绑定某个模型或客户端，任何支持 MCP 的 Agent 都可以接入。
+AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome 或 Edge。可以把它理解为 ChatGPT 浏览器插件的通用版本：不绑定某个模型或客户端，任何支持 MCP 的 Agent 都可以接入。
 
-它复用你当前的登录态和标签页，支持读取页面、点击、输入、滚动、截图、文件上传和 iframe 等常见操作。你不需要换浏览器，也不需要重新登录。
+它复用你当前的登录态和标签页，支持读取页面、点击、输入、滚动、截图、文件上传和 iframe 等常见操作。你不需要换浏览器，也不需要重新登录。Chrome 和 Edge 可以同时安装，各自使用独立端口和配置。
 
 ![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
 
@@ -32,7 +32,7 @@ AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome。可�
 | --- | --- |
 | Node.js | 20+，终端执行 `node -v` |
 | Git | 终端执行 `git --version` |
-| Chrome | 116+，地址栏打开 `chrome://version` |
+| Chrome 或 Edge | 116+，Chrome 打开 `chrome://version`，Edge 打开 `edge://version` |
 
 > 不需要管理员权限，也不会修改你 Chrome 里已有的登录态和设置。
 
@@ -51,11 +51,25 @@ cd agentsurf-browser-control-runtime
 npm run setup
 ```
 
-向导会自动完成依赖安装、构建和 Native Host 注册，并提示你：
+默认不改变原有行为：只安装 Chrome，继续使用 `agentsurf`、根目录 `config.json` 和原有启动器。同时使用 Chrome 和 Edge 时执行：
 
-1. 打开 `chrome://extensions`，开启开发者模式；
+```bash
+npm run setup -- --browser all
+```
+
+已有的 `agentsurf` 配置不需要删除，仍会连接 Chrome；新增的 `agentsurf-chrome` 和 `agentsurf-edge` 用于显式选择目标浏览器。
+
+| MCP 名称 | 目标 | 使用场景 |
+| --- | --- | --- |
+| `agentsurf` | Chrome | 默认安装和旧配置，保持兼容 |
+| `agentsurf-chrome` | Chrome | 多浏览器模式下的显式 Chrome |
+| `agentsurf-edge` | Edge | 多浏览器模式下的显式 Edge |
+
+向导会自动完成依赖安装、构建和 Native Host 注册，并提示你分别操作要使用的浏览器：
+
+1. 在 Chrome 打开 `chrome://extensions`，在 Edge 打开 `edge://extensions`，开启开发者模式；
 2. 点击“加载已解压的扩展程序”，选择项目里的 `dist/`；
-3. 复制 AgentSurf 卡片上显示的扩展 ID，粘贴回终端；
+3. 复制每个浏览器中 AgentSurf 卡片显示的扩展 ID，粘贴回终端；
 4. 保存终端最后打印的 MCP 配置 JSON。
 
 ![在 Chrome 扩展卡片上获取 AgentSurf 扩展 ID](docs/assets/agentsurf-extension-id.png)
@@ -64,8 +78,8 @@ npm run setup
 
 ### 3. 检查扩展连接
 
-1. 回到 `chrome://extensions`，点 AgentSurf 卡片上的 **重新加载**；
-2. 点击 Chrome 工具栏里的 AgentSurf 图标；
+1. 回到每个浏览器的扩展页面，点 AgentSurf 卡片上的 **重新加载**；
+2. 点击浏览器工具栏里的 AgentSurf 图标；
 3. 看到 `● connected` 就表示扩展已连接。
 
 ![npm run setup 成功后 AgentSurf 扩展显示 connected](docs/assets/agentsurf-extension-connected.png)
@@ -80,7 +94,7 @@ npm run setup
 
 1. 打开 CC Switch，点击顶部的 **MCP**；
 2. 点击右上角 **+**，选择 **自定义**；
-3. 服务器 ID 填 `agentsurf`，传输类型选 `stdio`，把安装脚本打印的 `command` 路径填入 **命令**；
+3. 服务器 ID 填 `agentsurf-chrome` 或 `agentsurf-edge`，传输类型选 `stdio`，把安装脚本打印的对应 `command` 路径填入 **命令**；
 4. 保存后，打开对应 Agent 的同步开关（如 Claude、Codex、Gemini）；
 5. 重启对应 Agent。
 
@@ -91,18 +105,21 @@ npm run setup
 把安装脚本的完整输出发给正在使用的 Agent，然后直接说：
 
 ```text
-请把这段 MCP 配置加入你当前使用的 Agent，名称用 agentsurf，完成后告诉我如何重启和验证。
+请把这段 MCP 配置加入你当前使用的 Agent，名称使用配置中的 key，完成后告诉我如何重启和验证。
 ```
 
 完成后重启 Agent。
 
-`npm run setup` 会在安装结束前打印当前系统对应的 MCP 配置。把完整输出加入你的 Agent 即可，结构如下：
+`npm run setup` 会为本次安装的每个浏览器分别打印 MCP 配置。把完整输出加入你的 Agent 即可。同时安装 Chrome 和 Edge 时，结构如下：
 
 ```json
 {
   "mcpServers": {
-    "agentsurf": {
-      "command": "<npm run setup 打印的启动器绝对路径>"
+    "agentsurf-chrome": {
+      "command": "<Chrome 启动器绝对路径>"
+    },
+    "agentsurf-edge": {
+      "command": "<Edge 启动器绝对路径>"
     }
   }
 }

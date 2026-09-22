@@ -8,9 +8,9 @@
 
 > This project is published in the [LINUX DO](https://linux.do/) community.
 
-AgentSurf lets your AI agent operate the local Chrome browser you are already using. Think of it as a universal version of the ChatGPT browser plugin: it is not tied to one model or client, and any MCP-capable agent can use it.
+AgentSurf lets your AI agent operate the local Chrome or Edge browser you are already using. Think of it as a universal version of the ChatGPT browser plugin: it is not tied to one model or client, and any MCP-capable agent can use it.
 
-It reuses your existing sessions and tabs and supports common browser actions such as reading pages, clicking, typing, scrolling, taking screenshots, uploading files, and working with iframes. You do not need to switch browsers or sign in again.
+It reuses your existing sessions and tabs and supports common browser actions such as reading pages, clicking, typing, scrolling, taking screenshots, uploading files, and working with iframes. You do not need to switch browsers or sign in again. Chrome and Edge can be installed together with separate ports and configuration.
 
 ![AgentSurf demo: an agent controls the user's signed-in Chrome through the local runtime](docs/assets/agentsurf-demo.svg)
 
@@ -32,7 +32,7 @@ Give this README to an agent that can operate your computer and let it guide you
 | --- | --- |
 | Node.js | 20+, run `node -v` |
 | Git | run `git --version` |
-| Chrome | 116+, open `chrome://version` |
+| Chrome or Edge | 116+, open `chrome://version` in Chrome or `edge://version` in Edge |
 
 > Administrator access is not required, and your existing Chrome sessions and settings will not be changed.
 
@@ -51,11 +51,25 @@ cd agentsurf-browser-control-runtime
 npm run setup
 ```
 
-The setup wizard installs dependencies, builds the project, registers the native host, and prompts you to:
+The default keeps the original behavior: Chrome only, using the `agentsurf` MCP entry, the root `config.json`, and the existing launcher. To use Chrome and Edge together:
 
-1. Open `chrome://extensions` and enable Developer mode;
+```bash
+npm run setup -- --browser all
+```
+
+The existing `agentsurf` configuration can stay in place and continues to target Chrome. The new `agentsurf-chrome` and `agentsurf-edge` entries make the browser target explicit.
+
+| MCP name | Target | Use |
+| --- | --- | --- |
+| `agentsurf` | Chrome | Default install and legacy configuration |
+| `agentsurf-chrome` | Chrome | Explicit Chrome target in multi-browser mode |
+| `agentsurf-edge` | Edge | Explicit Edge target in multi-browser mode |
+
+The setup wizard installs dependencies, builds the project, registers the native host, and prompts you for each selected browser:
+
+1. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge and enable Developer mode;
 2. Click “Load unpacked” and select the project's `dist/` directory;
-3. Copy the extension ID shown on the AgentSurf card and paste it back into the terminal;
+3. Copy the AgentSurf extension ID shown in each browser and paste it back into the terminal;
 4. Save the MCP config JSON printed by the setup wizard.
 
 ![Getting the AgentSurf extension ID from its Chrome extension card](docs/assets/agentsurf-extension-id.png)
@@ -64,8 +78,8 @@ The setup wizard installs dependencies, builds the project, registers the native
 
 ### 3. Check the extension connection
 
-1. Return to `chrome://extensions` and click **Reload** on the AgentSurf card;
-2. Click the AgentSurf icon in Chrome's toolbar;
+1. Return to each browser's extensions page and click **Reload** on the AgentSurf card;
+2. Click the AgentSurf icon in the browser toolbar;
 3. Seeing `● connected` means the extension is connected.
 
 ![AgentSurf extension showing connected after a successful npm run setup](docs/assets/agentsurf-extension-connected.png)
@@ -80,7 +94,7 @@ The installer prints an MCP config block whose key value is the absolute launche
 
 1. Open CC Switch and click **MCP** in the top navigation;
 2. Click **+** and choose **Custom**;
-3. Set the server ID to `agentsurf`, choose `stdio`, and enter the `command` path printed by the installer;
+3. Set the server ID to `agentsurf-chrome` or `agentsurf-edge`, choose `stdio`, and enter the matching `command` path printed by the installer;
 4. Save it, then enable sync for the target agent (for example, Claude, Codex, or Gemini);
 5. Restart that agent.
 
@@ -91,18 +105,21 @@ The installer prints an MCP config block whose key value is the absolute launche
 Give the complete installer output to the agent you are using, then say:
 
 ```text
-Add this MCP configuration to the agent I am currently using, name it agentsurf, and tell me how to restart and verify it.
+Add this MCP configuration to the agent I am currently using, use the keys from the configuration, and tell me how to restart and verify it.
 ```
 
 Restart the agent afterwards.
 
-`npm run setup` prints the MCP configuration for your current system before it finishes. Add the complete output to your agent. The structure is:
+`npm run setup` prints a separate MCP configuration for each selected browser. Add the complete output to your agent. With Chrome and Edge, the structure is:
 
 ```json
 {
   "mcpServers": {
-    "agentsurf": {
-      "command": "<absolute path to the launcher printed by npm run setup>"
+    "agentsurf-chrome": {
+      "command": "<absolute Chrome launcher path>"
+    },
+    "agentsurf-edge": {
+      "command": "<absolute Edge launcher path>"
     }
   }
 }

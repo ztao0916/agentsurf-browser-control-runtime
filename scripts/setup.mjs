@@ -9,6 +9,11 @@ import { getMessages } from './i18n.mjs';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { setup: text } = await getMessages();
+const browsers = {
+  legacy: { id: 'legacy', browser: 'chrome', legacy: true, label: 'Chrome', defaultPort: 8765, mcpName: 'agentsurf' },
+  chrome: { id: 'chrome', browser: 'chrome', legacy: false, label: 'Chrome', defaultPort: 8765, mcpName: 'agentsurf-chrome' },
+  edge: { id: 'edge', browser: 'edge', legacy: false, label: 'Edge', defaultPort: 8766, mcpName: 'agentsurf-edge' },
+};
 const options = parseArgs(process.argv.slice(2), text);
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
@@ -23,10 +28,6 @@ if (Number(process.versions.node.split('.')[0]) < 20) {
 if (process.platform !== 'win32' && process.platform !== 'darwin') {
   throw new Error(text.unsupportedPlatform);
 }
-if (options.extensionId !== undefined && !isExtensionId(options.extensionId)) {
-  throw new Error(text.invalidExtensionId);
-}
-
 console.log(text.title);
 console.log('');
 console.log(text.installingDependencies);
@@ -39,22 +40,38 @@ await access(join(projectRoot, 'dist', 'manifest.json'));
 
 console.log('');
 console.log(text.loadingExtension);
-console.log(text.openExtensions);
-console.log(text.enableDeveloperMode);
-console.log(text.loadUnpacked);
-console.log(`     ${join(projectRoot, 'dist')}`);
-console.log(text.copyExtensionId);
+for (const target of selectedTargets(options)) {
+  const extensionsUrl = target.browser === 'edge' ? 'edge://extensions' : 'chrome://extensions';
+  console.log('');
+  console.log(text.browserHeading(target.label));
+  console.log(text.openExtensions(extensionsUrl));
+  console.log(text.enableDeveloperMode);
+  console.log(text.loadUnpacked);
+  console.log(`     ${join(projectRoot, 'dist')}`);
+  console.log(text.copyExtensionId(target.label));
+}
 
 const terminal = process.stdin.isTTY && process.stdout.isTTY
   ? createInterface({ input: process.stdin, output: process.stdout })
   : null;
 
 try {
-  const extensionId = options.extensionId ?? await promptForExtensionId(terminal, text);
+  const installations = [];
+  for (const target of selectedTargets(options)) {
+    const extensionId = options.extensionIds[target.id]
+      ?? await promptForExtensionId(terminal, text, target.label);
+    installations.push({
+      target,
+      extensionId,
+      port: options.ports[target.id] ?? target.defaultPort,
+    });
+  }
 
   console.log('');
   console.log(text.registeringNativeHost);
-  await installNativeHost(extensionId, options.port, text);
+  for (const installation of installations) {
+    await installNativeHost(installation, text);
+  }
 
   console.log('');
   console.log(text.complete);
@@ -64,9 +81,13 @@ try {
 }
 
 function parseArgs(values, text) {
+  let browser = 'chrome';
+  let browserProvided = false;
   let extensionId;
-  let port = 8765;
+  let port;
   let help = false;
+  const extensionIds = {};
+  const ports = {};
 
   for (let index = 0; index < values.length; index += 1) {
     const arg = values[index];
@@ -74,63 +95,117 @@ function parseArgs(values, text) {
       help = true;
       continue;
     }
-    if (arg === '--extension-id' || arg === '--port') {
+    if (arg === '--browser'
+      || arg === '--extension-id'
+      || arg === '--chrome-extension-id'
+      || arg === '--edge-extension-id'
+      || arg === '--port'
+      || arg === '--chrome-port'
+      || arg === '--edge-port') {
       const value = values[index + 1];
       if (value === undefined || value.startsWith('--')) {
         throw new Error(text.missingOptionValue(arg));
       }
       index += 1;
-      if (arg === '--extension-id') extensionId = value;
-      else {
-        port = Number(value);
-        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      if (arg === '--browser') {
+        browser = value;
+        browserProvided = true;
+        if (browser !== 'chrome' && browser !== 'edge' && browser !== 'all') {
+          throw new Error(text.invalidBrowser(value));
+        }
+      } else if (arg === '--extension-id') {
+        extensionId = value;
+      } else if (arg === '--chrome-extension-id') {
+        extensionIds.chrome = value;
+      } else if (arg === '--edge-extension-id') {
+        extensionIds.edge = value;
+      } else {
+        const parsedPort = Number(value);
+        if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
           throw new Error(text.invalidPort);
         }
+        if (arg === '--port') port = parsedPort;
+        else if (arg === '--chrome-port') ports.chrome = parsedPort;
+        else ports.edge = parsedPort;
       }
       continue;
     }
     throw new Error(text.unknownOption(arg));
   }
 
-  return { extensionId, port, help };
+  if (extensionId !== undefined) {
+    if (browser === 'all') throw new Error(text.browserSpecificOption('--extension-id', '--chrome-extension-id or --edge-extension-id'));
+    extensionIds[browserProvided ? browser : 'legacy'] = extensionId;
+  }
+  if (port !== undefined) {
+    if (browser === 'all') throw new Error(text.browserSpecificOption('--port', '--chrome-port or --edge-port'));
+    ports[browserProvided ? browser : 'legacy'] = port;
+  }
+  for (const value of Object.values(extensionIds)) {
+    if (!isExtensionId(value)) throw new Error(text.invalidExtensionId);
+  }
+
+  const parsed = { browser, browserProvided, extensionIds, ports, help };
+  const selectedIds = selectedTargets(parsed).map((target) => target.id);
+  for (const id of Object.keys(extensionIds)) {
+    if (!selectedIds.includes(id)) throw new Error(text.unknownOption(`--${id}-extension-id`));
+  }
+  for (const id of Object.keys(ports)) {
+    if (!selectedIds.includes(id)) throw new Error(text.unknownOption(`--${id}-port`));
+  }
+  return parsed;
 }
 
 function isExtensionId(value) {
   return /^[a-p]{32}$/.test(value);
 }
 
-async function promptForExtensionId(terminal, text) {
+async function promptForExtensionId(terminal, text, browserLabel) {
   if (terminal === null) {
     throw new Error(text.noInteractiveTerminal);
   }
   while (true) {
-    const value = (await terminal.question(text.extensionIdPrompt)).trim();
+    const value = (await terminal.question(text.extensionIdPrompt(browserLabel))).trim();
     if (isExtensionId(value)) return value;
     console.error(text.invalidExtensionId);
   }
 }
 
-async function installNativeHost(extensionId, port, text) {
+function selectedTargets(options) {
+  if (!options.browserProvided) return [browsers.legacy];
+  if (options.browser === 'all') return [browsers.chrome, browsers.edge];
+  return [browsers[options.browser]];
+}
+
+async function installNativeHost({ target, extensionId, port }, text) {
   if (process.platform === 'win32') {
-    await run('powershell', [
+    const args = [
       '-NoProfile',
       '-ExecutionPolicy',
       'Bypass',
       '-File',
       join(projectRoot, 'scripts', 'install-native-host.ps1'),
+      '-Browser',
+      target.browser,
       '-ExtensionId',
       extensionId,
       '-Port',
       String(port),
-    ]);
+      ...(target.legacy ? [] : ['-MultiBrowser']),
+    ];
+    await run('powershell', args);
     return;
   }
 
-  await run(process.execPath, [
+  const args = [
     join(projectRoot, 'scripts', 'install-native-host-macos.mjs'),
+    '--extension-id',
     extensionId,
+    '--port',
     String(port),
-  ]);
+    ...(target.legacy ? ['--legacy'] : ['--browser', target.browser]),
+  ];
+  await run(process.execPath, args);
 }
 
 function printUsage(text) {

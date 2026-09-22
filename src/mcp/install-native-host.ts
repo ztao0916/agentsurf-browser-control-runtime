@@ -8,10 +8,32 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const HOST_NAME = 'com.browsercontrol.runtime';
-const DEFAULT_PORT = 8765;
+type BrowserId = 'chrome' | 'edge';
+
+const BROWSERS: Record<BrowserId, {
+  label: string;
+  defaultPort: number;
+  windowsRegistry: string;
+  macosManifestDirectory: string[];
+}> = {
+  chrome: {
+    label: 'Chrome',
+    defaultPort: 8765,
+    windowsRegistry: 'Google\\Chrome',
+    macosManifestDirectory: ['Google', 'Chrome', 'NativeMessagingHosts'],
+  },
+  edge: {
+    label: 'Edge',
+    defaultPort: 8766,
+    windowsRegistry: 'Microsoft\\Edge',
+    macosManifestDirectory: ['Microsoft Edge', 'NativeMessagingHosts'],
+  },
+};
 
 interface InstallOptions {
+  browser: BrowserId;
   extensionId: string;
+  legacy: boolean;
   port: number;
 }
 
@@ -38,7 +60,9 @@ export async function installNativeHost(args: string[]): Promise<void> {
 
 function parseArgs(args: string[]): InstallOptions {
   let extensionId: string | undefined;
-  let port = DEFAULT_PORT;
+  let browser: BrowserId = 'chrome';
+  let legacy = true;
+  let port: number | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === undefined) continue;
@@ -46,17 +70,25 @@ function parseArgs(args: string[]): InstallOptions {
     const value = inlineValue ?? args[index + 1];
     if (inlineValue === undefined) index += 1;
     if (flag === '--extension-id') extensionId = value;
+    else if (flag === '--browser') {
+      if (value !== 'chrome' && value !== 'edge') {
+        throw new Error('Browser must be chrome or edge.');
+      }
+      browser = value;
+      legacy = false;
+    }
     else if (flag === '--port') port = Number(value);
     else throw new Error(`Unknown option: ${arg}`);
   }
   if (extensionId === undefined || !/^[a-p]{32}$/.test(extensionId)) {
-    throw new Error('Usage: agentsurf-mcp install-native-host --extension-id <extension-id> [--port <port>]');
+    throw new Error('Usage: agentsurf-mcp install-native-host --extension-id <extension-id> [--browser chrome|edge] [--port <port>]');
   }
+  port ??= BROWSERS[browser].defaultPort;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Port must be between 1 and 65535.');
-  return { extensionId, port };
+  return { browser, extensionId, legacy, port };
 }
 
-async function ensureConfig(runtimeDirectory: string, port: number): Promise<string> {
+async function ensureConfig(runtimeDirectory: string, port: number, legacyConfigPath?: string): Promise<string> {
   const configPath = join(runtimeDirectory, 'config.json');
   let token: string | undefined;
   try {
@@ -68,6 +100,17 @@ async function ensureConfig(runtimeDirectory: string, port: number): Promise<str
   } catch (error: unknown) {
     if (!isMissingFile(error)) throw error;
   }
+  if (token === undefined && legacyConfigPath !== undefined) {
+    try {
+      const existing = JSON.parse(await readFile(legacyConfigPath, 'utf8')) as unknown;
+      if (typeof existing === 'object' && existing !== null && 'token' in existing) {
+        const existingToken = existing.token;
+        if (typeof existingToken === 'string' && existingToken.length >= 16) token = existingToken;
+      }
+    } catch (error: unknown) {
+      if (!isMissingFile(error)) throw error;
+    }
+  }
   token ??= randomBytes(32).toString('hex');
   await writeFile(configPath, `${JSON.stringify({ port, token }, null, 2)}\n`, 'utf8');
   return configPath;
@@ -75,12 +118,17 @@ async function ensureConfig(runtimeDirectory: string, port: number): Promise<str
 
 async function installOnWindows(options: InstallOptions, packagedHostScript: string): Promise<void> {
   const localAppData = process.env.LOCALAPPDATA;
-  const runtimeDirectory = join(
+  const runtimeRoot = join(
     localAppData && localAppData.length > 0 ? localAppData : join(homedir(), 'AppData', 'Local'),
     'BrowserControlRuntime',
   );
+  const runtimeDirectory = options.legacy ? runtimeRoot : join(runtimeRoot, options.browser);
   await mkdir(runtimeDirectory, { recursive: true });
-  const configPath = await ensureConfig(runtimeDirectory, options.port);
+  const configPath = await ensureConfig(
+    runtimeDirectory,
+    options.port,
+    !options.legacy && options.browser === 'chrome' ? join(runtimeRoot, 'config.json') : undefined,
+  );
   const hostScript = join(runtimeDirectory, 'host.js');
   await copyFile(packagedHostScript, hostScript);
 
@@ -103,10 +151,10 @@ async function installOnWindows(options: InstallOptions, packagedHostScript: str
   }
 
   const manifestPath = join(runtimeDirectory, `${HOST_NAME}.json`);
-  await writeFile(manifestPath, `${JSON.stringify(nativeHostManifest(launcherPath, options.extensionId), null, 2)}\n`, 'utf8');
+  await writeFile(manifestPath, `${JSON.stringify(nativeHostManifest(launcherPath, options.extensionId, options.browser), null, 2)}\n`, 'utf8');
   await execFileAsync('reg', [
     'add',
-    `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HOST_NAME}`,
+    `HKCU\\Software\\${BROWSERS[options.browser].windowsRegistry}\\NativeMessagingHosts\\${HOST_NAME}`,
     '/ve',
     '/t',
     'REG_SZ',
@@ -119,11 +167,17 @@ async function installOnWindows(options: InstallOptions, packagedHostScript: str
 }
 
 async function installOnMacos(options: InstallOptions, packagedHostScript: string): Promise<void> {
-  const runtimeDirectory = join(homedir(), 'Library', 'Application Support', 'BrowserControlRuntime');
-  const manifestDirectory = join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
+  const supportDirectory = join(homedir(), 'Library', 'Application Support');
+  const runtimeRoot = join(supportDirectory, 'BrowserControlRuntime');
+  const runtimeDirectory = options.legacy ? runtimeRoot : join(runtimeRoot, options.browser);
+  const manifestDirectory = join(supportDirectory, ...BROWSERS[options.browser].macosManifestDirectory);
   await mkdir(runtimeDirectory, { recursive: true, mode: 0o700 });
   await mkdir(manifestDirectory, { recursive: true });
-  const configPath = await ensureConfig(runtimeDirectory, options.port);
+  const configPath = await ensureConfig(
+    runtimeDirectory,
+    options.port,
+    !options.legacy && options.browser === 'chrome' ? join(runtimeRoot, 'config.json') : undefined,
+  );
   await chmod(configPath, 0o600);
   const hostScript = join(runtimeDirectory, 'host.js');
   await copyFile(packagedHostScript, hostScript);
@@ -138,15 +192,15 @@ async function installOnMacos(options: InstallOptions, packagedHostScript: strin
   await chmod(launcherPath, 0o700);
 
   const manifestPath = join(manifestDirectory, `${HOST_NAME}.json`);
-  await writeFile(manifestPath, `${JSON.stringify(nativeHostManifest(launcherPath, options.extensionId), null, 2)}\n`, 'utf8');
+  await writeFile(manifestPath, `${JSON.stringify(nativeHostManifest(launcherPath, options.extensionId, options.browser), null, 2)}\n`, 'utf8');
 
   printResult(options, manifestPath, configPath);
 }
 
-function nativeHostManifest(launcherPath: string, extensionId: string): Record<string, unknown> {
+function nativeHostManifest(launcherPath: string, extensionId: string, browser: BrowserId): Record<string, unknown> {
   return {
     name: HOST_NAME,
-    description: 'AgentSurf native messaging host',
+    description: `AgentSurf native messaging host for ${BROWSERS[browser].label}`,
     path: launcherPath,
     type: 'stdio',
     allowed_origins: [`chrome-extension://${extensionId}/`],
@@ -154,11 +208,11 @@ function nativeHostManifest(launcherPath: string, extensionId: string): Record<s
 }
 
 function printResult(options: InstallOptions, manifestPath: string, configPath: string): void {
-  console.log(`Native Host installed for extension ${options.extensionId}`);
+  console.log(`${BROWSERS[options.browser].label} Native Host installed for extension ${options.extensionId}`);
   console.log(`Manifest: ${manifestPath}`);
   console.log(`Config:   ${configPath}`);
   console.log(`Bridge:   ws://127.0.0.1:${options.port}`);
-  console.log('Reload the AgentSurf extension in Chrome. Re-run this command after upgrading the npm package.');
+  console.log(`Reload the AgentSurf extension in ${BROWSERS[options.browser].label}. Re-run this command after upgrading the npm package.`);
 }
 
 function windowsLauncherSource(nodePath: string, hostScript: string, configPath: string): string {

@@ -40,11 +40,19 @@ socket.on('error', (error) => {
 });
 
 async function readLocalConfig() {
-  const base = process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
-  try {
-    const value = JSON.parse(await readFile(join(base, 'BrowserControlRuntime', 'config.json'), 'utf8'));
-    return typeof value?.port === 'number' && typeof value?.token === 'string' ? value : null;
-  } catch {
-    return null;
+  const root = process.platform === 'darwin'
+    ? join(homedir(), 'Library', 'Application Support', 'BrowserControlRuntime')
+    : join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'BrowserControlRuntime');
+  const candidates = process.env.BROWSER_BRIDGE_CONFIG
+    ? [process.env.BROWSER_BRIDGE_CONFIG]
+    : [join(root, 'config.json'), join(root, 'chrome', 'config.json')];
+  for (const path of candidates) {
+    try {
+      const value = JSON.parse(await readFile(path, 'utf8'));
+      if (typeof value?.port === 'number' && typeof value?.token === 'string') return value;
+    } catch {
+      // Try the next supported config location.
+    }
   }
+  return null;
 }
