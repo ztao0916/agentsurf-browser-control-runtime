@@ -10,6 +10,7 @@ import type { ElementRegistry } from './element-registry';
 import { describeKey, type KeyDescriptor } from '../core/key-descriptors';
 import { isElementDisabled, isElementVisible } from './element-state';
 import type { AgentCursor } from './agent-cursor';
+import { createRandomToken } from '../core/ids/element-id';
 
 type BrowserWindow = Window & typeof globalThis;
 
@@ -311,7 +312,7 @@ export class ActionExecutor {
       throw new ToolFailure(createToolError('element_not_editable', 'The element is not a file input.', false));
     }
     this.cursor?.showForElement(element);
-    const marker = this.pageWindow.crypto.randomUUID();
+    const marker = createRandomToken();
     element.setAttribute(FILE_INPUT_MARKER_ATTRIBUTE, marker);
     return { marker, page_revision: this.registry.pageRevision };
   }

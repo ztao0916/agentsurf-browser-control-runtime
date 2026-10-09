@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionExecutor } from '../src/content/action-executor';
 import { ElementRegistry } from '../src/content/element-registry';
 import { ToolFailure } from '../src/core/protocol/errors';
@@ -327,5 +327,48 @@ describe('ActionExecutor selectText', () => {
   it('rejects elements that do not support text selection', () => {
     const { elementId, executor } = setupElement('<button>Not editable</button>');
     expectToolError(() => executor.selectText(elementId, 'x', 'text'), 'element_not_editable');
+  });
+});
+
+describe('ActionExecutor file input', () => {
+  // A plain http page is not a secure context, so crypto.randomUUID does not exist there. The Page
+  // Agent runs inside the page, so marking a file input must not depend on that API.
+  let randomUuidDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    randomUuidDescriptor = Object.getOwnPropertyDescriptor(globalThis.crypto, 'randomUUID');
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      configurable: true,
+      writable: true,
+      value: () => {
+        throw new TypeError('crypto.randomUUID is not a function');
+      },
+    });
+  });
+
+  afterEach(() => {
+    if (randomUuidDescriptor === undefined) {
+      delete (globalThis.crypto as unknown as Record<string, unknown>)['randomUUID'];
+      return;
+    }
+    Object.defineProperty(globalThis.crypto, 'randomUUID', randomUuidDescriptor);
+  });
+
+  it('marks a file input without crypto.randomUUID', () => {
+    const { element, elementId, executor } = setupElement('<input type="file">');
+
+    const { marker } = executor.prepareFileInput(elementId);
+
+    expect(marker).toMatch(/^[a-f0-9]{32}$/u);
+    expect(element.getAttribute('data-browser-control-file-input')).toBe(marker);
+  });
+
+  it('clears the marker it wrote', () => {
+    const { element, elementId, executor } = setupElement('<input type="file">');
+    const { marker } = executor.prepareFileInput(elementId);
+
+    executor.clearFileInputMarker(marker);
+
+    expect(element.hasAttribute('data-browser-control-file-input')).toBe(false);
   });
 });
