@@ -375,6 +375,15 @@
         background: var(--outline-hover);
       }
 
+      .btn-danger {
+        background: transparent;
+        color: var(--danger);
+        border-color: var(--danger-border);
+      }
+      .btn-danger:hover {
+        background: var(--danger-bg);
+      }
+
       /* Feedback Line */
       .feedback {
         min-height: 14px;
@@ -529,35 +538,22 @@
 
       <!-- Gateway Enabled View -->
       <div id="gateway-content-enabled">
-        <!-- Connected View (Domain Privacy Protected) -->
         <div id="gateway-view-connected" class="gateway-status-box">
           <div style="display: flex; align-items: center; gap: 5px;">
-            <span class="dot" style="background: var(--success);"></span>
+            <span class="dot" id="gateway-status-dot" style="background: var(--success);"></span>
             <span id="gateway-status-text">已配对 · 当前生效</span>
           </div>
           <button class="text-action" id="btn-edit-config" type="button">修改配置</button>
         </div>
-
-        <!-- Config Form (Hidden by default when connected) -->
-        <div id="gateway-view-form" style="display: none;">
-          <div class="field">
-            <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
-            <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
-          </div>
-          <div class="field">
-            <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
-            <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
-          </div>
-          <div class="button-row">
-            <button class="btn btn-primary" id="btn-save-remote" type="button">保存并连接</button>
-            <button class="btn btn-outline" id="btn-cancel-config" type="button">取消</button>
-          </div>
-        </div>
       </div>
 
       <!-- Gateway Disabled View -->
-      <div id="gateway-content-disabled" class="gateway-disabled-box" style="display: none;">
-        云端网关已关闭（仅使用本地直连）
+      <div id="gateway-content-disabled" class="gateway-status-box" style="display: none; background: rgba(128, 128, 128, 0.05); border-color: rgba(128, 128, 128, 0.15); color: var(--text-muted);">
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <span class="dot" style="background: #94a3b8;"></span>
+          <span>仅本地直连生效</span>
+        </div>
+        <button class="text-action" id="btn-config-gateway" type="button">配置网关</button>
       </div>
     </div>
 
@@ -570,17 +566,41 @@
       <span class="version">v0.1.0</span>
     </div>
 
-    <!-- Frosted Glass Modal for Unconfigured Cloud Gateway -->
-    <div id="modal-unconfigured" class="modal-overlay" style="display: none;">
+    <!-- Frosted Glass Modal for Cloud Gateway -->
+    <div id="modal-gateway" class="modal-overlay" style="display: none;">
       <div class="modal-card">
-        <div class="modal-badge-icon">🌐</div>
-        <div class="modal-title">未配置云端网关</div>
-        <div class="modal-desc">
-          云端网关用于支持 Notion AI 等远程应用调度当前浏览器。检测到您尚未配置网关地址与密钥。
+        <!-- View 1: Unconfigured Prompt (Form A) -->
+        <div id="modal-view-prompt" style="text-align: center;">
+          <div class="modal-badge-icon">🌐</div>
+          <div class="modal-title">未配置云端网关</div>
+          <div class="modal-desc">
+            云端网关用于支持 Notion AI 等远程应用调度当前浏览器。检测到您尚未配置网关地址与密钥。
+          </div>
+          <div class="modal-actions">
+            <button id="btn-modal-cancel" class="btn btn-outline" type="button">暂不配置</button>
+            <button id="btn-modal-configure" class="btn btn-primary" type="button">立即配置</button>
+          </div>
         </div>
-        <div class="modal-actions">
-          <button id="btn-modal-cancel" class="btn btn-outline" type="button">暂不配置</button>
-          <button id="btn-modal-configure" class="btn btn-primary" type="button">立即配置</button>
+
+        <!-- View 2: Configuration Form -->
+        <div id="modal-view-form" style="display: none; text-align: left;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div class="modal-title" style="margin: 0;">云端网关配置</div>
+            <button id="btn-modal-close" class="text-btn" style="font-size: 14px; padding: 0 4px;" type="button" title="关闭">✕</button>
+          </div>
+          <div class="field">
+            <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
+            <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
+            <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
+          </div>
+          <div class="modal-actions" style="margin-top: 12px;">
+            <button id="btn-clear-config" class="btn btn-danger" type="button" style="display: none; flex: 0 0 auto;">清空配置</button>
+            <button id="btn-cancel-config" class="btn btn-outline" type="button">取消</button>
+            <button id="btn-save-remote" class="btn btn-primary" type="button">保存并连接</button>
+          </div>
         </div>
       </div>
     </div>

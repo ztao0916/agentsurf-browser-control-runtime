@@ -25,19 +25,24 @@ const gatewayContentEnabled = getElement<HTMLDivElement>('gateway-content-enable
 const gatewayContentDisabled = getElement<HTMLDivElement>('gateway-content-disabled');
 
 const gatewayViewConnected = getElement<HTMLDivElement>('gateway-view-connected');
+const gatewayStatusDot = getElement<HTMLSpanElement>('gateway-status-dot');
 const gatewayStatusText = getElement<HTMLSpanElement>('gateway-status-text');
 const btnEditConfig = getElement<HTMLButtonElement>('btn-edit-config');
-
-const gatewayViewForm = getElement<HTMLDivElement>('gateway-view-form');
-const gatewayUrlInput = getElement<HTMLInputElement>('gateway-url');
-const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
-const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
-const btnCancelConfig = getElement<HTMLButtonElement>('btn-cancel-config');
+const btnConfigGateway = getElement<HTMLButtonElement>('btn-config-gateway');
 
 // Modal elements
-const modalUnconfigured = getElement<HTMLDivElement>('modal-unconfigured');
+const modalGateway = getElement<HTMLDivElement>('modal-gateway');
+const modalViewPrompt = getElement<HTMLDivElement>('modal-view-prompt');
+const modalViewForm = getElement<HTMLDivElement>('modal-view-form');
 const btnModalCancel = getElement<HTMLButtonElement>('btn-modal-cancel');
 const btnModalConfigure = getElement<HTMLButtonElement>('btn-modal-configure');
+const btnModalClose = getElement<HTMLButtonElement>('btn-modal-close');
+
+const gatewayUrlInput = getElement<HTMLInputElement>('gateway-url');
+const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
+const btnClearConfig = getElement<HTMLButtonElement>('btn-clear-config');
+const btnCancelConfig = getElement<HTMLButtonElement>('btn-cancel-config');
+const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
 
 // Feedback & Footer
 const result = getElement<HTMLDivElement>('result');
@@ -46,12 +51,31 @@ const btnCopy = getElement<HTMLButtonElement>('copy');
 const events: NativeTransportEvent[] = [];
 let snapshot: TransportConnectionSnapshot | null = null;
 let currentMode: 'local' | 'remote' = 'local';
-let isEditingGatewayConfig = false;
 
 function getElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (element === null) throw new Error(`Debug element #${id} was not found.`);
   return element as T;
+}
+
+function showPromptModal(): void {
+  modalViewPrompt.style.display = 'block';
+  modalViewForm.style.display = 'none';
+  modalGateway.style.display = 'flex';
+}
+
+function showFormModal(): void {
+  modalViewPrompt.style.display = 'none';
+  modalViewForm.style.display = 'block';
+  modalGateway.style.display = 'flex';
+
+  const hasConfig = Boolean(gatewayUrlInput.value.trim());
+  btnClearConfig.style.display = hasConfig ? 'inline-flex' : 'none';
+  gatewayUrlInput.focus();
+}
+
+function closeModal(): void {
+  modalGateway.style.display = 'none';
 }
 
 function setResult(text: string, isError = false): void {
@@ -91,6 +115,7 @@ function renderState(state: TransportConnectionSnapshot): void {
       headerStatusText.textContent = '云端网关生效中';
 
       gatewayStatusText.textContent = '已配对 · 当前生效';
+      gatewayStatusDot.style.background = 'var(--success)';
       gatewayViewConnected.className = 'gateway-status-box';
     } else if (remoteState === 'connecting' || remoteState === 'reconnecting') {
       // Connecting to remote
@@ -102,6 +127,7 @@ function renderState(state: TransportConnectionSnapshot): void {
       headerStatusText.textContent = '云端连接中...';
 
       gatewayStatusText.textContent = state.reconnect_attempt > 0 ? `重试连接 (${state.reconnect_attempt})...` : '正在连接云端网关...';
+      gatewayStatusDot.style.background = 'var(--warn)';
       gatewayViewConnected.className = 'gateway-status-box warn';
     } else {
       // Remote error / disconnected
@@ -113,16 +139,8 @@ function renderState(state: TransportConnectionSnapshot): void {
       headerStatusText.textContent = '云端未连接 (本地可用)';
 
       gatewayStatusText.textContent = state.error ? `连接失败: ${state.error}` : '网关未连接';
+      gatewayStatusDot.style.background = 'var(--danger)';
       gatewayViewConnected.className = 'gateway-status-box warn';
-    }
-
-    // By default when connected or configured, hide domain to protect privacy
-    if (!isEditingGatewayConfig && (remoteState === 'connected' || gatewayUrlInput.value)) {
-      gatewayViewConnected.style.display = 'flex';
-      gatewayViewForm.style.display = 'none';
-    } else {
-      gatewayViewConnected.style.display = 'none';
-      gatewayViewForm.style.display = 'block';
     }
   } else {
     // Local mode is Active
@@ -130,15 +148,8 @@ function renderState(state: TransportConnectionSnapshot): void {
     localStatusBadge.className = 'pill pill-active';
     localStatusBadge.textContent = localState === 'error' ? '本地异常' : '当前生效';
 
-    if (!isEditingGatewayConfig) {
-      gatewayContentEnabled.style.display = 'none';
-      gatewayContentDisabled.style.display = 'block';
-    } else {
-      gatewayContentEnabled.style.display = 'block';
-      gatewayContentDisabled.style.display = 'none';
-      gatewayViewConnected.style.display = 'none';
-      gatewayViewForm.style.display = 'block';
-    }
+    gatewayContentEnabled.style.display = 'none';
+    gatewayContentDisabled.style.display = 'flex';
 
     headerStatusBadge.className = 'status-badge connected';
     headerStatusText.textContent = '本地直连生效中';
@@ -227,53 +238,32 @@ gatewayToggle.addEventListener('change', () => {
     const url = gatewayUrlInput.value.trim();
     const token = gatewayTokenInput.value.trim();
     if (!url || !token) {
-      // 未配置过：保持开关为 OFF，弹出毛玻璃模态引导弹窗
+      // 未配置过：保持开关为 OFF，弹出形式 A 毛玻璃模态引导弹窗
       gatewayToggle.checked = false;
-      modalUnconfigured.style.display = 'flex';
+      showPromptModal();
       return;
     }
     // 之前已配置过：开关直接切换为 ON，立即发起云端连接
-    isEditingGatewayConfig = false;
     void switchMode('remote', url, token);
   } else {
     // 关掉云端开关：直接回归本地直连生效
-    isEditingGatewayConfig = false;
     void switchMode('local');
   }
 });
 
-btnModalCancel.addEventListener('click', () => {
-  modalUnconfigured.style.display = 'none';
-});
+btnModalCancel.addEventListener('click', closeModal);
+btnModalConfigure.addEventListener('click', showFormModal);
+btnEditConfig.addEventListener('click', showFormModal);
+btnConfigGateway.addEventListener('click', showFormModal);
+btnModalClose.addEventListener('click', closeModal);
+btnCancelConfig.addEventListener('click', closeModal);
 
-btnModalConfigure.addEventListener('click', () => {
-  modalUnconfigured.style.display = 'none';
-  isEditingGatewayConfig = true;
-  gatewayContentEnabled.style.display = 'block';
-  gatewayContentDisabled.style.display = 'none';
-  gatewayViewConnected.style.display = 'none';
-  gatewayViewForm.style.display = 'block';
-  gatewayUrlInput.focus();
-});
-
-btnEditConfig.addEventListener('click', () => {
-  isEditingGatewayConfig = true;
-  gatewayViewConnected.style.display = 'none';
-  gatewayViewForm.style.display = 'block';
-  gatewayUrlInput.focus();
-});
-
-btnCancelConfig.addEventListener('click', () => {
-  isEditingGatewayConfig = false;
-  const url = gatewayUrlInput.value.trim();
-  if (url && currentMode === 'remote') {
-    gatewayViewConnected.style.display = 'flex';
-    gatewayViewForm.style.display = 'none';
-  } else {
-    gatewayToggle.checked = false;
-    gatewayContentEnabled.style.display = 'none';
-    gatewayContentDisabled.style.display = 'block';
-  }
+btnClearConfig.addEventListener('click', async () => {
+  gatewayUrlInput.value = '';
+  gatewayTokenInput.value = '';
+  closeModal();
+  await switchMode('local', '', '');
+  setResult('已清空云端配置，回归本地直连模式');
 });
 
 btnSaveRemote.addEventListener('click', () => {
@@ -283,8 +273,14 @@ btnSaveRemote.addEventListener('click', () => {
     setResult('请输入网关地址', true);
     return;
   }
-  isEditingGatewayConfig = false;
+  closeModal();
   void switchMode('remote', url, token);
+});
+
+modalGateway.addEventListener('click', (event) => {
+  if (event.target === modalGateway) {
+    closeModal();
+  }
 });
 
 btnCopy.addEventListener('click', () => void copyDiagnostics());
