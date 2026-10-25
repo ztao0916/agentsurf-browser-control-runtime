@@ -7,163 +7,419 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 13px;
+        --bg: #ffffff;
+        --card-bg: #f8fafc;
+        --card-border: #e2e8f0;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --input-border: #cbd5e1;
+        --input-bg: #ffffff;
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --outline-hover: #f1f5f9;
+        --success: #16a34a;
+        --success-bg: rgba(22, 163, 74, 0.1);
+        --success-border: rgba(22, 163, 74, 0.25);
+        --warn: #d97706;
+        --warn-bg: rgba(217, 119, 6, 0.1);
+        --warn-border: rgba(217, 119, 6, 0.25);
+        --danger: #dc2626;
+        --danger-bg: rgba(220, 38, 38, 0.1);
+        --danger-border: rgba(220, 38, 38, 0.25);
+        --capsule-bg: #f1f5f9;
+        --capsule-border: #e2e8f0;
       }
-      body { margin: 0; padding: 14px 16px 18px; width: 340px; box-sizing: border-box; }
-      h1 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; }
-      .badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(128,128,128,0.2); font-weight: normal; }
-      
-      .mode-switcher {
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #18181b;
+          --card-bg: #27272a;
+          --card-border: #3f3f46;
+          --text: #f43f5e;
+          --text: #f4f4f5;
+          --text-muted: #a1a1aa;
+          --input-border: #3f3f46;
+          --input-bg: #18181b;
+          --primary: #3b82f6;
+          --primary-hover: #2563eb;
+          --outline-hover: #27272a;
+          --success: #22c55e;
+          --success-bg: rgba(34, 197, 94, 0.15);
+          --success-border: rgba(34, 197, 94, 0.3);
+          --warn: #f59e0b;
+          --warn-bg: rgba(245, 158, 11, 0.15);
+          --warn-border: rgba(245, 158, 11, 0.3);
+          --danger: #ef4444;
+          --danger-bg: rgba(239, 68, 68, 0.15);
+          --danger-border: rgba(239, 68, 68, 0.3);
+          --capsule-bg: #27272a;
+          --capsule-border: #3f3f46;
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 14px 16px;
+        width: 320px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        font-size: 12px;
+        line-height: 1.4;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Header */
+      .header {
         display: flex;
-        background: rgba(128, 128, 128, 0.15);
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .logo-icon {
+        width: 22px;
+        height: 22px;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        color: #ffffff;
         border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 12px;
+        box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+      }
+
+      .brand-title {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+
+      /* Status Badge */
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        color: var(--text-muted);
+        transition: all 0.2s ease;
+      }
+
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #94a3b8;
+        flex: none;
+      }
+
+      .status-badge.connected {
+        background: var(--success-bg);
+        border-color: var(--success-border);
+        color: var(--success);
+      }
+      .status-badge.connected .dot {
+        background: var(--success);
+        box-shadow: 0 0 6px var(--success);
+      }
+
+      .status-badge.connecting, .status-badge.reconnecting {
+        background: var(--warn-bg);
+        border-color: var(--warn-border);
+        color: var(--warn);
+      }
+      .status-badge.connecting .dot, .status-badge.reconnecting .dot {
+        background: var(--warn);
+        animation: pulse 1.5s infinite;
+      }
+
+      .status-badge.error {
+        background: var(--danger-bg);
+        border-color: var(--danger-border);
+        color: var(--danger);
+      }
+      .status-badge.error .dot {
+        background: var(--danger);
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.85); }
+      }
+
+      /* Segmented Mode Capsule */
+      .mode-capsule {
+        display: flex;
+        background: var(--capsule-bg);
+        border: 1px solid var(--capsule-border);
+        border-radius: 8px;
         padding: 2px;
         margin-bottom: 12px;
       }
-      .mode-btn {
+
+      .capsule-btn {
         flex: 1;
-        padding: 6px 4px;
+        padding: 5px 8px;
         text-align: center;
         border: none;
         background: transparent;
         cursor: pointer;
-        border-radius: 4px;
-        font-size: 12px;
+        border-radius: 6px;
+        font-size: 11.5px;
         font-weight: 500;
-        color: inherit;
-        transition: background 0.15s, box-shadow 0.15s;
+        color: var(--text-muted);
+        transition: all 0.15s ease;
       }
-      .mode-btn.active {
-        background: #ffffff;
-        color: #000000;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+
+      .capsule-btn.active {
+        background: var(--bg);
+        color: var(--text);
         font-weight: 600;
-      }
-      @media (prefers-color-scheme: dark) {
-        .mode-btn.active {
-          background: #2a2b2d;
-          color: #ffffff;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.5);
-        }
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       }
 
-      .state { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-bottom: 10px; font-size: 13px; }
-      .dot { width: 9px; height: 9px; border-radius: 50%; background: #9aa0a6; flex: none; }
-      .dot.connected { background: #1e8e3e; }
-      .dot.connecting, .dot.reconnecting { background: #f9ab00; }
-      .dot.error { background: #d93025; }
-      
-      dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0 0 12px; font-size: 12px; }
-      dt { color: #5f6368; }
-      dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+      /* Form Fields */
+      .field {
+        margin-bottom: 10px;
+      }
 
-      .form-group { margin-bottom: 10px; }
-      .form-group label { display: block; font-size: 12px; color: #5f6368; margin-bottom: 4px; }
-      .form-group input {
+      .field-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+      }
+
+      input[type="text"], input[type="password"] {
         width: 100%;
-        box-sizing: border-box;
-        padding: 6px 8px;
-        border: 1px solid rgba(128,128,128,0.3);
-        border-radius: 4px;
-        font-family: ui-monospace, monospace;
-        font-size: 12px;
-        background: rgba(128,128,128,0.05);
-        color: inherit;
-      }
-      .form-group input:focus {
+        padding: 7px 9px;
+        font-size: 11.5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        background: var(--input-bg);
+        color: var(--text);
+        border: 1px solid var(--input-border);
+        border-radius: 6px;
         outline: none;
-        border-color: #1a73e8;
+        transition: border-color 0.15s, box-shadow 0.15s;
       }
 
-      .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-      button.action-btn {
-        font: inherit;
-        font-size: 12px;
-        padding: 5px 10px;
+      input[type="text"]:focus, input[type="password"]:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+      }
+
+      /* Buttons */
+      .button-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        margin-bottom: 8px;
+      }
+
+      .btn {
+        flex: 1;
+        padding: 7px 12px;
+        font-size: 11.5px;
+        font-weight: 500;
+        border-radius: 6px;
         cursor: pointer;
-        border-radius: 4px;
-        border: 1px solid rgba(128,128,128,0.3);
-        background: rgba(128,128,128,0.08);
-        color: inherit;
+        transition: all 0.15s ease;
+        border: 1px solid transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
-      button.action-btn:hover {
-        background: rgba(128,128,128,0.18);
-      }
-      button.action-btn.primary {
-        background: #1a73e8;
+
+      .btn-primary {
+        background: var(--primary);
         color: #ffffff;
-        border-color: #1a73e8;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+      }
+
+      .btn-primary:hover {
+        background: var(--primary-hover);
+      }
+
+      .btn-outline {
+        flex: none;
+        background: transparent;
+        color: var(--text);
+        border-color: var(--card-border);
+      }
+
+      .btn-outline:hover {
+        background: var(--outline-hover);
+      }
+
+      /* Local Mode Card */
+      .local-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+      }
+
+      .local-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-bottom: 4px;
+      }
+
+      .local-row .label {
+        color: var(--text-muted);
+      }
+
+      .local-row .val {
+        font-family: ui-monospace, monospace;
         font-weight: 500;
       }
-      button.action-btn.primary:hover {
-        background: #1557b0;
+
+      .local-hint {
+        margin: 6px 0 0;
+        padding-top: 6px;
+        border-top: 1px solid var(--card-border);
+        color: var(--text-muted);
+        font-size: 10.5px;
+        line-height: 1.35;
       }
 
-      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #5f6368; margin: 0 0 5px; }
-      #events { margin: 0; padding: 0; list-style: none; max-height: 160px; overflow: auto; font-size: 12px; }
-      #events li { display: flex; gap: 7px; padding: 3px 0; border-top: 1px solid rgba(128, 128, 128, .2); }
-      #events li:first-child { border-top: none; }
-      #events .time { color: #5f6368; font-family: ui-monospace, monospace; flex: none; font-size: 11px; }
-      #events .message { overflow-wrap: anywhere; }
-      #events .error .message { color: #d93025; }
-      #events .empty { color: #5f6368; border-top: none; }
-      #result { min-height: 1.2em; color: #1e8e3e; margin: 8px 0 0; font-size: 12px; }
+      /* Feedback Line */
+      .feedback {
+        min-height: 16px;
+        text-align: center;
+        font-size: 11px;
+        color: var(--text-muted);
+        margin: 6px 0 2px;
+        overflow-wrap: anywhere;
+      }
+
+      .feedback.success { color: var(--success); }
+      .feedback.error { color: var(--danger); }
+
+      /* Footer */
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 8px;
+        margin-top: 4px;
+        border-top: 1px solid var(--card-border);
+        color: var(--text-muted);
+        font-size: 11px;
+      }
+
+      .text-btn {
+        background: transparent;
+        border: none;
+        padding: 2px 4px;
+        margin: -2px -4px;
+        color: var(--text-muted);
+        font-size: 11px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 4px;
+        transition: color 0.15s;
+      }
+
+      .text-btn:hover {
+        color: var(--text);
+      }
+
+      .version {
+        font-size: 10.5px;
+        opacity: 0.75;
+      }
     </style>
   </head>
   <body>
-    <h1>
-      AgentSurf
-      <span class="badge" id="mode-badge">本地模式</span>
-    </h1>
-
-    <div class="mode-switcher">
-      <button class="mode-btn active" id="btn-mode-local" type="button">本地模式 (Local)</button>
-      <button class="mode-btn" id="btn-mode-remote" type="button">远程配对 (Remote)</button>
-    </div>
-
-    <p class="state"><span id="state-dot" class="dot"></span><span id="state-text">loading…</span></p>
-
-    <!-- 本地模式面板 -->
-    <div id="panel-local">
-      <dl>
-        <dt>Host</dt>
-        <dd id="host-name">com.browsercontrol.runtime</dd>
-        <dt>Endpoint</dt>
-        <dd id="bridge-url">unavailable</dd>
-        <dt>Pending</dt>
-        <dd id="pending">0</dd>
-      </dl>
-      <div class="buttons">
-        <button class="action-btn" id="connect" type="button">Connect</button>
-        <button class="action-btn" id="disconnect" type="button">Disconnect</button>
-        <button class="action-btn" id="reconnect" type="button">Reconnect</button>
+    <!-- Top Header -->
+    <div class="header">
+      <div class="brand">
+        <div class="logo-icon">A</div>
+        <h1 class="brand-title">AgentSurf</h1>
+      </div>
+      <div id="status-badge" class="status-badge">
+        <span id="state-dot" class="dot"></span>
+        <span id="state-text">就绪</span>
       </div>
     </div>
 
-    <!-- 远程配对面板 -->
-    <div id="panel-remote" style="display: none;">
-      <div class="form-group">
-        <label for="gateway-url">云端网关地址 (Gateway WSS URL):</label>
+    <!-- Segmented Mode Capsule (BrowserSkill style, no heavy tabs) -->
+    <div class="mode-capsule">
+      <button class="capsule-btn active" id="btn-mode-remote" type="button">🌐 云端网关 (Remote)</button>
+      <button class="capsule-btn" id="btn-mode-local" type="button">💻 本地直连 (Local)</button>
+    </div>
+
+    <!-- Remote Mode Panel -->
+    <div id="panel-remote">
+      <div class="field">
+        <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
         <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
       </div>
-      <div class="form-group">
-        <label for="gateway-token">配对密钥 (Bearer Token):</label>
-        <input id="gateway-token" type="password" placeholder="粘贴密钥" />
+      <div class="field">
+        <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
+        <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
       </div>
-      <div class="buttons">
-        <button class="action-btn primary" id="btn-save-remote" type="button">保存并连接 (Connect)</button>
-        <button class="action-btn" id="btn-disconnect-remote" type="button">断开连接</button>
+      <div class="button-row">
+        <button class="btn btn-primary" id="btn-save-remote" type="button">保存并连接</button>
+        <button class="btn btn-outline" id="btn-disconnect-remote" type="button">断开</button>
       </div>
     </div>
 
-    <div style="margin-bottom: 8px;">
-      <button class="action-btn" id="copy" type="button" style="width: 100%;">复制诊断日志 (Copy diagnostics)</button>
+    <!-- Local Mode Panel -->
+    <div id="panel-local" style="display: none;">
+      <div class="local-card">
+        <div class="local-row">
+          <span class="label">Native Host</span>
+          <span class="val" id="host-name">com.browsercontrol.runtime</span>
+        </div>
+        <div class="local-row">
+          <span class="label">通信状态</span>
+          <span class="val" id="local-status">直连已就绪</span>
+        </div>
+        <p class="local-hint">
+          专用于 Mac 本地 Claude Desktop、Cursor、Cline 等 AI 工具零延迟本地操控。
+        </p>
+      </div>
+      <div class="button-row">
+        <button class="btn btn-primary" id="btn-connect-local" type="button" style="width: 100%;">重新连接本地 Host</button>
+      </div>
     </div>
 
-    <h2>最近事件 (Recent events)</h2>
-    <ul id="events"><li class="empty">No events yet.</li></ul>
-    <p id="result"></p>
+    <!-- Status Message Feedback -->
+    <div id="result" class="feedback"></div>
+
+    <!-- Minimal Footer -->
+    <div class="footer">
+      <button class="text-btn" id="copy" type="button">
+        <span>📋</span>
+        <span>复制诊断信息</span>
+      </button>
+      <span class="version">v0.1.0</span>
+    </div>
 
     <script src="debug/debug.js"></script>
   </body>

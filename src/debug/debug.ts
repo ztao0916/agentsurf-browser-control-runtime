@@ -7,26 +7,25 @@ import {
 } from '../transport/transport-control';
 import type { NativeTransportEvent } from '../transport/native-messaging-transport';
 
-const MAX_EVENTS = 5;
+const MAX_EVENTS = 20;
 const LISTED_CATEGORIES = new Set<NativeTransportEvent['category']>(['state', 'error']);
 
-const modeBadge = getElement<HTMLSpanElement>('mode-badge');
+const statusBadge = getElement<HTMLDivElement>('status-badge');
+const stateText = getElement<HTMLSpanElement>('state-text');
 const btnModeLocal = getElement<HTMLButtonElement>('btn-mode-local');
 const btnModeRemote = getElement<HTMLButtonElement>('btn-mode-remote');
 const panelLocal = getElement<HTMLDivElement>('panel-local');
 const panelRemote = getElement<HTMLDivElement>('panel-remote');
 
-const stateDot = getElement<HTMLSpanElement>('state-dot');
-const stateText = getElement<HTMLSpanElement>('state-text');
 const hostName = getElement<HTMLElement>('host-name');
-const bridgeUrl = getElement<HTMLElement>('bridge-url');
-const pendingCount = getElement<HTMLElement>('pending');
+const localStatus = getElement<HTMLElement>('local-status');
+const btnConnectLocal = getElement<HTMLButtonElement>('btn-connect-local');
+
 const gatewayUrlInput = getElement<HTMLInputElement>('gateway-url');
 const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
 const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
 const btnDisconnectRemote = getElement<HTMLButtonElement>('btn-disconnect-remote');
-const eventsList = getElement<HTMLUListElement>('events');
-const result = getElement<HTMLParagraphElement>('result');
+const result = getElement<HTMLDivElement>('result');
 
 const events: NativeTransportEvent[] = [];
 let snapshot: TransportConnectionSnapshot | null = null;
@@ -41,13 +40,11 @@ function getElement<T extends HTMLElement>(id: string): T {
 function updateModeUI(mode: 'local' | 'remote'): void {
   currentMode = mode;
   if (mode === 'local') {
-    modeBadge.textContent = '本地模式';
     btnModeLocal.classList.add('active');
     btnModeRemote.classList.remove('active');
     panelLocal.style.display = 'block';
     panelRemote.style.display = 'none';
   } else {
-    modeBadge.textContent = '远程网关配对';
     btnModeLocal.classList.remove('active');
     btnModeRemote.classList.add('active');
     panelLocal.style.display = 'none';
@@ -59,55 +56,40 @@ function renderState(state: TransportConnectionSnapshot): void {
   snapshot = state;
   updateModeUI(state.mode);
 
-  stateDot.className = `dot ${state.state}`;
-  stateText.textContent = state.error === null ? state.state : `${state.state} — ${state.error}`;
+  statusBadge.className = `status-badge ${state.state}`;
+  if (state.state === 'connected') {
+    stateText.textContent = state.mode === 'remote' ? '网关已连接' : '本地已连接';
+  } else if (state.state === 'connecting' || state.state === 'reconnecting') {
+    stateText.textContent = state.reconnect_attempt > 0 ? `重试中 (${state.reconnect_attempt})` : '连接中...';
+  } else if (state.state === 'disconnected') {
+    stateText.textContent = '未连接';
+  } else {
+    stateText.textContent = state.state;
+  }
 
   if (state.mode === 'local') {
     hostName.textContent = state.host_name ?? 'com.browsercontrol.runtime';
-    bridgeUrl.textContent = state.bridge_url ?? 'unavailable';
-    pendingCount.textContent = state.reconnect_attempt > 0
-      ? `${state.pending_requests} (reconnect attempt ${state.reconnect_attempt})`
-      : String(state.pending_requests);
+    localStatus.textContent = state.state === 'connected' ? '直连已就绪' : state.state;
   } else {
     if (state.gateway_url && !gatewayUrlInput.value) {
       gatewayUrlInput.value = state.gateway_url;
     }
   }
-}
 
-function renderEvents(): void {
-  if (events.length === 0) {
-    eventsList.replaceChildren(createEventRow({ timestamp: Date.now(), category: 'state', message: 'No events yet.' }, 'empty'));
-    return;
+  if (state.error) {
+    setResult(state.error, true);
   }
-  eventsList.replaceChildren(
-    ...events.map((event) => createEventRow(event, event.category === 'error' ? 'error' : '')),
-  );
-}
-
-function createEventRow(event: NativeTransportEvent, extraClass: string): HTMLLIElement {
-  const row = document.createElement('li');
-  if (extraClass !== '') row.className = extraClass;
-  const time = document.createElement('span');
-  time.className = 'time';
-  time.textContent = new Date(event.timestamp).toLocaleTimeString();
-  const message = document.createElement('span');
-  message.className = 'message';
-  message.textContent = event.request_id === undefined ? event.message : `${event.message} (${event.request_id})`;
-  row.append(time, message);
-  return row;
 }
 
 function addEvent(event: NativeTransportEvent): void {
   if (!LISTED_CATEGORIES.has(event.category)) return;
   events.unshift(event);
   events.length = Math.min(events.length, MAX_EVENTS);
-  renderEvents();
 }
 
 function setResult(text: string, isError = false): void {
   result.textContent = text;
-  result.style.color = isError ? '#d93025' : '#1e8e3e';
+  result.className = isError ? 'feedback error' : 'feedback success';
 }
 
 async function refresh(): Promise<void> {
@@ -125,9 +107,9 @@ async function refresh(): Promise<void> {
       renderState(response.state);
       return;
     }
-    setResult('The extension service worker returned an unusable state.', true);
+    setResult('无法获取扩展运行时状态', true);
   } catch (error: unknown) {
-    setResult(`Cannot reach the extension service worker: ${error instanceof Error ? error.message : String(error)}`, true);
+    setResult(`无法连接扩展后台: ${error instanceof Error ? error.message : String(error)}`, true);
   }
 }
 
@@ -141,7 +123,7 @@ async function control(action: 'connect' | 'disconnect' | 'reconnect'): Promise<
   setResult(
     isTransportControlResponse(response) && !response.ok
       ? response.error.message
-      : 'The extension service worker did not answer.',
+      : '扩展后台未响应。',
     true,
   );
 }
@@ -158,7 +140,7 @@ async function switchMode(targetMode: 'local' | 'remote', url?: string, token?: 
 
   if (isTransportControlResponse(response) && response.ok) {
     renderState(response.state);
-    setResult(targetMode === 'remote' ? '已切换并连接到远程网关' : '已切换到本地 Native 模式');
+    setResult(targetMode === 'remote' ? '已连接云端网关' : '已切换到本地 Native 模式');
   } else {
     setResult('切换模式失败', true);
   }
@@ -217,6 +199,12 @@ btnDisconnectRemote.addEventListener('click', () => {
   void control('disconnect');
 });
 
+btnConnectLocal.addEventListener('click', () => {
+  void control('connect');
+});
+
+getElement<HTMLButtonElement>('copy').addEventListener('click', () => void copyDiagnostics());
+
 chrome.runtime.onMessage.addListener((message: unknown) => {
   if (typeof message !== 'object' || message === null || !('kind' in message) || message.kind !== 'transport-event') {
     return undefined;
@@ -229,10 +217,4 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
   return undefined;
 });
 
-for (const [id, action] of [['connect', 'connect'], ['disconnect', 'disconnect'], ['reconnect', 'reconnect']] as const) {
-  getElement<HTMLButtonElement>(id).addEventListener('click', () => void control(action));
-}
-getElement<HTMLButtonElement>('copy').addEventListener('click', () => void copyDiagnostics());
-
-renderEvents();
 void refresh();
