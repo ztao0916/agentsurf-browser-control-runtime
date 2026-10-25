@@ -125,8 +125,15 @@ function renderState(state: TransportConnectionSnapshot): void {
     localStatusBadge.className = 'pill pill-active';
     localStatusBadge.textContent = localState === 'error' ? '本地异常' : '当前生效';
 
-    gatewayContentEnabled.style.display = 'none';
-    gatewayContentDisabled.style.display = 'block';
+    if (!isEditingGatewayConfig) {
+      gatewayContentEnabled.style.display = 'none';
+      gatewayContentDisabled.style.display = 'block';
+    } else {
+      gatewayContentEnabled.style.display = 'block';
+      gatewayContentDisabled.style.display = 'none';
+      gatewayViewConnected.style.display = 'none';
+      gatewayViewForm.style.display = 'block';
+    }
 
     headerStatusBadge.className = 'status-badge connected';
     headerStatusText.textContent = '本地直连生效中';
@@ -215,15 +222,22 @@ gatewayToggle.addEventListener('change', () => {
     const url = gatewayUrlInput.value.trim();
     const token = gatewayTokenInput.value.trim();
     if (!url) {
+      // 未配置过：切换不成功，开关弹回 OFF，立即展开表单引导用户配置
+      gatewayToggle.checked = false;
       isEditingGatewayConfig = true;
       gatewayContentEnabled.style.display = 'block';
       gatewayContentDisabled.style.display = 'none';
       gatewayViewConnected.style.display = 'none';
       gatewayViewForm.style.display = 'block';
+      setResult('未配置云端网关，请先填写地址与密钥保存', true);
+      gatewayUrlInput.focus();
       return;
     }
+    // 之前已配置过：开关直接切换为 ON，立即发起云端连接
+    isEditingGatewayConfig = false;
     void switchMode('remote', url, token);
   } else {
+    // 关掉云端开关：直接回归本地直连生效
     isEditingGatewayConfig = false;
     void switchMode('local');
   }
@@ -233,12 +247,20 @@ btnEditConfig.addEventListener('click', () => {
   isEditingGatewayConfig = true;
   gatewayViewConnected.style.display = 'none';
   gatewayViewForm.style.display = 'block';
+  gatewayUrlInput.focus();
 });
 
 btnCancelConfig.addEventListener('click', () => {
   isEditingGatewayConfig = false;
-  gatewayViewConnected.style.display = 'flex';
-  gatewayViewForm.style.display = 'none';
+  const url = gatewayUrlInput.value.trim();
+  if (url && currentMode === 'remote') {
+    gatewayViewConnected.style.display = 'flex';
+    gatewayViewForm.style.display = 'none';
+  } else {
+    gatewayToggle.checked = false;
+    gatewayContentEnabled.style.display = 'none';
+    gatewayContentDisabled.style.display = 'block';
+  }
 });
 
 btnSaveRemote.addEventListener('click', () => {
