@@ -16,12 +16,10 @@ const headerStatusText = getElement<HTMLSpanElement>('header-status-text');
 
 // Card 1: Local Native elements
 const cardLocal = getElement<HTMLDivElement>('card-local');
-const localStatusBadge = getElement<HTMLDivElement>('local-status-badge');
+const localStatusBadge = getElement<HTMLSpanElement>('local-status-badge');
 const hostName = getElement<HTMLElement>('host-name');
 
 // Card 2: Remote Gateway elements
-const cardGateway = getElement<HTMLDivElement>('card-gateway');
-const gatewayActiveBadge = getElement<HTMLSpanElement>('gateway-active-badge');
 const gatewayToggle = getElement<HTMLInputElement>('gateway-toggle');
 const gatewayContentEnabled = getElement<HTMLDivElement>('gateway-content-enabled');
 const gatewayContentDisabled = getElement<HTMLDivElement>('gateway-content-disabled');
@@ -80,46 +78,34 @@ function renderState(state: TransportConnectionSnapshot): void {
 
     if (remoteState === 'connected') {
       // Remote Gateway is Active
-      cardGateway.className = 'card active-cloud';
-      gatewayActiveBadge.className = 'pill pill-active';
-      gatewayActiveBadge.textContent = '● 当前生效';
-
       cardLocal.className = 'card';
       localStatusBadge.className = 'pill pill-standby';
-      localStatusBadge.textContent = '● 待命中';
+      localStatusBadge.textContent = '待命中';
 
       headerStatusBadge.className = 'status-badge connected';
-      headerStatusText.textContent = '🌐 云端网关生效中';
+      headerStatusText.textContent = '云端网关生效中';
 
-      gatewayStatusText.textContent = '网关已配对连接';
+      gatewayStatusText.textContent = '已配对 · 当前生效';
       gatewayViewConnected.className = 'gateway-status-box';
     } else if (remoteState === 'connecting' || remoteState === 'reconnecting') {
       // Connecting to remote
-      cardGateway.className = 'card';
-      gatewayActiveBadge.className = 'pill pill-standby';
-      gatewayActiveBadge.textContent = '🟡 连接中...';
-
-      cardLocal.className = 'card active';
+      cardLocal.className = 'card';
       localStatusBadge.className = 'pill pill-active';
-      localStatusBadge.textContent = '● 本地可用';
+      localStatusBadge.textContent = '本地可用';
 
       headerStatusBadge.className = 'status-badge connecting';
-      headerStatusText.textContent = '🟡 云端网关连接中...';
+      headerStatusText.textContent = '云端连接中...';
 
       gatewayStatusText.textContent = state.reconnect_attempt > 0 ? `重试连接 (${state.reconnect_attempt})...` : '正在连接云端网关...';
       gatewayViewConnected.className = 'gateway-status-box warn';
     } else {
       // Remote error / disconnected
-      cardGateway.className = 'card';
-      gatewayActiveBadge.className = 'pill pill-standby';
-      gatewayActiveBadge.textContent = '⚠️ 连接失败';
-
-      cardLocal.className = 'card active';
+      cardLocal.className = 'card';
       localStatusBadge.className = 'pill pill-active';
-      localStatusBadge.textContent = '● 本地可用';
+      localStatusBadge.textContent = '本地可用';
 
       headerStatusBadge.className = 'status-badge error';
-      headerStatusText.textContent = '⚠️ 云端未连 (本地可用)';
+      headerStatusText.textContent = '云端未连接 (本地可用)';
 
       gatewayStatusText.textContent = state.error ? `连接失败: ${state.error}` : '网关未连接';
       gatewayViewConnected.className = 'gateway-status-box warn';
@@ -135,19 +121,15 @@ function renderState(state: TransportConnectionSnapshot): void {
     }
   } else {
     // Local mode is Active
-    cardLocal.className = 'card active';
+    cardLocal.className = 'card';
     localStatusBadge.className = 'pill pill-active';
-    localStatusBadge.textContent = localState === 'error' ? '● 本地异常' : '● 当前生效';
-
-    cardGateway.className = 'card';
-    gatewayActiveBadge.className = 'pill pill-standby';
-    gatewayActiveBadge.textContent = '○ 已停用';
+    localStatusBadge.textContent = localState === 'error' ? '本地异常' : '当前生效';
 
     gatewayContentEnabled.style.display = 'none';
     gatewayContentDisabled.style.display = 'block';
 
     headerStatusBadge.className = 'status-badge connected';
-    headerStatusText.textContent = '💻 本地直连生效中';
+    headerStatusText.textContent = '本地直连生效中';
   }
 
   if (state.error && isRemote) {
