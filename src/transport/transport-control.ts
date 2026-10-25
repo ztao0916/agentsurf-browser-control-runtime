@@ -11,6 +11,9 @@ export interface TransportConnectionSnapshot {
   reconnect_attempt: number;
   pending_requests: number;
   error: string | null;
+  remote_state?: NativeConnectionState;
+  remote_error?: string | null;
+  local_state?: NativeConnectionState;
 }
 
 export interface GatewayConfig {

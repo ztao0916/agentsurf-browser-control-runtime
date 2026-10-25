@@ -26,8 +26,6 @@
         --danger: #dc2626;
         --danger-bg: rgba(220, 38, 38, 0.1);
         --danger-border: rgba(220, 38, 38, 0.25);
-        --capsule-bg: #f1f5f9;
-        --capsule-border: #e2e8f0;
       }
 
       @media (prefers-color-scheme: dark) {
@@ -35,7 +33,6 @@
           --bg: #18181b;
           --card-bg: #27272a;
           --card-border: #3f3f46;
-          --text: #f43f5e;
           --text: #f4f4f5;
           --text-muted: #a1a1aa;
           --input-border: #3f3f46;
@@ -52,8 +49,6 @@
           --danger: #ef4444;
           --danger-bg: rgba(239, 68, 68, 0.15);
           --danger-border: rgba(239, 68, 68, 0.3);
-          --capsule-bg: #27272a;
-          --capsule-border: #3f3f46;
         }
       }
 
@@ -62,7 +57,7 @@
       body {
         margin: 0;
         padding: 14px 16px;
-        width: 320px;
+        width: 330px;
         background: var(--bg);
         color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -111,7 +106,7 @@
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        padding: 3px 8px;
+        padding: 2.5px 8px;
         border-radius: 9999px;
         font-size: 11px;
         font-weight: 500;
@@ -163,40 +158,94 @@
         50% { opacity: 0.4; transform: scale(0.85); }
       }
 
-      /* Segmented Mode Capsule */
-      .mode-capsule {
+      /* Cards */
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+      }
+
+      .card-header {
         display: flex;
-        background: var(--capsule-bg);
-        border: 1px solid var(--capsule-border);
-        border-radius: 8px;
-        padding: 2px;
-        margin-bottom: 12px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
       }
 
-      .capsule-btn {
-        flex: 1;
-        padding: 5px 8px;
-        text-align: center;
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        border-radius: 6px;
-        font-size: 11.5px;
-        font-weight: 500;
-        color: var(--text-muted);
-        transition: all 0.15s ease;
-      }
-
-      .capsule-btn.active {
-        background: var(--bg);
-        color: var(--text);
+      .card-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         font-weight: 600;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .card-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-top: 4px;
+      }
+
+      .card-row .label { color: var(--text-muted); }
+      .card-row .val { font-family: ui-monospace, monospace; font-weight: 500; }
+
+      .card-hint {
+        margin: 6px 0 0;
+        padding-top: 6px;
+        border-top: 1px solid var(--card-border);
+        color: var(--text-muted);
+        font-size: 10.5px;
+        line-height: 1.35;
+      }
+
+      /* Toggle Switch */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 32px;
+        height: 18px;
+        flex: none;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: var(--card-border);
+        transition: .2s;
+        border-radius: 18px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 2px;
+        bottom: 2px;
+        background-color: #ffffff;
+        transition: .2s;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      }
+      input:checked + .slider {
+        background-color: var(--primary);
+      }
+      input:checked + .slider:before {
+        transform: translateX(14px);
       }
 
       /* Form Fields */
       .field {
-        margin-bottom: 10px;
+        margin-top: 8px;
       }
 
       .field-label {
@@ -204,13 +253,13 @@
         font-size: 11px;
         font-weight: 500;
         color: var(--text-muted);
-        margin-bottom: 4px;
+        margin-bottom: 3px;
       }
 
       input[type="text"], input[type="password"] {
         width: 100%;
-        padding: 7px 9px;
-        font-size: 11.5px;
+        padding: 6px 8px;
+        font-size: 11px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         background: var(--input-bg);
         color: var(--text);
@@ -228,15 +277,14 @@
       /* Buttons */
       .button-row {
         display: flex;
-        gap: 8px;
-        margin-top: 12px;
-        margin-bottom: 8px;
+        gap: 6px;
+        margin-top: 8px;
       }
 
       .btn {
         flex: 1;
-        padding: 7px 12px;
-        font-size: 11.5px;
+        padding: 6px 10px;
+        font-size: 11px;
         font-weight: 500;
         border-radius: 6px;
         cursor: pointer;
@@ -251,69 +299,72 @@
         background: var(--primary);
         color: #ffffff;
         font-weight: 600;
-        box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
       }
-
       .btn-primary:hover {
         background: var(--primary-hover);
       }
 
       .btn-outline {
-        flex: none;
         background: transparent;
         color: var(--text);
         border-color: var(--card-border);
       }
-
       .btn-outline:hover {
         background: var(--outline-hover);
       }
 
-      /* Local Mode Card */
-      .local-card {
-        background: var(--card-bg);
-        border: 1px solid var(--card-border);
-        border-radius: 8px;
-        padding: 10px 12px;
-        margin-bottom: 8px;
+      .text-action {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 10.5px;
+        color: var(--primary);
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .text-action:hover {
+        text-decoration: underline;
       }
 
-      .local-row {
+      .gateway-status-box {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: var(--success-bg);
+        border: 1px solid var(--success-border);
+        color: var(--success);
         font-size: 11px;
-        margin-bottom: 4px;
-      }
-
-      .local-row .label {
-        color: var(--text-muted);
-      }
-
-      .local-row .val {
-        font-family: ui-monospace, monospace;
         font-weight: 500;
+        margin-top: 6px;
       }
 
-      .local-hint {
-        margin: 6px 0 0;
-        padding-top: 6px;
-        border-top: 1px solid var(--card-border);
+      .gateway-status-box.warn {
+        background: var(--warn-bg);
+        border-color: var(--warn-border);
+        color: var(--warn);
+      }
+
+      .gateway-disabled-box {
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: rgba(128,128,128,0.06);
         color: var(--text-muted);
-        font-size: 10.5px;
-        line-height: 1.35;
+        font-size: 11px;
+        text-align: center;
+        margin-top: 6px;
       }
 
       /* Feedback Line */
       .feedback {
-        min-height: 16px;
+        min-height: 15px;
         text-align: center;
         font-size: 11px;
         color: var(--text-muted);
-        margin: 6px 0 2px;
+        margin: 4px 0 2px;
         overflow-wrap: anywhere;
       }
-
       .feedback.success { color: var(--success); }
       .feedback.error { color: var(--danger); }
 
@@ -343,10 +394,7 @@
         border-radius: 4px;
         transition: color 0.15s;
       }
-
-      .text-btn:hover {
-        color: var(--text);
-      }
+      .text-btn:hover { color: var(--text); }
 
       .version {
         font-size: 10.5px;
@@ -361,69 +409,81 @@
         <div class="logo-icon">A</div>
         <h1 class="brand-title">AgentSurf</h1>
       </div>
-      <div id="status-badge" class="status-badge">
-        <span id="state-dot" class="dot"></span>
-        <span id="state-text">就绪</span>
+      <div id="header-status-badge" class="status-badge connected">
+        <span class="dot"></span>
+        <span id="header-status-text">运行正常</span>
       </div>
     </div>
 
-    <!-- Segmented Mode Capsule (BrowserSkill style, no heavy tabs) -->
-    <div class="mode-capsule">
-      <button class="capsule-btn active" id="btn-mode-remote" type="button">🌐 云端网关 (Remote)</button>
-      <button class="capsule-btn" id="btn-mode-local" type="button">💻 本地直连 (Local)</button>
+    <!-- CARD 1: 本地直连 (默认核心基石，置顶常驻展示) -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>💻</span>
+          <span>本地直连 (Local Native)</span>
+        </div>
+        <div id="local-status-badge" class="status-badge connected">
+          <span class="dot"></span>
+          <span id="local-status-text">已就绪</span>
+        </div>
+      </div>
+      <div class="card-row">
+        <span class="label">Native Host</span>
+        <span class="val" id="host-name">com.browsercontrol.runtime</span>
+      </div>
+      <p class="card-hint">
+        默认启用，支持本地 Claude Desktop、Cursor、Cline 等 AI 客户端直接操控当前浏览器。
+      </p>
     </div>
 
-    <!-- Remote Mode Panel -->
-    <div id="panel-remote">
-      <!-- Connected Card (shown when connected, hides sensitive domain by default) -->
-      <div id="remote-connected-card" class="local-card" style="display: none;">
-        <div class="local-row">
-          <span class="label">网关状态</span>
-          <span class="val" style="color: var(--success); font-weight: 600;">● 已连接</span>
+    <!-- CARD 2: 云端网关 (Remote Gateway，同屏卡片化展示，无需切换 Tab) -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>🌐</span>
+          <span>云端网关 (Remote Gateway)</span>
         </div>
-        <p class="local-hint" style="margin-top: 4px; padding-top: 4px;">
-          通道运行正常，Notion AI 可随时通过云端网关操控当前浏览器。
-        </p>
-        <div class="button-row" style="margin-top: 8px; margin-bottom: 0;">
-          <button class="btn btn-outline" id="btn-toggle-config" type="button" style="flex: 1;">⚙️ 修改网关配置</button>
-          <button class="btn btn-outline" id="btn-disconnect-card" type="button">断开</button>
+        <label class="switch" title="开启/关闭云端网关">
+          <input type="checkbox" id="gateway-toggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <p class="card-hint" style="margin: 0; padding: 0; border: none;">
+        为 Notion AI 等云端应用提供反向通道，远程调度 Mac 本地浏览器。
+      </p>
+
+      <!-- Gateway Enabled View -->
+      <div id="gateway-content-enabled">
+        <!-- Connected View (Hides Domain by Default for Privacy) -->
+        <div id="gateway-view-connected" class="gateway-status-box">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <span class="dot" style="background: var(--success); box-shadow: 0 0 6px var(--success);"></span>
+            <span id="gateway-status-text">网关已配对连接</span>
+          </div>
+          <button class="text-action" id="btn-edit-config" type="button">⚙️ 修改配置</button>
+        </div>
+
+        <!-- Config Form (Shown when editing or unconfigured) -->
+        <div id="gateway-view-form" style="display: none;">
+          <div class="field">
+            <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
+            <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
+            <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
+          </div>
+          <div class="button-row">
+            <button class="btn btn-primary" id="btn-save-remote" type="button">保存并连接</button>
+            <button class="btn btn-outline" id="btn-cancel-config" type="button">取消</button>
+          </div>
         </div>
       </div>
 
-      <!-- Config Form (hidden when connected to protect domain) -->
-      <div id="remote-config-fields">
-        <div class="field">
-          <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
-          <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
-        </div>
-        <div class="field">
-          <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
-          <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
-        </div>
-        <div class="button-row">
-          <button class="btn btn-primary" id="btn-save-remote" type="button">保存并连接</button>
-          <button class="btn btn-outline" id="btn-disconnect-remote" type="button">断开</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Local Mode Panel -->
-    <div id="panel-local" style="display: none;">
-      <div class="local-card">
-        <div class="local-row">
-          <span class="label">Native Host</span>
-          <span class="val" id="host-name">com.browsercontrol.runtime</span>
-        </div>
-        <div class="local-row">
-          <span class="label">通信状态</span>
-          <span class="val" id="local-status">直连已就绪</span>
-        </div>
-        <p class="local-hint">
-          专用于 Mac 本地 Claude Desktop、Cursor、Cline 等 AI 工具零延迟本地操控。
-        </p>
-      </div>
-      <div class="button-row">
-        <button class="btn btn-primary" id="btn-connect-local" type="button" style="width: 100%;">重新连接本地 Host</button>
+      <!-- Gateway Disabled View -->
+      <div id="gateway-content-disabled" class="gateway-disabled-box" style="display: none;">
+        云端网关已关闭（仅使用本地直连）
       </div>
     </div>
 

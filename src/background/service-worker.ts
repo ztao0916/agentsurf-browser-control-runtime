@@ -56,22 +56,17 @@ const remoteTransport = new RemoteGatewayTransport(
   (event) => publishTransportEvent(event),
 );
 
-function getLocalSnapshot(): TransportConnectionSnapshot {
-  const s = nativeTransport.getSnapshot();
-  return {
-    mode: 'local',
-    transport: 'native_messaging',
-    state: s.state,
-    host_name: s.host_name,
-    bridge_url: s.bridge_url,
-    reconnect_attempt: s.reconnect_attempt,
-    pending_requests: s.pending_requests,
-    error: s.error,
-  };
-}
-
 function getActiveSnapshot(): TransportConnectionSnapshot {
-  return currentMode === 'remote' ? remoteTransport.getSnapshot() : getLocalSnapshot();
+  const local = nativeTransport.getSnapshot();
+  const remote = remoteTransport.getSnapshot();
+  const active = currentMode === 'remote' ? remote : local;
+  return {
+    ...active,
+    mode: currentMode,
+    local_state: local.state,
+    remote_state: remote.state,
+    remote_error: remote.error,
+  };
 }
 
 chrome.storage.local.get(['agentSurfMode', 'agentSurfGatewayUrl', 'agentSurfGatewayToken']).then((stored) => {
