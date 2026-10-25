@@ -30,8 +30,8 @@ AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome 或 Edg
 > 
 > | 模式 | 适用场景 | 说明与入口 |
 > | :--- | :--- | :--- |
-> | 💻 **[本地部署 (默认)](#-本地部署-默认)** | Claude Desktop、Cursor、Codex 等本地 Agent | [查看下方本地步骤 👇](#-本地部署-默认)（0 网络依赖、断网可用） |
-> | ☁️ **[云端部署 (Notion AI 等)](docs/notion-mcp.md)** | Notion AI 等云端 AI Agent | [跳转云端部署指南 ↗](docs/notion-mcp.md)（反向连接网关，本地 0 终端） |
+> | 💻 **[本地部署 (默认)](#-本地部署-默认)** | Claude Desktop、Cursor、Codex 等本机 Agent | [查看下方本地步骤 👇](#-本地部署-默认)（0 网络依赖、断网可用） |
+> | ☁️ **[云端远程部署](docs/remote-gateway.md)** | 云端 Agent、远程 MCP 客户端、Notion AI、工作流等 | [跳转远程网关指南 ↗](docs/remote-gateway.md)（反向连接网关，本地 0 终端） |
 
 ---
 
@@ -136,14 +136,15 @@ npm run setup -- --browser all
 
 ---
 
-### ☁️ 云端部署 (Notion AI 等)
+### ☁️ 云端远程部署 (适配各类云端 Agent 与不同环境)
 
-如果你需要让运行在云端的 AI Agent（如 **Notion AI**、自定义云端智能体）连接并操作你本地的 Chrome，推荐使用 **远程网关模式**：
+如果你需要让运行在云端服务器、SaaS 平台或私有环境中的 AI 智能体（如自定义云端 Agent、Dify、Coze、Notion AI、远程自动化流水线等）安全调度你本地的真实 Chrome / Edge 浏览器，推荐使用 **远程网关模式**：
 
-* **本地 0 终端**：无需在本地常驻任何命令行或 SSH 隧道，直接在 Chrome 扩展面板一键配对；
-* **Notion 永久在线**：云端常驻轻量网关，Notion 端一次配置终生有效；
-* **一键交给 AI 部署**：文档内附完整 Prompt，复制发给任何 AI 编程工具即可自动完成部署；
-* 详细部署与配置指南请参阅独立文档：👉 **[Notion AI 远程部署与连接指南 (docs/notion-mcp.md)](docs/notion-mcp.md)**。
+* **多环境通用适配**：提供标准 Streamed HTTP MCP 接口，可无缝接入任意支持 MCP 协议的云端应用与智能体；
+* **本地 0 终端门槛**：本地电脑无需常驻命令行、无需 SSH 隧道或申请公网 IP，在扩展面板即可一键连接；
+* **服务永久在线**：云端常驻轻量反向网关，跨网络、跨设备、支持自动断线重连；
+* **一键交给 AI 部署**：文档内附完整的服务端部署 Prompt，复制发给任何 AI 编程工具即可自动完成服务器配置；
+* 详细部署与配置指南请参阅独立文档：👉 **[云端远程网关部署与多环境接入指南 (docs/remote-gateway.md)](docs/remote-gateway.md)**。
 
 ---
 

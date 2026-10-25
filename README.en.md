@@ -31,7 +31,7 @@ Give this README to an agent that can operate your computer and let it guide you
 > | Mode | Best For | Description & Link |
 > | :--- | :--- | :--- |
 > | 💻 **[Local Deployment (Default)](#-local-deployment-default)** | Claude Desktop, Cursor, Codex, etc. | [See steps below 👇](#-local-deployment-default) (0 network dependencies, fully offline) |
-> | ☁️ **[Cloud Deployment (Notion AI, etc.)](docs/notion-mcp.md)** | Cloud AI Agents like Notion AI | [Go to Cloud Guide ↗](docs/notion-mcp.md) (Reverse gateway, 0 terminal commands on local PC) |
+> | ☁️ **[Remote Cloud Deployment](docs/remote-gateway.md)** | Cloud AI Agents, Remote MCP clients, Notion AI, workflows | [Go to Remote Gateway Guide ↗](docs/remote-gateway.md) (Reverse gateway, 0 terminal commands on local PC) |
 
 ---
 
@@ -136,14 +136,15 @@ Restart the agent afterwards.
 
 ---
 
-### ☁️ Cloud Deployment (Notion AI, etc.)
+### ☁️ Remote Cloud Deployment (Adapt to Various Cloud Agents & Environments)
 
-If you need a cloud-hosted AI Agent (such as **Notion AI** or custom cloud agents) to control your local browser, use the **Remote Gateway Mode**:
+If you need a cloud-hosted or remote AI Agent (such as custom cloud agents, Dify, Coze, Notion AI, or remote workflows) to securely control your local browser, use the **Remote Gateway Mode**:
 
+* **Universal Environment Adaptation**: Exposes standard Streamed HTTP MCP endpoints to connect with any MCP-compatible cloud application or agent;
 * **0 Terminal Commands on Local PC**: No local CLI or SSH reverse tunnels needed; pair directly inside the Chrome extension popup;
-* **Always-Online MCP**: Lightweight cloud gateway keeps Notion connected permanently;
-* **Automate Setup with AI**: Includes prompt templates for AI tools to deploy the gateway for you automatically;
-* Detailed guide: 👉 **[Notion AI & Remote Gateway Deployment Guide (docs/notion-mcp.md)](docs/notion-mcp.md)**.
+* **Always-Online Gateway**: Lightweight cloud gateway keeps remote connections reliable with automatic reconnection;
+* **Automate Setup with AI**: Includes prompt templates for AI tools to deploy the gateway on your server automatically;
+* Detailed guide: 👉 **[Remote Gateway Deployment & Multi-Environment Guide (docs/remote-gateway.md)](docs/remote-gateway.md)**.
 
 ---
 

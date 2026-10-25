@@ -85,8 +85,8 @@ async function handleInitRemote(args: string[]): Promise<void> {
       + `  Bearer Token:   ${token}\n`
       + `  Public MCP URL: ${cleanUrl}/mcp\n`
       + `  Gateway WS URL: ${wsUrl}/ws\n\n`
-      + `Notion AI Setup:\n`
-      + `  1. In Notion, open Settings -> Connections -> Add connection\n`
+      + `Remote Client Setup (e.g. Notion AI, Custom Agent, Dify):\n`
+      + `  1. Add MCP connection in your remote client or platform:\n`
       + `     - Server URL:     ${cleanUrl}/mcp\n`
       + `     - Authentication: Bearer Token\n`
       + `     - Token:          ${token}\n\n`
