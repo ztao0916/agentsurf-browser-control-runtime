@@ -178,7 +178,7 @@ AgentSurf 采用双通道互斥开关设计，单面板即可自由切换：
   * 本地电脑只要开着 Chrome，云端 Notion 随时可以通过反向通道调度当前浏览器；
   * 切换方法：开启卡片上的 **【云端网关】** 开关，本地通道自动待命。
 
-![AgentSurf 扩展面板双通道互斥开关](assets/agentsurf-extension-connected.png)
+![AgentSurf 扩展面板双通道互斥开关](assets/agentsurf-extension-panel.png)
 
 ---
 

@@ -93,7 +93,7 @@ The setup wizard installs dependencies, builds the project, registers the native
 2. Click the AgentSurf icon in the browser toolbar;
 3. Verify that **"Local Native"** or **"Remote Gateway"** is toggled ON and active in the popup panel (Local Native is active by default).
 
-![AgentSurf extension panel status](docs/assets/agentsurf-extension-connected.png)
+![AgentSurf extension panel status](docs/assets/agentsurf-extension-panel.png)
 
 #### 4. Connect your agent (MCP config)
 

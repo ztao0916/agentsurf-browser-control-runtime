@@ -93,7 +93,7 @@ npm run setup -- --browser all
 2. 点击浏览器工具栏里的 AgentSurf 图标；
 3. 确认扩展面板中 **「本地直连」** 或 **「云端网关」** 处于开启生效状态（默认本地直连开启）。
 
-![AgentSurf 扩展面板状态](docs/assets/agentsurf-extension-connected.png)
+![AgentSurf 扩展面板状态](docs/assets/agentsurf-extension-panel.png)
 
 #### 4. 接入你的 Agent（MCP 配置）
 
