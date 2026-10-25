@@ -25,11 +25,16 @@ const gatewayUrlInput = getElement<HTMLInputElement>('gateway-url');
 const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
 const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
 const btnDisconnectRemote = getElement<HTMLButtonElement>('btn-disconnect-remote');
+const remoteConnectedCard = getElement<HTMLDivElement>('remote-connected-card');
+const remoteConfigFields = getElement<HTMLDivElement>('remote-config-fields');
+const btnToggleConfig = getElement<HTMLButtonElement>('btn-toggle-config');
+const btnDisconnectCard = getElement<HTMLButtonElement>('btn-disconnect-card');
 const result = getElement<HTMLDivElement>('result');
 
 const events: NativeTransportEvent[] = [];
 let snapshot: TransportConnectionSnapshot | null = null;
 let currentMode: 'local' | 'remote' = 'local';
+let isEditingConfig = false;
 
 function getElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -73,6 +78,13 @@ function renderState(state: TransportConnectionSnapshot): void {
   } else {
     if (state.gateway_url && !gatewayUrlInput.value) {
       gatewayUrlInput.value = state.gateway_url;
+    }
+    if (state.state === 'connected' && !isEditingConfig) {
+      remoteConnectedCard.style.display = 'block';
+      remoteConfigFields.style.display = 'none';
+    } else {
+      remoteConnectedCard.style.display = 'none';
+      remoteConfigFields.style.display = 'block';
     }
   }
 
@@ -192,10 +204,22 @@ btnSaveRemote.addEventListener('click', () => {
     setResult('请输入网关地址', true);
     return;
   }
+  isEditingConfig = false;
   void switchMode('remote', url, token);
 });
 
 btnDisconnectRemote.addEventListener('click', () => {
+  void control('disconnect');
+});
+
+btnToggleConfig.addEventListener('click', () => {
+  isEditingConfig = !isEditingConfig;
+  remoteConnectedCard.style.display = isEditingConfig ? 'none' : 'block';
+  remoteConfigFields.style.display = isEditingConfig ? 'block' : 'none';
+});
+
+btnDisconnectCard.addEventListener('click', () => {
+  isEditingConfig = true;
   void control('disconnect');
 });
 

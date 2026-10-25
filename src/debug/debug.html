@@ -375,17 +375,35 @@
 
     <!-- Remote Mode Panel -->
     <div id="panel-remote">
-      <div class="field">
-        <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
-        <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
+      <!-- Connected Card (shown when connected, hides sensitive domain by default) -->
+      <div id="remote-connected-card" class="local-card" style="display: none;">
+        <div class="local-row">
+          <span class="label">网关状态</span>
+          <span class="val" style="color: var(--success); font-weight: 600;">● 已连接</span>
+        </div>
+        <p class="local-hint" style="margin-top: 4px; padding-top: 4px;">
+          通道运行正常，Notion AI 可随时通过云端网关操控当前浏览器。
+        </p>
+        <div class="button-row" style="margin-top: 8px; margin-bottom: 0;">
+          <button class="btn btn-outline" id="btn-toggle-config" type="button" style="flex: 1;">⚙️ 修改网关配置</button>
+          <button class="btn btn-outline" id="btn-disconnect-card" type="button">断开</button>
+        </div>
       </div>
-      <div class="field">
-        <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
-        <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
-      </div>
-      <div class="button-row">
-        <button class="btn btn-primary" id="btn-save-remote" type="button">保存并连接</button>
-        <button class="btn btn-outline" id="btn-disconnect-remote" type="button">断开</button>
+
+      <!-- Config Form (hidden when connected to protect domain) -->
+      <div id="remote-config-fields">
+        <div class="field">
+          <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
+          <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
+          <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
+        </div>
+        <div class="button-row">
+          <button class="btn btn-primary" id="btn-save-remote" type="button">保存并连接</button>
+          <button class="btn btn-outline" id="btn-disconnect-remote" type="button">断开</button>
+        </div>
       </div>
     </div>
 
