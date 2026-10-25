@@ -50,6 +50,15 @@ const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
 // Feedback & Footer
 const result = getElement<HTMLDivElement>('result');
 const btnCopy = getElement<HTMLButtonElement>('copy');
+const versionLabel = document.getElementById('version-label');
+if (versionLabel) {
+  try {
+    const v = chrome.runtime?.getManifest?.()?.version;
+    if (v) versionLabel.textContent = `v${v}`;
+  } catch {
+    // fallback
+  }
+}
 
 const events: NativeTransportEvent[] = [];
 let snapshot: TransportConnectionSnapshot | null = null;

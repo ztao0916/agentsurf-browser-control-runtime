@@ -1,6 +1,6 @@
 {
   "name": "@agentsurf/mcp-server",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "Local MCP server and Chrome browser control runtime for AI agents.",
   "license": "Apache-2.0",
   "author": "ztao",

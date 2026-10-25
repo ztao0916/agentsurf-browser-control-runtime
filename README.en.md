@@ -91,11 +91,9 @@ The setup wizard installs dependencies, builds the project, registers the native
 
 1. Return to each browser's extensions page and click **Reload** on the AgentSurf card;
 2. Click the AgentSurf icon in the browser toolbar;
-3. Seeing `● connected` means the extension is connected.
+3. Verify that **"Local Native"** or **"Remote Gateway"** is toggled ON and active in the popup panel (Local Native is active by default).
 
-![AgentSurf extension showing connected after a successful npm run setup](docs/assets/agentsurf-extension-connected.png)
-
-If it is not connected: click **Disconnect** once, wait one second, then click **Connect**.
+![AgentSurf extension panel status](docs/assets/agentsurf-extension-connected.png)
 
 #### 4. Connect your agent (MCP config)
 

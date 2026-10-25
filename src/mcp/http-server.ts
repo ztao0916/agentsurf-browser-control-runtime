@@ -188,7 +188,7 @@ export async function startHttpMcpServer(options: {
 
   function createRemoteServer(isAuthorized: () => Promise<boolean>): McpServer {
     const server = new McpServer(
-      { name: 'agentsurf-remote', version: '0.1.0' },
+      { name: 'agentsurf-remote', version: '0.7.0' },
       {
         instructions: [
           'AgentSurf controls the user\'s local Chrome browser over remote MCP.',

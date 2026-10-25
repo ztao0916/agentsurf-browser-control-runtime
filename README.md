@@ -91,11 +91,9 @@ npm run setup -- --browser all
 
 1. 回到每个浏览器的扩展页面，点 AgentSurf 卡片上的 **重新加载**；
 2. 点击浏览器工具栏里的 AgentSurf 图标；
-3. 看到 `● connected` 就表示扩展已连接。
+3. 确认扩展面板中 **「本地直连」** 或 **「云端网关」** 处于开启生效状态（默认本地直连开启）。
 
-![npm run setup 成功后 AgentSurf 扩展显示 connected](docs/assets/agentsurf-extension-connected.png)
-
-如果没有连接：点一次 **Disconnect**，等 1 秒，再点 **Connect**。
+![AgentSurf 扩展面板状态](docs/assets/agentsurf-extension-connected.png)
 
 #### 4. 接入你的 Agent（MCP 配置）
 

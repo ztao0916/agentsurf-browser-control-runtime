@@ -40,7 +40,7 @@ body:
     id: version
     attributes:
       label: AgentSurf version or commit
-      placeholder: v0.1.0 or commit SHA
+      placeholder: v0.7.0 or commit SHA
     validations:
       required: true
   - type: input

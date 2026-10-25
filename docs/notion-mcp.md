@@ -165,18 +165,20 @@ curl https://mcp.example.com:9443/health
 
 ---
 
-## 六、 本地模式与远程模式自由切换
+## 六、 本地直连与云端网关自由切换
 
-AgentSurf 完美兼顾了两种截然不同的使用场景：
+AgentSurf 采用双通道互斥开关设计，单面板即可自由切换：
 
-* **本地模式 (Local)**：
+* **本地直连 (Local Native)**：
   * 专供本地客户端使用（如 Claude Desktop、Cursor、Codex 等）；
-  * **零网络依赖，断网可用**，走本地 Native Messaging 回环管道，性能极致。
-  * 切换方法：在扩展面板点击 **【本地模式 (Local)】** 即可。
-* **远程配对模式 (Remote)**：
+  * **零网络依赖，断网可用**，走本地 Native Messaging 回环管道，延迟极低；
+  * 切换方法：开启卡片上的 **【本地直连】** 开关，云端网关自动变灰待命。
+* **云端网关 (Remote Gateway)**：
   * 专供 Notion AI 等云端客户端跨设备使用；
-  * 本地电脑只要开着 Chrome，云端 Notion 随时可以调用。
-  * 切换方法：在扩展面板点击 **【远程配对 (Remote)】** 即可。
+  * 本地电脑只要开着 Chrome，云端 Notion 随时可以通过反向通道调度当前浏览器；
+  * 切换方法：开启卡片上的 **【云端网关】** 开关，本地通道自动待命。
+
+![AgentSurf 扩展面板双通道互斥开关](assets/agentsurf-extension-connected.png)
 
 ---
 

@@ -71,7 +71,7 @@ function releaseSessionOnShutdown(): void {
 
 export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
-    { name: 'agentsurf', version: '0.1.0' },
+    { name: 'agentsurf', version: '0.7.0' },
     {
       instructions: [
         'AgentSurf controls the user\'s local Chrome.',
