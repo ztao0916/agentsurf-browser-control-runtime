@@ -15,11 +15,13 @@ const headerStatusBadge = getElement<HTMLDivElement>('header-status-badge');
 const headerStatusText = getElement<HTMLSpanElement>('header-status-text');
 
 // Card 1: Local Native elements
+const cardLocal = getElement<HTMLDivElement>('card-local');
 const localStatusBadge = getElement<HTMLDivElement>('local-status-badge');
-const localStatusText = getElement<HTMLSpanElement>('local-status-text');
 const hostName = getElement<HTMLElement>('host-name');
 
 // Card 2: Remote Gateway elements
+const cardGateway = getElement<HTMLDivElement>('card-gateway');
+const gatewayActiveBadge = getElement<HTMLSpanElement>('gateway-active-badge');
 const gatewayToggle = getElement<HTMLInputElement>('gateway-toggle');
 const gatewayContentEnabled = getElement<HTMLDivElement>('gateway-content-enabled');
 const gatewayContentDisabled = getElement<HTMLDivElement>('gateway-content-disabled');
@@ -58,22 +60,14 @@ function renderState(state: TransportConnectionSnapshot): void {
   snapshot = state;
   currentMode = state.mode;
 
-  // 1. Update Card 1 (Local Native)
+  const isRemote = state.mode === 'remote';
+  const remoteState = state.remote_state ?? (isRemote ? state.state : 'disconnected');
   const localState = state.local_state ?? (state.mode === 'local' ? state.state : 'connected');
-  if (localState === 'connected') {
-    localStatusBadge.className = 'status-badge connected';
-    localStatusText.textContent = '已就绪';
-  } else if (localState === 'error') {
-    localStatusBadge.className = 'status-badge error';
-    localStatusText.textContent = '异常';
-  } else {
-    localStatusBadge.className = 'status-badge';
-    localStatusText.textContent = localState;
-  }
+
+  // Update Host name
   hostName.textContent = state.host_name ?? 'com.browsercontrol.runtime';
 
-  // 2. Update Card 2 (Remote Gateway)
-  const isRemote = state.mode === 'remote';
+  // Update Card 2 toggle
   gatewayToggle.checked = isRemote;
 
   if (isRemote) {
@@ -84,19 +78,54 @@ function renderState(state: TransportConnectionSnapshot): void {
       gatewayUrlInput.value = state.gateway_url;
     }
 
-    const remoteState = state.remote_state ?? state.state;
     if (remoteState === 'connected') {
+      // Remote Gateway is Active
+      cardGateway.className = 'card active-cloud';
+      gatewayActiveBadge.className = 'pill pill-active';
+      gatewayActiveBadge.textContent = '● 当前生效';
+
+      cardLocal.className = 'card';
+      localStatusBadge.className = 'pill pill-standby';
+      localStatusBadge.textContent = '● 待命中';
+
+      headerStatusBadge.className = 'status-badge connected';
+      headerStatusText.textContent = '🌐 云端网关生效中';
+
       gatewayStatusText.textContent = '网关已配对连接';
       gatewayViewConnected.className = 'gateway-status-box';
     } else if (remoteState === 'connecting' || remoteState === 'reconnecting') {
+      // Connecting to remote
+      cardGateway.className = 'card';
+      gatewayActiveBadge.className = 'pill pill-standby';
+      gatewayActiveBadge.textContent = '🟡 连接中...';
+
+      cardLocal.className = 'card active';
+      localStatusBadge.className = 'pill pill-active';
+      localStatusBadge.textContent = '● 本地可用';
+
+      headerStatusBadge.className = 'status-badge connecting';
+      headerStatusText.textContent = '🟡 云端网关连接中...';
+
       gatewayStatusText.textContent = state.reconnect_attempt > 0 ? `重试连接 (${state.reconnect_attempt})...` : '正在连接云端网关...';
       gatewayViewConnected.className = 'gateway-status-box warn';
     } else {
+      // Remote error / disconnected
+      cardGateway.className = 'card';
+      gatewayActiveBadge.className = 'pill pill-standby';
+      gatewayActiveBadge.textContent = '⚠️ 连接失败';
+
+      cardLocal.className = 'card active';
+      localStatusBadge.className = 'pill pill-active';
+      localStatusBadge.textContent = '● 本地可用';
+
+      headerStatusBadge.className = 'status-badge error';
+      headerStatusText.textContent = '⚠️ 云端未连 (本地可用)';
+
       gatewayStatusText.textContent = state.error ? `连接失败: ${state.error}` : '网关未连接';
       gatewayViewConnected.className = 'gateway-status-box warn';
     }
 
-    // By default when connected or configured, hide the domain input to protect privacy
+    // By default when connected or configured, hide domain to protect privacy
     if (!isEditingGatewayConfig && (remoteState === 'connected' || gatewayUrlInput.value)) {
       gatewayViewConnected.style.display = 'flex';
       gatewayViewForm.style.display = 'none';
@@ -105,17 +134,20 @@ function renderState(state: TransportConnectionSnapshot): void {
       gatewayViewForm.style.display = 'block';
     }
   } else {
+    // Local mode is Active
+    cardLocal.className = 'card active';
+    localStatusBadge.className = 'pill pill-active';
+    localStatusBadge.textContent = localState === 'error' ? '● 本地异常' : '● 当前生效';
+
+    cardGateway.className = 'card';
+    gatewayActiveBadge.className = 'pill pill-standby';
+    gatewayActiveBadge.textContent = '○ 已停用';
+
     gatewayContentEnabled.style.display = 'none';
     gatewayContentDisabled.style.display = 'block';
-  }
 
-  // 3. Update Overall Header Status
-  if (localState === 'connected' || (isRemote && state.state === 'connected')) {
     headerStatusBadge.className = 'status-badge connected';
-    headerStatusText.textContent = '运行正常';
-  } else {
-    headerStatusBadge.className = 'status-badge';
-    headerStatusText.textContent = '待命';
+    headerStatusText.textContent = '💻 本地直连生效中';
   }
 
   if (state.error && isRemote) {

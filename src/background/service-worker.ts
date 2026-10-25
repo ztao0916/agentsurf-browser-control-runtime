@@ -87,8 +87,10 @@ chrome.storage.local.get(['agentSurfMode', 'agentSurfGatewayUrl', 'agentSurfGate
   } else {
     nativeTransport.connect();
   }
+  updateExtensionBadge();
 }).catch(() => {
   nativeTransport.connect();
+  updateExtensionBadge();
 });
 
 registerRuntimeMessageHandler(async (message) => {
@@ -160,6 +162,8 @@ async function handleTransportControl(message: TransportControlRequest): Promise
         break;
     }
 
+    updateExtensionBadge();
+
     return {
       ok: true,
       state: getActiveSnapshot(),
@@ -174,6 +178,32 @@ async function handleTransportControl(message: TransportControlRequest): Promise
   }
 }
 
+function updateExtensionBadge(): void {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.action?.setBadgeText) {
+      if (currentMode === 'remote') {
+        const state = remoteTransport.getSnapshot().state;
+        if (state === 'connected') {
+          void chrome.action.setBadgeText({ text: 'CLOUD' });
+          void chrome.action.setBadgeBackgroundColor({ color: '#16a34a' });
+        } else if (state === 'connecting' || state === 'reconnecting') {
+          void chrome.action.setBadgeText({ text: '...' });
+          void chrome.action.setBadgeBackgroundColor({ color: '#d97706' });
+        } else {
+          void chrome.action.setBadgeText({ text: 'OFF' });
+          void chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
+        }
+      } else {
+        void chrome.action.setBadgeText({ text: 'LOC' });
+        void chrome.action.setBadgeBackgroundColor({ color: '#2563eb' });
+      }
+    }
+  } catch {
+    // Ignore in non-extension environments (e.g. test)
+  }
+}
+
 function publishTransportEvent(event: NativeTransportEvent): void {
+  updateExtensionBadge();
   void chrome.runtime.sendMessage({ kind: 'transport-event', event }).catch(() => undefined);
 }
