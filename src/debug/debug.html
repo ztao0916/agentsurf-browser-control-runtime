@@ -285,14 +285,10 @@
         color: var(--warn);
       }
 
-      .gateway-disabled-box {
-        padding: 5px 8px;
-        border-radius: 6px;
+      .gateway-status-box.standby {
         background: rgba(128, 128, 128, 0.05);
+        border-color: rgba(128, 128, 128, 0.15);
         color: var(--text-muted);
-        font-size: 11px;
-        text-align: center;
-        margin-top: 6px;
       }
 
       .text-action {
@@ -511,15 +507,24 @@
     <div class="card" id="card-local">
       <div class="card-header">
         <span class="card-title">本地直连 (Local Native)</span>
-        <span id="local-status-badge" class="pill pill-active">当前生效</span>
+        <label class="switch" title="启用/关闭本地直连">
+          <input type="checkbox" id="local-toggle" checked />
+          <span class="slider"></span>
+        </label>
       </div>
-      <div class="card-row">
-        <span class="label">Native Host</span>
-        <span class="val" id="host-name">com.browsercontrol.runtime</span>
-      </div>
-      <p class="card-hint">
+
+      <p class="card-hint" style="margin: 0 0 6px 0; padding: 0; border: none;">
         默认基石通道，支持本地 AI 客户端零延迟操控当前浏览器。
       </p>
+
+      <!-- Local Status Box -->
+      <div id="local-status-box" class="gateway-status-box">
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <span class="dot" id="local-status-dot" style="background: var(--success);"></span>
+          <span id="local-status-text">当前生效</span>
+        </div>
+        <span class="val" id="host-name" style="font-size: 10px; color: var(--text-muted);">com.browsercontrol.runtime</span>
+      </div>
     </div>
 
     <!-- CARD 2: 云端网关 (Remote Gateway) -->
@@ -527,12 +532,12 @@
       <div class="card-header">
         <span class="card-title">云端网关 (Remote Gateway)</span>
         <label class="switch" title="启用/关闭云端网关">
-          <input type="checkbox" id="gateway-toggle" checked />
+          <input type="checkbox" id="gateway-toggle" />
           <span class="slider"></span>
         </label>
       </div>
 
-      <p class="card-hint" style="margin: 0; padding: 0; border: none;">
+      <p class="card-hint" style="margin: 0 0 6px 0; padding: 0; border: none;">
         为云端 AI 应用提供安全反向通道，远程调度 Mac 浏览器。
       </p>
 
@@ -548,7 +553,7 @@
       </div>
 
       <!-- Gateway Disabled View -->
-      <div id="gateway-content-disabled" class="gateway-status-box" style="display: none; background: rgba(128, 128, 128, 0.05); border-color: rgba(128, 128, 128, 0.15); color: var(--text-muted);">
+      <div id="gateway-content-disabled" class="gateway-status-box standby" style="display: none;">
         <div style="display: flex; align-items: center; gap: 5px;">
           <span class="dot" style="background: #94a3b8;"></span>
           <span>仅本地直连生效</span>

@@ -16,7 +16,10 @@ const headerStatusText = getElement<HTMLSpanElement>('header-status-text');
 
 // Card 1: Local Native elements
 const cardLocal = getElement<HTMLDivElement>('card-local');
-const localStatusBadge = getElement<HTMLSpanElement>('local-status-badge');
+const localToggle = getElement<HTMLInputElement>('local-toggle');
+const localStatusBox = getElement<HTMLDivElement>('local-status-box');
+const localStatusDot = getElement<HTMLSpanElement>('local-status-dot');
+const localStatusText = getElement<HTMLSpanElement>('local-status-text');
 const hostName = getElement<HTMLElement>('host-name');
 
 // Card 2: Remote Gateway elements
@@ -94,7 +97,8 @@ function renderState(state: TransportConnectionSnapshot): void {
   // Update Host name
   hostName.textContent = state.host_name ?? 'com.browsercontrol.runtime';
 
-  // Update Card 2 toggle
+  // Mutually exclusive toggle states
+  localToggle.checked = !isRemote;
   gatewayToggle.checked = isRemote;
 
   if (isRemote) {
@@ -108,8 +112,9 @@ function renderState(state: TransportConnectionSnapshot): void {
     if (remoteState === 'connected') {
       // Remote Gateway is Active
       cardLocal.className = 'card';
-      localStatusBadge.className = 'pill pill-standby';
-      localStatusBadge.textContent = '待命中';
+      localStatusBox.className = 'gateway-status-box standby';
+      localStatusDot.style.background = '#94a3b8';
+      localStatusText.textContent = '待命中';
 
       headerStatusBadge.className = 'status-badge connected';
       headerStatusText.textContent = '云端网关生效中';
@@ -120,8 +125,9 @@ function renderState(state: TransportConnectionSnapshot): void {
     } else if (remoteState === 'connecting' || remoteState === 'reconnecting') {
       // Connecting to remote
       cardLocal.className = 'card';
-      localStatusBadge.className = 'pill pill-active';
-      localStatusBadge.textContent = '本地可用';
+      localStatusBox.className = 'gateway-status-box standby';
+      localStatusDot.style.background = '#94a3b8';
+      localStatusText.textContent = '待命中 (本地可用)';
 
       headerStatusBadge.className = 'status-badge connecting';
       headerStatusText.textContent = '云端连接中...';
@@ -132,8 +138,9 @@ function renderState(state: TransportConnectionSnapshot): void {
     } else {
       // Remote error / disconnected
       cardLocal.className = 'card';
-      localStatusBadge.className = 'pill pill-active';
-      localStatusBadge.textContent = '本地可用';
+      localStatusBox.className = 'gateway-status-box standby';
+      localStatusDot.style.background = '#94a3b8';
+      localStatusText.textContent = '待命中 (本地可用)';
 
       headerStatusBadge.className = 'status-badge error';
       headerStatusText.textContent = '云端未连接 (本地可用)';
@@ -145,8 +152,9 @@ function renderState(state: TransportConnectionSnapshot): void {
   } else {
     // Local mode is Active
     cardLocal.className = 'card';
-    localStatusBadge.className = 'pill pill-active';
-    localStatusBadge.textContent = localState === 'error' ? '本地异常' : '当前生效';
+    localStatusBox.className = 'gateway-status-box';
+    localStatusDot.style.background = localState === 'error' ? 'var(--danger)' : 'var(--success)';
+    localStatusText.textContent = localState === 'error' ? '本地异常' : '当前生效';
 
     gatewayContentEnabled.style.display = 'none';
     gatewayContentDisabled.style.display = 'flex';
@@ -233,35 +241,76 @@ async function copyDiagnostics(): Promise<void> {
 }
 
 // Event Listeners
+localToggle.addEventListener('change', () => {
+  if (localToggle.checked) {
+    // 开启本地开关：云端开关关闭，切换为仅本地模式
+    gatewayToggle.checked = false;
+    void switchMode('local');
+  } else {
+    // 关闭本地开关：意图切换到云端
+    const url = gatewayUrlInput.value.trim();
+    const token = gatewayTokenInput.value.trim();
+    if (!url || !token) {
+      // 云端未配置：本地开关恢复开启，弹出形式 A 毛玻璃模态引导弹窗
+      localToggle.checked = true;
+      showPromptModal();
+      return;
+    }
+    // 云端已配置：云端开关打开，切换为云端网关模式
+    gatewayToggle.checked = true;
+    void switchMode('remote', url, token);
+  }
+});
+
 gatewayToggle.addEventListener('change', () => {
   if (gatewayToggle.checked) {
     const url = gatewayUrlInput.value.trim();
     const token = gatewayTokenInput.value.trim();
     if (!url || !token) {
-      // 未配置过：保持开关为 OFF，弹出形式 A 毛玻璃模态引导弹窗
+      // 未配置过：云端开关保持 OFF，本地开关保持 ON，弹出形式 A 毛玻璃模态引导弹窗
       gatewayToggle.checked = false;
+      localToggle.checked = true;
       showPromptModal();
       return;
     }
-    // 之前已配置过：开关直接切换为 ON，立即发起云端连接
+    // 之前已配置过：本地开关关闭，云端开关开启，立即发起云端连接
+    localToggle.checked = false;
     void switchMode('remote', url, token);
   } else {
-    // 关掉云端开关：直接回归本地直连生效
+    // 关掉云端开关：本地开关打开，直接回归本地直连生效
+    localToggle.checked = true;
     void switchMode('local');
   }
 });
 
-btnModalCancel.addEventListener('click', closeModal);
+btnModalCancel.addEventListener('click', () => {
+  closeModal();
+  localToggle.checked = currentMode === 'local';
+  gatewayToggle.checked = currentMode === 'remote';
+});
+
 btnModalConfigure.addEventListener('click', showFormModal);
 btnEditConfig.addEventListener('click', showFormModal);
 btnConfigGateway.addEventListener('click', showFormModal);
-btnModalClose.addEventListener('click', closeModal);
-btnCancelConfig.addEventListener('click', closeModal);
+
+btnModalClose.addEventListener('click', () => {
+  closeModal();
+  localToggle.checked = currentMode === 'local';
+  gatewayToggle.checked = currentMode === 'remote';
+});
+
+btnCancelConfig.addEventListener('click', () => {
+  closeModal();
+  localToggle.checked = currentMode === 'local';
+  gatewayToggle.checked = currentMode === 'remote';
+});
 
 btnClearConfig.addEventListener('click', async () => {
   gatewayUrlInput.value = '';
   gatewayTokenInput.value = '';
   closeModal();
+  localToggle.checked = true;
+  gatewayToggle.checked = false;
   await switchMode('local', '', '');
   setResult('已清空云端配置，回归本地直连模式');
 });
@@ -274,12 +323,16 @@ btnSaveRemote.addEventListener('click', () => {
     return;
   }
   closeModal();
+  localToggle.checked = false;
+  gatewayToggle.checked = true;
   void switchMode('remote', url, token);
 });
 
 modalGateway.addEventListener('click', (event) => {
   if (event.target === modalGateway) {
     closeModal();
+    localToggle.checked = currentMode === 'local';
+    gatewayToggle.checked = currentMode === 'remote';
   }
 });
 
