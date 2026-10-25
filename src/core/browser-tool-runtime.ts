@@ -63,6 +63,9 @@ export class BrowserToolRuntime {
 
   private async dispatch(request: ToolRequest): Promise<ToolResults[ToolName]> {
     switch (request.tool) {
+      case 'browser.end_session':
+      case 'browser.get_operation':
+        throw new ToolFailure(createToolError('permission_denied', 'This tool requires the remote execution runtime.', false));
       case 'browser.start_session':
         return { session: await this.requireSessions().start(request.args.session_id, request.args.name) };
       case 'browser.claim_tab': {

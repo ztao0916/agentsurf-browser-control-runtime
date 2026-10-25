@@ -26,7 +26,18 @@ It reuses your existing sessions and tabs and supports common browser actions su
 
 Give this README to an agent that can operate your computer and let it guide you through setup, or follow the steps below manually.
 
-### 1. Prerequisites
+> **Choose your deployment mode:**
+> 
+> | Mode | Best For | Description & Link |
+> | :--- | :--- | :--- |
+> | 💻 **[Local Deployment (Default)](#-local-deployment-default)** | Claude Desktop, Cursor, Codex, etc. | [See steps below 👇](#-local-deployment-default) (0 network dependencies, fully offline) |
+> | ☁️ **[Cloud Deployment (Notion AI, etc.)](docs/notion-mcp.md)** | Cloud AI Agents like Notion AI | [Go to Cloud Guide ↗](docs/notion-mcp.md) (BrowserSkill-style, 0 terminal commands on local PC) |
+
+---
+
+### 💻 Local Deployment (Default)
+
+#### 1. Prerequisites
 
 | Requirement | Version and check |
 | --- | --- |
@@ -36,7 +47,7 @@ Give this README to an agent that can operate your computer and let it guide you
 
 > Administrator access is not required, and your existing Chrome sessions and settings will not be changed.
 
-### 2. Install
+#### 2. Install
 
 1. Clone the repository and enter the project directory:
 
@@ -76,7 +87,7 @@ The setup wizard installs dependencies, builds the project, registers the native
 
 > The **ID** shown in the extension card is the AgentSurf extension ID requested by the setup wizard.
 
-### 3. Check the extension connection
+#### 3. Check the extension connection
 
 1. Return to each browser's extensions page and click **Reload** on the AgentSurf card;
 2. Click the AgentSurf icon in the browser toolbar;
@@ -86,7 +97,7 @@ The setup wizard installs dependencies, builds the project, registers the native
 
 If it is not connected: click **Disconnect** once, wait one second, then click **Connect**.
 
-### 4. Connect your agent (MCP config)
+#### 4. Connect your agent (MCP config)
 
 The installer prints an MCP config block whose key value is the absolute launcher path. Choose either option:
 
@@ -124,6 +135,19 @@ Restart the agent afterwards.
   }
 }
 ```
+
+---
+
+### ☁️ Cloud Deployment (Notion AI, etc.)
+
+If you need a cloud-hosted AI Agent (such as **Notion AI** or custom cloud agents) to control your local browser, use the **Remote Gateway Mode (BrowserSkill-style architecture)**:
+
+* **0 Terminal Commands on Local PC**: No local CLI or SSH reverse tunnels needed; pair directly inside the Chrome extension popup;
+* **Always-Online MCP**: Lightweight cloud gateway keeps Notion connected permanently;
+* **Automate Setup with AI**: Includes prompt templates for AI tools to deploy the gateway for you automatically;
+* Detailed guide: 👉 **[Notion AI & Remote Gateway Deployment Guide (docs/notion-mcp.md)](docs/notion-mcp.md)**.
+
+---
 
 ## Using multiple browsers
 

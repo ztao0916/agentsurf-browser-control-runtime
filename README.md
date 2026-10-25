@@ -26,7 +26,18 @@ AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome 或 Edg
 
 把本 README 交给能操作电脑的 Agent，让它带你完成安装；也可以按下面的步骤手动操作。
 
-### 1. 准备环境
+> **请选择你的部署模式：**
+> 
+> | 模式 | 适用场景 | 说明与入口 |
+> | :--- | :--- | :--- |
+> | 💻 **[本地部署 (默认)](#-本地部署-默认)** | Claude Desktop、Cursor、Codex 等本地 Agent | [查看下方本地步骤 👇](#-本地部署-默认)（0 网络依赖、断网可用） |
+> | ☁️ **[云端部署 (Notion AI 等)](docs/notion-mcp.md)** | Notion AI 等云端 AI Agent | [跳转云端部署指南 ↗](docs/notion-mcp.md)（参考腾讯 BrowserSkill 架构，本地 0 终端） |
+
+---
+
+### 💻 本地部署 (默认)
+
+#### 1. 准备环境
 
 | 需要 | 要求与检查方式 |
 | --- | --- |
@@ -36,7 +47,7 @@ AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome 或 Edg
 
 > 不需要管理员权限，也不会修改你 Chrome 里已有的登录态和设置。
 
-### 2. 安装
+#### 2. 安装
 
 1. 克隆仓库并进入项目目录：
 
@@ -76,7 +87,7 @@ npm run setup -- --browser all
 
 > 图中 **ID** 就是安装向导需要填写的 AgentSurf 扩展 ID。
 
-### 3. 检查扩展连接
+#### 3. 检查扩展连接
 
 1. 回到每个浏览器的扩展页面，点 AgentSurf 卡片上的 **重新加载**；
 2. 点击浏览器工具栏里的 AgentSurf 图标；
@@ -86,7 +97,7 @@ npm run setup -- --browser all
 
 如果没有连接：点一次 **Disconnect**，等 1 秒，再点 **Connect**。
 
-### 4. 接入你的 Agent（MCP 配置）
+#### 4. 接入你的 Agent（MCP 配置）
 
 安装脚本最后会打印一段 MCP 配置，核心是启动器的绝对路径。选择下面任意一种方式接入：
 
@@ -124,6 +135,19 @@ npm run setup -- --browser all
   }
 }
 ```
+
+---
+
+### ☁️ 云端部署 (Notion AI 等)
+
+如果你需要让运行在云端的 AI Agent（如 **Notion AI**、自定义云端智能体）连接并操作你本地的 Chrome，推荐使用 **远程网关模式（参考腾讯 BrowserSkill 架构）**：
+
+* **本地 0 终端**：无需在本地常驻任何命令行或 SSH 隧道，直接在 Chrome 扩展面板一键配对；
+* **Notion 永久在线**：云端常驻轻量网关，Notion 端一次配置终生有效；
+* **一键交给 AI 部署**：文档内附完整 Prompt，复制发给任何 AI 编程工具即可自动完成部署；
+* 详细部署与配置指南请参阅独立文档：👉 **[Notion AI 远程部署与连接指南 (docs/notion-mcp.md)](docs/notion-mcp.md)**。
+
+---
 
 ## 同时使用多个浏览器
 

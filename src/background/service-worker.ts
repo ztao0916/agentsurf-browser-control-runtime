@@ -11,10 +11,14 @@ import { ToolFailure, toToolError } from '../core/protocol/errors';
 import { registerRuntimeMessageHandler } from '../transport/runtime-message-transport';
 import {
   isTransportControlRequest,
+  type TransportConnectionSnapshot,
   type TransportControlRequest,
   type TransportControlResponse,
 } from '../transport/transport-control';
 import { NativeMessagingTransport, type NativeTransportEvent } from '../transport/native-messaging-transport';
+import { RemoteGatewayTransport } from '../transport/remote-gateway-transport';
+import { RemoteExecutionRuntime, type RemoteTaskRecord } from '../core/remote-execution';
+import type { ToolRequest } from '../core/protocol/tool-contract';
 
 const sessions = new ChromeBrowserSessionCoordinator();
 const debuggerAdapter = new ChromeDebuggerAdapter();
@@ -27,16 +31,74 @@ const runtime = new BrowserToolRuntime(
   new ChromeDownloadAdapter(),
   new ChromeFrameAdapter(),
 );
-const externalTransport = new NativeMessagingTransport(
-  (request) => runtime.handle(request),
+const remoteRuntime = new RemoteExecutionRuntime(sessions, {
+  load: async () => {
+    const saved = await chrome.storage.local.get('agentSurfRemoteOperations');
+    return (saved.agentSurfRemoteOperations ?? []) as RemoteTaskRecord[];
+  },
+  save: async (tasks) => { await chrome.storage.local.set({ agentSurfRemoteOperations: tasks }); },
+}, (request) => runtime.handle(request));
+
+const handleTool = (request: ToolRequest) => request.remote || request.tool === 'browser.end_session' || request.tool === 'browser.get_operation'
+  ? remoteRuntime.handle(request) : runtime.handle(request);
+
+let currentMode: 'local' | 'remote' = 'local';
+let gatewayUrl = '';
+let gatewayToken = '';
+
+const nativeTransport = new NativeMessagingTransport(
+  handleTool,
   (event) => publishTransportEvent(event),
 );
 
-externalTransport.connect();
+const remoteTransport = new RemoteGatewayTransport(
+  handleTool,
+  (event) => publishTransportEvent(event),
+);
+
+function getLocalSnapshot(): TransportConnectionSnapshot {
+  const s = nativeTransport.getSnapshot();
+  return {
+    mode: 'local',
+    transport: 'native_messaging',
+    state: s.state,
+    host_name: s.host_name,
+    bridge_url: s.bridge_url,
+    reconnect_attempt: s.reconnect_attempt,
+    pending_requests: s.pending_requests,
+    error: s.error,
+  };
+}
+
+function getActiveSnapshot(): TransportConnectionSnapshot {
+  return currentMode === 'remote' ? remoteTransport.getSnapshot() : getLocalSnapshot();
+}
+
+chrome.storage.local.get(['agentSurfMode', 'agentSurfGatewayUrl', 'agentSurfGatewayToken']).then((stored) => {
+  if (stored['agentSurfMode'] === 'remote') {
+    currentMode = 'remote';
+  }
+  if (typeof stored['agentSurfGatewayUrl'] === 'string') {
+    gatewayUrl = stored['agentSurfGatewayUrl'];
+  }
+  if (typeof stored['agentSurfGatewayToken'] === 'string') {
+    gatewayToken = stored['agentSurfGatewayToken'];
+  }
+
+  remoteTransport.updateCredentials(gatewayUrl, gatewayToken);
+
+  if (currentMode === 'remote') {
+    remoteTransport.connect();
+  } else {
+    nativeTransport.connect();
+  }
+}).catch(() => {
+  nativeTransport.connect();
+});
 
 registerRuntimeMessageHandler(async (message) => {
   if (isTransportControlRequest(message)) {
-    return handleTransportControl(message);
+    return await handleTransportControl(message);
   }
   if (typeof message !== 'object' || message === null || !('kind' in message) || message.kind !== 'tool-request') {
     return undefined;
@@ -44,7 +106,7 @@ registerRuntimeMessageHandler(async (message) => {
 
   const requestId = 'request_id' in message && typeof message.request_id === 'string' ? message.request_id : 'unknown';
   try {
-    return await runtime.handle(parseToolRequest(message));
+    return await handleTool(parseToolRequest(message));
   } catch (error: unknown) {
     const toolError = error instanceof ToolFailure ? error.toolError : toToolError(error);
     return {
@@ -57,22 +119,61 @@ registerRuntimeMessageHandler(async (message) => {
   }
 });
 
-function handleTransportControl(message: TransportControlRequest): TransportControlResponse {
+async function handleTransportControl(message: TransportControlRequest): Promise<TransportControlResponse> {
   try {
     switch (message.action) {
       case 'connect':
-        externalTransport.connect();
+        if (currentMode === 'remote') remoteTransport.connect();
+        else nativeTransport.connect();
         break;
       case 'disconnect':
-        externalTransport.disconnect();
+        if (currentMode === 'remote') remoteTransport.disconnect();
+        else nativeTransport.disconnect();
         break;
       case 'reconnect':
-        externalTransport.reconnect();
+        if (currentMode === 'remote') remoteTransport.reconnect();
+        else nativeTransport.reconnect();
         break;
+      case 'set-mode': {
+        const targetMode = message.mode;
+        if (message.gatewayUrl !== undefined) gatewayUrl = message.gatewayUrl;
+        if (message.gatewayToken !== undefined) gatewayToken = message.gatewayToken;
+
+        if (targetMode !== currentMode) {
+          if (currentMode === 'remote') remoteTransport.disconnect();
+          else nativeTransport.disconnect();
+          currentMode = targetMode;
+        }
+
+        remoteTransport.updateCredentials(gatewayUrl, gatewayToken);
+
+        await chrome.storage.local.set({
+          agentSurfMode: currentMode,
+          agentSurfGatewayUrl: gatewayUrl,
+          agentSurfGatewayToken: gatewayToken,
+        });
+
+        if (currentMode === 'remote') {
+          remoteTransport.connect();
+        } else {
+          nativeTransport.connect();
+        }
+        break;
+      }
+      case 'get-config':
       case 'get-state':
         break;
     }
-    return { ok: true, state: externalTransport.getSnapshot() };
+
+    return {
+      ok: true,
+      state: getActiveSnapshot(),
+      config: {
+        mode: currentMode,
+        gatewayUrl,
+        gatewayToken,
+      },
+    };
   } catch (error: unknown) {
     return { ok: false, error: toToolError(error) };
   }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,52 +7,164 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: system-ui, sans-serif;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 13px;
       }
-      body { margin: 0; padding: 14px 16px 18px; width: 340px; }
-      h1 { font-size: 15px; margin: 0 0 10px; }
-      .state { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-bottom: 10px; }
+      body { margin: 0; padding: 14px 16px 18px; width: 340px; box-sizing: border-box; }
+      h1 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; }
+      .badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(128,128,128,0.2); font-weight: normal; }
+      
+      .mode-switcher {
+        display: flex;
+        background: rgba(128, 128, 128, 0.15);
+        border-radius: 6px;
+        padding: 2px;
+        margin-bottom: 12px;
+      }
+      .mode-btn {
+        flex: 1;
+        padding: 6px 4px;
+        text-align: center;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        color: inherit;
+        transition: background 0.15s, box-shadow 0.15s;
+      }
+      .mode-btn.active {
+        background: #ffffff;
+        color: #000000;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        font-weight: 600;
+      }
+      @media (prefers-color-scheme: dark) {
+        .mode-btn.active {
+          background: #2a2b2d;
+          color: #ffffff;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+      }
+
+      .state { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-bottom: 10px; font-size: 13px; }
       .dot { width: 9px; height: 9px; border-radius: 50%; background: #9aa0a6; flex: none; }
       .dot.connected { background: #1e8e3e; }
       .dot.connecting, .dot.reconnecting { background: #f9ab00; }
       .dot.error { background: #d93025; }
-      dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 10px; }
+      
+      dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0 0 12px; font-size: 12px; }
       dt { color: #5f6368; }
       dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+
+      .form-group { margin-bottom: 10px; }
+      .form-group label { display: block; font-size: 12px; color: #5f6368; margin-bottom: 4px; }
+      .form-group input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border: 1px solid rgba(128,128,128,0.3);
+        border-radius: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        background: rgba(128,128,128,0.05);
+        color: inherit;
+      }
+      .form-group input:focus {
+        outline: none;
+        border-color: #1a73e8;
+      }
+
       .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-      button { font: inherit; padding: 5px 9px; cursor: pointer; }
+      button.action-btn {
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 10px;
+        cursor: pointer;
+        border-radius: 4px;
+        border: 1px solid rgba(128,128,128,0.3);
+        background: rgba(128,128,128,0.08);
+        color: inherit;
+      }
+      button.action-btn:hover {
+        background: rgba(128,128,128,0.18);
+      }
+      button.action-btn.primary {
+        background: #1a73e8;
+        color: #ffffff;
+        border-color: #1a73e8;
+        font-weight: 500;
+      }
+      button.action-btn.primary:hover {
+        background: #1557b0;
+      }
+
       h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #5f6368; margin: 0 0 5px; }
-      #events { margin: 0; padding: 0; list-style: none; max-height: 220px; overflow: auto; }
-      #events li { display: flex; gap: 7px; padding: 2px 0; border-top: 1px solid rgba(128, 128, 128, .25); }
+      #events { margin: 0; padding: 0; list-style: none; max-height: 160px; overflow: auto; font-size: 12px; }
+      #events li { display: flex; gap: 7px; padding: 3px 0; border-top: 1px solid rgba(128, 128, 128, .2); }
       #events li:first-child { border-top: none; }
-      #events .time { color: #5f6368; font-family: ui-monospace, monospace; flex: none; }
+      #events .time { color: #5f6368; font-family: ui-monospace, monospace; flex: none; font-size: 11px; }
       #events .message { overflow-wrap: anywhere; }
       #events .error .message { color: #d93025; }
       #events .empty { color: #5f6368; border-top: none; }
-      #result { min-height: 1.2em; color: #1e8e3e; margin: 8px 0 0; }
+      #result { min-height: 1.2em; color: #1e8e3e; margin: 8px 0 0; font-size: 12px; }
     </style>
   </head>
   <body>
-    <h1>AgentSurf</h1>
-    <p class="state"><span id="state-dot" class="dot"></span><span id="state-text">loading…</span></p>
-    <dl>
-      <dt>Host</dt>
-      <dd id="host-name">com.browsercontrol.runtime</dd>
-      <dt>Endpoint</dt>
-      <dd id="bridge-url">unavailable</dd>
-      <dt>Pending</dt>
-      <dd id="pending">0</dd>
-    </dl>
-    <div class="buttons">
-      <button id="connect" type="button">Connect</button>
-      <button id="disconnect" type="button">Disconnect</button>
-      <button id="reconnect" type="button">Reconnect</button>
-      <button id="copy" type="button">Copy diagnostics</button>
+    <h1>
+      AgentSurf
+      <span class="badge" id="mode-badge">本地模式</span>
+    </h1>
+
+    <div class="mode-switcher">
+      <button class="mode-btn active" id="btn-mode-local" type="button">本地模式 (Local)</button>
+      <button class="mode-btn" id="btn-mode-remote" type="button">远程配对 (Remote)</button>
     </div>
-    <h2>Recent events</h2>
+
+    <p class="state"><span id="state-dot" class="dot"></span><span id="state-text">loading…</span></p>
+
+    <!-- 本地模式面板 -->
+    <div id="panel-local">
+      <dl>
+        <dt>Host</dt>
+        <dd id="host-name">com.browsercontrol.runtime</dd>
+        <dt>Endpoint</dt>
+        <dd id="bridge-url">unavailable</dd>
+        <dt>Pending</dt>
+        <dd id="pending">0</dd>
+      </dl>
+      <div class="buttons">
+        <button class="action-btn" id="connect" type="button">Connect</button>
+        <button class="action-btn" id="disconnect" type="button">Disconnect</button>
+        <button class="action-btn" id="reconnect" type="button">Reconnect</button>
+      </div>
+    </div>
+
+    <!-- 远程配对面板 -->
+    <div id="panel-remote" style="display: none;">
+      <div class="form-group">
+        <label for="gateway-url">云端网关地址 (Gateway WSS URL):</label>
+        <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
+      </div>
+      <div class="form-group">
+        <label for="gateway-token">配对密钥 (Bearer Token):</label>
+        <input id="gateway-token" type="password" placeholder="粘贴密钥" />
+      </div>
+      <div class="buttons">
+        <button class="action-btn primary" id="btn-save-remote" type="button">保存并连接 (Connect)</button>
+        <button class="action-btn" id="btn-disconnect-remote" type="button">断开连接</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 8px;">
+      <button class="action-btn" id="copy" type="button" style="width: 100%;">复制诊断日志 (Copy diagnostics)</button>
+    </div>
+
+    <h2>最近事件 (Recent events)</h2>
     <ul id="events"><li class="empty">No events yet.</li></ul>
     <p id="result"></p>
+
     <script src="debug/debug.js"></script>
   </body>
 </html>

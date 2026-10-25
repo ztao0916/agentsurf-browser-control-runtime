@@ -7,6 +7,8 @@ export const TOP_FRAME_ID = 0;
 
 export type ToolName =
   | 'browser.start_session'
+  | 'browser.end_session'
+  | 'browser.get_operation'
   | 'browser.claim_tab'
   | 'browser.reset_sessions'
   | 'browser.close_tab'
@@ -87,6 +89,16 @@ export interface BrowserSessionInfo {
 export interface StartSessionArgs {
   session_id?: string;
   name?: string;
+}
+
+export interface EndSessionArgs {
+  close_opened_tabs?: boolean;
+}
+
+export interface OperationResult {
+  operation_id: string;
+  state: 'running' | 'completed' | 'unknown';
+  response?: { ok: boolean; result?: unknown; error?: ToolError };
 }
 
 export interface ClaimTabArgs {
@@ -317,6 +329,8 @@ export interface OpenArgs {
 
 export interface ToolArguments {
   'browser.start_session': StartSessionArgs;
+  'browser.end_session': EndSessionArgs;
+  'browser.get_operation': { operation_id: string };
   'browser.claim_tab': ClaimTabArgs;
   'browser.reset_sessions': ResetSessionsArgs;
   'browser.close_tab': TabTargetArgs;
@@ -507,6 +521,8 @@ export interface OpenResult {
 
 export interface ToolResults {
   'browser.start_session': BrowserSessionResult;
+  'browser.end_session': { ended: true; released_tab_ids: number[] };
+  'browser.get_operation': OperationResult;
   'browser.claim_tab': BrowserSessionResult;
   'browser.reset_sessions': ResetSessionsResult;
   'browser.close_tab': CloseTabResult;
@@ -552,6 +568,9 @@ export type ToolRequest<TTool extends ToolName = ToolName> = {
     request_id: string;
     session_id?: string;
     turn_id?: string;
+    /** Remote calls use explicit lifetimes and execution records, never stdio's implicit session. */
+    remote?: boolean;
+    operation_id?: string;
     tool: TCurrentTool;
     args: ToolArguments[TCurrentTool];
   };

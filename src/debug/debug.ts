@@ -1,32 +1,36 @@
 import { sendRuntimeMessage } from '../transport/runtime-message-transport';
 import {
   isTransportControlResponse,
+  type TransportConnectionSnapshot,
   type TransportControlRequest,
   type TransportEventMessage,
 } from '../transport/transport-control';
-import type { NativeConnectionSnapshot, NativeTransportEvent } from '../transport/native-messaging-transport';
+import type { NativeTransportEvent } from '../transport/native-messaging-transport';
 
-/**
- * The popup is a status card, not a tool playground: browser work is driven from code (MCP or
- * `npm run bridge:call`). What cannot be done from code is seeing whether the native host is
- * connected, forcing a reconnect, and reading the last connection errors.
- *
- * Every tool call emits a request and a response event, so keeping those here would flush the
- * connection history within a dozen calls. Only the connection lifecycle is listed.
- */
 const MAX_EVENTS = 5;
 const LISTED_CATEGORIES = new Set<NativeTransportEvent['category']>(['state', 'error']);
+
+const modeBadge = getElement<HTMLSpanElement>('mode-badge');
+const btnModeLocal = getElement<HTMLButtonElement>('btn-mode-local');
+const btnModeRemote = getElement<HTMLButtonElement>('btn-mode-remote');
+const panelLocal = getElement<HTMLDivElement>('panel-local');
+const panelRemote = getElement<HTMLDivElement>('panel-remote');
 
 const stateDot = getElement<HTMLSpanElement>('state-dot');
 const stateText = getElement<HTMLSpanElement>('state-text');
 const hostName = getElement<HTMLElement>('host-name');
 const bridgeUrl = getElement<HTMLElement>('bridge-url');
 const pendingCount = getElement<HTMLElement>('pending');
+const gatewayUrlInput = getElement<HTMLInputElement>('gateway-url');
+const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
+const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
+const btnDisconnectRemote = getElement<HTMLButtonElement>('btn-disconnect-remote');
 const eventsList = getElement<HTMLUListElement>('events');
 const result = getElement<HTMLParagraphElement>('result');
 
 const events: NativeTransportEvent[] = [];
-let snapshot: NativeConnectionSnapshot | null = null;
+let snapshot: TransportConnectionSnapshot | null = null;
+let currentMode: 'local' | 'remote' = 'local';
 
 function getElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -34,15 +38,41 @@ function getElement<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
-function renderState(state: NativeConnectionSnapshot): void {
+function updateModeUI(mode: 'local' | 'remote'): void {
+  currentMode = mode;
+  if (mode === 'local') {
+    modeBadge.textContent = '本地模式';
+    btnModeLocal.classList.add('active');
+    btnModeRemote.classList.remove('active');
+    panelLocal.style.display = 'block';
+    panelRemote.style.display = 'none';
+  } else {
+    modeBadge.textContent = '远程网关配对';
+    btnModeLocal.classList.remove('active');
+    btnModeRemote.classList.add('active');
+    panelLocal.style.display = 'none';
+    panelRemote.style.display = 'block';
+  }
+}
+
+function renderState(state: TransportConnectionSnapshot): void {
   snapshot = state;
+  updateModeUI(state.mode);
+
   stateDot.className = `dot ${state.state}`;
   stateText.textContent = state.error === null ? state.state : `${state.state} — ${state.error}`;
-  hostName.textContent = state.host_name;
-  bridgeUrl.textContent = state.bridge_url ?? 'unavailable';
-  pendingCount.textContent = state.reconnect_attempt > 0
-    ? `${state.pending_requests} (reconnect attempt ${state.reconnect_attempt})`
-    : String(state.pending_requests);
+
+  if (state.mode === 'local') {
+    hostName.textContent = state.host_name ?? 'com.browsercontrol.runtime';
+    bridgeUrl.textContent = state.bridge_url ?? 'unavailable';
+    pendingCount.textContent = state.reconnect_attempt > 0
+      ? `${state.pending_requests} (reconnect attempt ${state.reconnect_attempt})`
+      : String(state.pending_requests);
+  } else {
+    if (state.gateway_url && !gatewayUrlInput.value) {
+      gatewayUrlInput.value = state.gateway_url;
+    }
+  }
 }
 
 function renderEvents(): void {
@@ -84,12 +114,19 @@ async function refresh(): Promise<void> {
   try {
     const response = await sendRuntimeMessage({ kind: 'transport-control', action: 'get-state' } satisfies TransportControlRequest);
     if (isTransportControlResponse(response) && response.ok) {
+      if (response.config) {
+        if (response.config.gatewayUrl && !gatewayUrlInput.value) {
+          gatewayUrlInput.value = response.config.gatewayUrl;
+        }
+        if (response.config.gatewayToken && !gatewayTokenInput.value) {
+          gatewayTokenInput.value = response.config.gatewayToken;
+        }
+      }
       renderState(response.state);
       return;
     }
     setResult('The extension service worker returned an unusable state.', true);
   } catch (error: unknown) {
-    // Without this the card would sit on "loading…" and read as if the link were down.
     setResult(`Cannot reach the extension service worker: ${error instanceof Error ? error.message : String(error)}`, true);
   }
 }
@@ -101,7 +138,6 @@ async function control(action: 'connect' | 'disconnect' | 'reconnect'): Promise<
     renderState(response.state);
     return;
   }
-  // The service worker also reports failures as events; this covers a rejected message.
   setResult(
     isTransportControlResponse(response) && !response.ok
       ? response.error.message
@@ -110,18 +146,33 @@ async function control(action: 'connect' | 'disconnect' | 'reconnect'): Promise<
   );
 }
 
-/**
- * Diagnostics intentionally carry no token: the connection snapshot holds the endpoint and host
- * name, never the bridge credential.
- */
+async function switchMode(targetMode: 'local' | 'remote', url?: string, token?: string): Promise<void> {
+  setResult('');
+  const response = await sendRuntimeMessage({
+    kind: 'transport-control',
+    action: 'set-mode',
+    mode: targetMode,
+    ...(url !== undefined ? { gatewayUrl: url } : {}),
+    ...(token !== undefined ? { gatewayToken: token } : {}),
+  } satisfies TransportControlRequest);
+
+  if (isTransportControlResponse(response) && response.ok) {
+    renderState(response.state);
+    setResult(targetMode === 'remote' ? '已切换并连接到远程网关' : '已切换到本地 Native 模式');
+  } else {
+    setResult('切换模式失败', true);
+  }
+}
+
 function diagnosticsText(): string {
   const lines = [
     `AgentSurf diagnostics ${new Date().toISOString()}`,
     `extension ${chrome.runtime.getManifest().version}`,
-    `user agent ${navigator.userAgent}`,
+    `mode ${currentMode}`,
     snapshot === null ? 'state unavailable' : `state ${snapshot.state}`,
-    snapshot === null ? '' : `host ${snapshot.host_name}`,
-    snapshot === null ? '' : `endpoint ${snapshot.bridge_url ?? 'unavailable'}`,
+    snapshot?.gateway_url ? `gateway ${snapshot.gateway_url}` : '',
+    snapshot?.host_name ? `host ${snapshot.host_name}` : '',
+    snapshot?.bridge_url ? `endpoint ${snapshot.bridge_url}` : '',
     snapshot === null ? '' : `pending ${snapshot.pending_requests} reconnect_attempt ${snapshot.reconnect_attempt}`,
     snapshot?.error == null ? '' : `last error ${snapshot.error}`,
     'events:',
@@ -134,11 +185,37 @@ function diagnosticsText(): string {
 async function copyDiagnostics(): Promise<void> {
   try {
     await navigator.clipboard.writeText(diagnosticsText());
-    setResult('Diagnostics copied.');
+    setResult('诊断日志已复制到剪贴板。');
   } catch (error: unknown) {
-    setResult(`Could not copy: ${error instanceof Error ? error.message : String(error)}`, true);
+    setResult(`复制失败: ${error instanceof Error ? error.message : String(error)}`, true);
   }
 }
+
+btnModeLocal.addEventListener('click', () => {
+  if (currentMode !== 'local') {
+    void switchMode('local');
+  }
+});
+
+btnModeRemote.addEventListener('click', () => {
+  if (currentMode !== 'remote') {
+    updateModeUI('remote');
+  }
+});
+
+btnSaveRemote.addEventListener('click', () => {
+  const url = gatewayUrlInput.value.trim();
+  const token = gatewayTokenInput.value.trim();
+  if (!url) {
+    setResult('请输入网关地址', true);
+    return;
+  }
+  void switchMode('remote', url, token);
+});
+
+btnDisconnectRemote.addEventListener('click', () => {
+  void control('disconnect');
+});
 
 chrome.runtime.onMessage.addListener((message: unknown) => {
   if (typeof message !== 'object' || message === null || !('kind' in message) || message.kind !== 'transport-event') {

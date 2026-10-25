@@ -39,6 +39,21 @@ await build({
   logLevel: 'info',
 });
 
+// Standalone gateway bundle for zero-dependency remote server deployment
+await build({
+  entryPoints: {
+    'mcp/standalone-gateway': resolve(projectRoot, 'src/mcp/cli.ts'),
+  },
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'node20',
+  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+  outdir: dist,
+  sourcemap: false,
+  logLevel: 'info',
+});
+
 // The Native Host is copied into the user's runtime directory during install,
 // so it must not resolve dependencies from the npm package or repository.
 await build({

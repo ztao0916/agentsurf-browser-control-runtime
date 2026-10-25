@@ -8,7 +8,7 @@ export interface NativeHostConfig {
   token: string;
 }
 
-function getRuntimeRoot(): string {
+export function getRuntimeRoot(): string {
   if (process.platform === 'darwin') {
     return join(homedir(), 'Library', 'Application Support', 'BrowserControlRuntime');
   }

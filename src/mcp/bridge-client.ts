@@ -15,6 +15,20 @@ export class LocalBridgeError extends Error {
   }
 }
 
+export class BridgeDeliveryError extends Error {
+  public constructor(public readonly dispatched: boolean) {
+    super(dispatched ? 'Browser operation outcome is unknown. Query the operation; do not replay it.' : 'Browser operation was not dispatched.');
+    this.name = 'BridgeDeliveryError';
+  }
+}
+
+export interface BridgeCallOptions {
+  remote?: boolean | undefined;
+  operationId?: string | undefined;
+  configPath?: string | undefined;
+  timeoutMs?: number | undefined;
+}
+
 /**
  * `session_id` travels at the root of the request, not inside `args`, because that is where
  * `parseToolRequest` reads it and where the runtime's ownership checks look for it. Without it a
@@ -24,12 +38,14 @@ export async function callLocalBridge(
   tool: ToolName,
   args: ToolRequest['args'],
   sessionId?: string,
+  options: BridgeCallOptions = {},
 ): Promise<unknown> {
   const configuredUrl = process.env.BROWSER_BRIDGE_URL;
   const configuredToken = process.env.BROWSER_BRIDGE_TOKEN;
-  const config = configuredUrl !== undefined && configuredToken !== undefined ? undefined : await readConfig();
-  const bridgeUrl = configuredUrl || `ws://127.0.0.1:${config?.port ?? 8765}`;
-  const token = configuredToken || config?.token;
+  const config = options.configPath !== undefined ? await readConfig(options.configPath)
+    : configuredUrl !== undefined && configuredToken !== undefined ? undefined : await readConfig();
+  const bridgeUrl = options.configPath === undefined && configuredUrl ? configuredUrl : `ws://127.0.0.1:${config?.port ?? 8765}`;
+  const token = options.configPath === undefined && configuredToken ? configuredToken : config?.token;
   if (!token) throw new Error('AgentSurf Bridge token is not configured.');
   const requestId = `mcp_${crypto.randomUUID()}`;
 
@@ -37,6 +53,7 @@ export async function callLocalBridge(
     const socket = new WebSocket(bridgeUrl);
     let finished = false;
     let authenticated = false;
+    let dispatched = false;
 
     const finish = (error?: Error, result?: unknown): void => {
       if (finished) return;
@@ -47,7 +64,7 @@ export async function callLocalBridge(
       else reject(error);
     };
 
-    const timeout = setTimeout(() => finish(new Error('AgentSurf request timed out.')), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(() => finish(options.remote ? new BridgeDeliveryError(dispatched) : new Error('AgentSurf request timed out.')), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
 
     socket.on('open', () => {
       socket.send(JSON.stringify({ type: 'auth', role: 'agent', token }));
@@ -68,12 +85,16 @@ export async function callLocalBridge(
         }
         if (authenticated) return;
         authenticated = true;
+        // From this point a send/connection error cannot prove the request did not reach the bridge.
+        dispatched = true;
         socket.send(JSON.stringify({
           protocol_version: '1',
           request_id: requestId,
           tool,
           args,
           ...(sessionId === undefined ? {} : { session_id: sessionId }),
+          ...(options.remote ? { remote: true } : {}),
+          ...(options.operationId === undefined ? {} : { operation_id: options.operationId }),
         }));
         return;
       }
@@ -83,11 +104,15 @@ export async function callLocalBridge(
       }
       if (message.request_id !== requestId) return;
       if (message.ok === true) finish(undefined, message.result);
-      else finish(new LocalBridgeError(readToolError(message.error, 'AgentSurf returned an error.')));
+      else {
+        const toolError = readToolError(message.error, 'AgentSurf returned an error.');
+        if (options.remote && ['request_timeout', 'transport_disconnected'].includes(toolError.code)) finish(new BridgeDeliveryError(dispatched));
+        else finish(new LocalBridgeError(toolError));
+      }
     });
-    socket.on('error', (error) => finish(new Error(`Cannot connect to AgentSurf: ${error.message}`)));
+    socket.on('error', (error) => finish(options.remote ? new BridgeDeliveryError(dispatched) : new Error(`Cannot connect to AgentSurf: ${error.message}`)));
     socket.on('close', () => {
-      if (!finished) finish(new Error('AgentSurf connection closed before a response was received.'));
+      if (!finished) finish(options.remote ? new BridgeDeliveryError(dispatched) : new Error('AgentSurf connection closed before a response was received.'));
     });
   });
 }

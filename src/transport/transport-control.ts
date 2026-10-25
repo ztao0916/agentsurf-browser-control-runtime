@@ -1,14 +1,33 @@
 import type { ToolError } from '../core/protocol/errors';
-import type { NativeConnectionSnapshot, NativeTransportEvent } from './native-messaging-transport';
+import type { NativeConnectionState, NativeTransportEvent } from './native-messaging-transport';
+
+export interface TransportConnectionSnapshot {
+  mode: 'local' | 'remote';
+  transport: 'native_messaging' | 'remote_gateway';
+  state: NativeConnectionState;
+  host_name?: string;
+  bridge_url?: string | null;
+  gateway_url?: string | null;
+  reconnect_attempt: number;
+  pending_requests: number;
+  error: string | null;
+}
+
+export interface GatewayConfig {
+  url: string;
+  token: string;
+}
 
 export type TransportControlRequest =
   | { kind: 'transport-control'; action: 'connect' }
   | { kind: 'transport-control'; action: 'disconnect' }
   | { kind: 'transport-control'; action: 'reconnect' }
-  | { kind: 'transport-control'; action: 'get-state' };
+  | { kind: 'transport-control'; action: 'get-state' }
+  | { kind: 'transport-control'; action: 'get-config' }
+  | { kind: 'transport-control'; action: 'set-mode'; mode: 'local' | 'remote'; gatewayUrl?: string | undefined; gatewayToken?: string | undefined };
 
 export type TransportControlResponse =
-  | { ok: true; state: NativeConnectionSnapshot }
+  | { ok: true; state: TransportConnectionSnapshot; config?: { mode: 'local' | 'remote'; gatewayUrl: string; gatewayToken: string } }
   | { ok: false; error: ToolError };
 
 export interface TransportEventMessage {

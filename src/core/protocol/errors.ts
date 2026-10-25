@@ -1,5 +1,9 @@
 export type ToolErrorCode =
   | 'invalid_request'
+  | 'operation_unknown'
+  | 'operation_conflict'
+  | 'session_busy'
+  | 'resource_limit'
   | 'invalid_url'
   | 'tab_not_found'
   | 'frame_not_found'

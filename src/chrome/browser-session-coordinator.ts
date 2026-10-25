@@ -7,6 +7,8 @@ interface StoredSession {
   name: string | null;
   tab_ids: number[];
   group_id: number | null;
+  /** Remote task lifetime is explicit, including across gateway/worker restarts. */
+  protected?: boolean;
 }
 
 interface TabLease {
@@ -84,6 +86,22 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     chrome.tabGroups.onRemoved.addListener((group) => void this.enqueue(() => this.removeGroup(group.id)));
   }
 
+  public async has(sessionId: string): Promise<boolean> {
+    await this.ensureInitialized();
+    return this.sessions.has(sessionId);
+  }
+
+  public async protect(sessionId: string, protectedTask: boolean): Promise<void> {
+    await this.enqueue(async () => {
+      this.requireSession(sessionId).protected = protectedTask;
+      await this.persistSessions();
+    });
+  }
+
+  public async endRemote(sessionId: string, closeOpenedTabs: boolean): Promise<{ releasedTabIds: number[] }> {
+    return this.reset(sessionId, false, closeOpenedTabs, true);
+  }
+
   // `sessionId` is a plain string, not the UUID literal the default would otherwise infer: the MCP
   // layer forwards a session_id the caller chose, and that id is arbitrary.
   public async start(sessionId: string = crypto.randomUUID(), name?: string): Promise<BrowserSessionInfo> {
@@ -118,6 +136,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
   public async end(sessionId: string, closeTabs: boolean): Promise<{ releasedTabIds: number[] }> {
     return this.enqueue(async () => {
       const session = this.requireSession(sessionId);
+      if (session.protected) throw new ToolFailure(createToolError('session_busy', 'End remote tasks through the remote execution runtime.', false));
       const tabIds = [...session.tab_ids];
       this.sessions.delete(sessionId);
       for (const tabId of tabIds) this.leases.delete(tabId);
@@ -206,7 +225,7 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
       await this.touchLease(lease);
       return;
     }
-    if (!isLeaseIdle(lease, Date.now())) {
+    if (this.sessions.get(lease.session_id)?.protected || !isLeaseIdle(lease, Date.now())) {
       // A caller without a session (a script, a CLI) does not get to bypass a conversation's
       // ownership: leases are authoritative for everyone.
       throw new ToolFailure(createToolError(
@@ -219,7 +238,16 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
       ));
     }
     // The owner went away without releasing, so free the tab instead of blocking it forever.
-    await this.enqueue(() => this.dropLease(tabId, lease.session_id));
+    await this.enqueue(async () => {
+      const current = this.leases.get(tabId);
+      if (current === lease && !this.sessions.get(lease.session_id)?.protected && isLeaseIdle(lease, Date.now())) {
+        await this.dropLease(tabId, lease.session_id);
+      }
+    });
+    const owner = this.leases.get(tabId)?.session_id;
+    if (owner !== undefined && owner !== sessionId) {
+      throw new ToolFailure(createToolError('tab_in_use', 'Tab ownership changed. Claim it before use.', false));
+    }
   }
 
   /**
@@ -228,10 +256,14 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
    */
   public async listLeases(): Promise<Map<number, string>> {
     await this.ensureInitialized();
-    const expired = [...this.leases].filter(([, lease]) => isLeaseIdle(lease, Date.now()));
+    const expired = [...this.leases].filter(([, lease]) => !this.sessions.get(lease.session_id)?.protected && isLeaseIdle(lease, Date.now()));
     if (expired.length > 0) {
       await this.enqueue(async () => {
-        for (const [tabId, lease] of expired) await this.dropLease(tabId, lease.session_id);
+        for (const [tabId, lease] of expired) {
+          if (this.leases.get(tabId) === lease && !this.sessions.get(lease.session_id)?.protected && isLeaseIdle(lease, Date.now())) {
+            await this.dropLease(tabId, lease.session_id);
+          }
+        }
       });
     }
     return new Map([...this.leases].map(([tabId, lease]) => [tabId, lease.session_id]));
@@ -245,8 +277,12 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     sessionId: string | undefined,
     force: boolean,
     closeOpenedTabs = false,
+    remoteEnd = false,
   ): Promise<{ releasedTabIds: number[]; closedTabIds: number[]; sessionCount: number; otherSessionsKept: number }> {
     return this.enqueue(async () => {
+      if (!remoteEnd && [...this.sessions.values()].some((session) => session.protected && (force || session.session_id === sessionId))) {
+        throw new ToolFailure(createToolError('session_busy', 'A protected remote task must be ended through its execution runtime.', false));
+      }
       if (force) {
         // Never closes tabs: force reaches other conversations, and closing their tabs would throw
         // away work they are still doing.
@@ -435,6 +471,16 @@ export class ChromeBrowserSessionCoordinator implements SessionCoordinator {
     if (Array.isArray(leases)) {
       for (const value of leases) {
         if (isStoredLease(value)) this.leases.set(value.tab_id, value.lease);
+      }
+    }
+    // storage.session can be cleared while a page-side action is still running. Restore protected
+    // ownership conservatively; unknown origins become user tabs so cleanup cannot close them.
+    for (const session of this.sessions.values()) {
+      if (!session.protected) continue;
+      for (const tabId of session.tab_ids) {
+        if (this.leases.has(tabId)) continue;
+        const exists = await chrome.tabs.get(tabId).then(() => true, () => false);
+        if (exists) this.leases.set(tabId, { session_id: session.session_id, turn_id: null, origin: 'user', claimed_at: Date.now() });
       }
     }
     await this.ungroupOrphanedTabs();

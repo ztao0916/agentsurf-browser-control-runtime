@@ -29,6 +29,8 @@ type UnknownRecord = Record<string, unknown>;
 
 export const TOOL_NAMES: readonly ToolName[] = [
   'browser.start_session',
+  'browser.end_session',
+  'browser.get_operation',
   'browser.claim_tab',
   'browser.reset_sessions',
   'browser.close_tab',
@@ -65,7 +67,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
  * `browser.start_session` itself to give each conversation its own session before the first real
  * call, so the agent never has to manage sessions by hand.
  */
-export const UNADVERTISED_TOOL_NAMES: readonly ToolName[] = ['browser.start_session'];
+export const UNADVERTISED_TOOL_NAMES: readonly ToolName[] = ['browser.start_session', 'browser.end_session', 'browser.get_operation'];
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
@@ -178,6 +180,10 @@ function invalid(field: string, message: string): ToolFailure {
 function parseArgs(tool: ToolName, value: unknown): ToolRequest['args'] {
   const args = requireRecord(value, 'args');
   switch (tool) {
+    case 'browser.end_session':
+      return { ...(args.close_opened_tabs === undefined ? {} : { close_opened_tabs: requireBoolean(args.close_opened_tabs, 'close_opened_tabs') }) };
+    case 'browser.get_operation':
+      return { operation_id: requireString(args.operation_id, 'operation_id') };
     case 'browser.start_session': {
       const sessionId = optionalString(args.session_id, 'args.session_id');
       const name = optionalString(args.name, 'args.name');
@@ -454,6 +460,8 @@ export function parseToolRequest(value: unknown): ToolRequest {
   const requestId = requireString(input.request_id, 'request_id');
   const sessionId = optionalString(input.session_id, 'session_id');
   const turnId = optionalString(input.turn_id, 'turn_id');
+  const remote = optionalBoolean(input.remote, 'remote');
+  const operationId = optionalString(input.operation_id, 'operation_id');
   const toolValue = requireString(input.tool, 'tool');
   if (!TOOL_NAMES.includes(toolValue as ToolName)) throw invalid('tool', `is unsupported: ${toolValue}`);
   const tool = toolValue as ToolName;
@@ -463,6 +471,8 @@ export function parseToolRequest(value: unknown): ToolRequest {
     request_id: requestId,
     ...(sessionId === undefined ? {} : { session_id: sessionId }),
     ...(turnId === undefined ? {} : { turn_id: turnId }),
+    ...(remote === undefined ? {} : { remote }),
+    ...(operationId === undefined ? {} : { operation_id: operationId }),
     tool,
     args: parseArgs(tool, input.args),
   } as ToolRequest;

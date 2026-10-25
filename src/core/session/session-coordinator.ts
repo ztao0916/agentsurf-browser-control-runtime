@@ -3,6 +3,9 @@ import type { BrowserSessionInfo } from '../protocol/tool-contract';
 export type TabClaimOrigin = 'agent' | 'user' | 'child';
 
 export interface SessionCoordinator {
+  has?(sessionId: string): Promise<boolean>;
+  protect?(sessionId: string, protectedTask: boolean): Promise<void>;
+  endRemote?(sessionId: string, closeOpenedTabs: boolean): Promise<{ releasedTabIds: number[] }>;
   start(sessionId?: string, name?: string): Promise<BrowserSessionInfo>;
   end(sessionId: string, closeTabs: boolean): Promise<{ releasedTabIds: number[] }>;
   name(sessionId: string, name: string): Promise<BrowserSessionInfo>;

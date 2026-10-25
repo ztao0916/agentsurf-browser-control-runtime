@@ -30,6 +30,8 @@ export interface ExternalToolRequest {
   request_id: string;
   session_id?: string;
   turn_id?: string;
+  remote?: boolean;
+  operation_id?: string;
   tool: string;
   args: ToolRequest['args'];
 }
@@ -62,6 +64,8 @@ export function toExternalToolRequest(request: ToolRequest): ExternalToolRequest
     request_id: request.request_id,
     ...(request.session_id === undefined ? {} : { session_id: request.session_id }),
     ...(request.turn_id === undefined ? {} : { turn_id: request.turn_id }),
+    ...(request.remote === undefined ? {} : { remote: request.remote }),
+    ...(request.operation_id === undefined ? {} : { operation_id: request.operation_id }),
     tool: request.tool,
     args: request.args,
   };
