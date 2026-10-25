@@ -141,7 +141,7 @@ export async function startHttpMcpServer(options: {
 
   const store = fileSessionStore(resolvedSessionStorePath);
   const remoteSessions = new RemoteSessions(store, async (tool, args, sessionId, operationId) => {
-    // 1. Direct WSS connection from Chrome Extension (Tencent BrowserSkill style)
+    // 1. Direct WSS connection from Chrome Extension
     if (activeExtensionSocket && activeExtensionSocket.readyState === WebSocket.OPEN) {
       return await dispatchToExtension(activeExtensionSocket, tool, args, sessionId, operationId);
     }

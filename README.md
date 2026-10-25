@@ -31,7 +31,7 @@ AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome 或 Edg
 > | 模式 | 适用场景 | 说明与入口 |
 > | :--- | :--- | :--- |
 > | 💻 **[本地部署 (默认)](#-本地部署-默认)** | Claude Desktop、Cursor、Codex 等本地 Agent | [查看下方本地步骤 👇](#-本地部署-默认)（0 网络依赖、断网可用） |
-> | ☁️ **[云端部署 (Notion AI 等)](docs/notion-mcp.md)** | Notion AI 等云端 AI Agent | [跳转云端部署指南 ↗](docs/notion-mcp.md)（参考腾讯 BrowserSkill 架构，本地 0 终端） |
+> | ☁️ **[云端部署 (Notion AI 等)](docs/notion-mcp.md)** | Notion AI 等云端 AI Agent | [跳转云端部署指南 ↗](docs/notion-mcp.md)（反向连接网关，本地 0 终端） |
 
 ---
 
@@ -140,7 +140,7 @@ npm run setup -- --browser all
 
 ### ☁️ 云端部署 (Notion AI 等)
 
-如果你需要让运行在云端的 AI Agent（如 **Notion AI**、自定义云端智能体）连接并操作你本地的 Chrome，推荐使用 **远程网关模式（参考腾讯 BrowserSkill 架构）**：
+如果你需要让运行在云端的 AI Agent（如 **Notion AI**、自定义云端智能体）连接并操作你本地的 Chrome，推荐使用 **远程网关模式**：
 
 * **本地 0 终端**：无需在本地常驻任何命令行或 SSH 隧道，直接在 Chrome 扩展面板一键配对；
 * **Notion 永久在线**：云端常驻轻量网关，Notion 端一次配置终生有效；

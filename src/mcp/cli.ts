@@ -90,7 +90,7 @@ async function handleInitRemote(args: string[]): Promise<void> {
       + `     - Server URL:     ${cleanUrl}/mcp\n`
       + `     - Authentication: Bearer Token\n`
       + `     - Token:          ${token}\n\n`
-      + `Chrome Extension Setup (BrowserSkill style, 0 terminal commands needed!):\n`
+      + `Chrome Extension Setup (0 terminal commands needed!):\n`
       + `  2. Click AgentSurf extension in Chrome -> Choose 'Remote Gateway'\n`
       + `     - Gateway URL:    ${wsUrl}/ws\n`
       + `     - Pairing Token:  ${token}\n`

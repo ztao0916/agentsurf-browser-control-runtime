@@ -31,7 +31,7 @@ Give this README to an agent that can operate your computer and let it guide you
 > | Mode | Best For | Description & Link |
 > | :--- | :--- | :--- |
 > | 💻 **[Local Deployment (Default)](#-local-deployment-default)** | Claude Desktop, Cursor, Codex, etc. | [See steps below 👇](#-local-deployment-default) (0 network dependencies, fully offline) |
-> | ☁️ **[Cloud Deployment (Notion AI, etc.)](docs/notion-mcp.md)** | Cloud AI Agents like Notion AI | [Go to Cloud Guide ↗](docs/notion-mcp.md) (BrowserSkill-style, 0 terminal commands on local PC) |
+> | ☁️ **[Cloud Deployment (Notion AI, etc.)](docs/notion-mcp.md)** | Cloud AI Agents like Notion AI | [Go to Cloud Guide ↗](docs/notion-mcp.md) (Reverse gateway, 0 terminal commands on local PC) |
 
 ---
 
@@ -140,7 +140,7 @@ Restart the agent afterwards.
 
 ### ☁️ Cloud Deployment (Notion AI, etc.)
 
-If you need a cloud-hosted AI Agent (such as **Notion AI** or custom cloud agents) to control your local browser, use the **Remote Gateway Mode (BrowserSkill-style architecture)**:
+If you need a cloud-hosted AI Agent (such as **Notion AI** or custom cloud agents) to control your local browser, use the **Remote Gateway Mode**:
 
 * **0 Terminal Commands on Local PC**: No local CLI or SSH reverse tunnels needed; pair directly inside the Chrome extension popup;
 * **Always-Online MCP**: Lightweight cloud gateway keeps Notion connected permanently;
