@@ -94,6 +94,7 @@ export async function startHttpMcpServer(options: {
     operationId?: string,
   ): Promise<unknown> {
     const requestId = `gw_${randomUUID()}`;
+    const effectiveOpId = operationId ?? `op_${randomUUID()}`;
     const toolRequest = {
       kind: 'tool-request' as const,
       protocol_version: '1' as const,
@@ -101,7 +102,8 @@ export async function startHttpMcpServer(options: {
       tool,
       args: args as ToolRequest['args'],
       session_id: sessionId,
-      ...(operationId !== undefined ? { turn_id: operationId } : {}),
+      operation_id: effectiveOpId,
+      turn_id: effectiveOpId,
       remote: true,
     } as unknown as ToolRequest;
     const payload: HostToExtensionMessage = {

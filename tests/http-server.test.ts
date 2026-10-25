@@ -248,9 +248,14 @@ describe('http-server', () => {
 
       // Handle messages on fake extension
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data.toString()) as { type: string; request?: { request_id: string; tool: string; args?: { session_id?: string } } };
+        const msg = JSON.parse(event.data.toString()) as {
+          type: string;
+          request?: { request_id: string; tool: string; session_id?: string; operation_id?: string; turn_id?: string; args?: { session_id?: string } };
+        };
         if (msg.type === 'tool_request' && msg.request) {
           const req = msg.request;
+          expect(req.operation_id).toBeDefined();
+          expect(typeof req.operation_id).toBe('string');
           const result = req.tool === 'browser.start_session'
             ? { session: { session_id: req.args?.session_id ?? 'sess-1', name: 'test' } }
             : { tabs: [{ tab_id: 1, title: 'Test Page', url: 'https://example.com' }] };
