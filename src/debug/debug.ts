@@ -34,6 +34,11 @@ const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
 const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
 const btnCancelConfig = getElement<HTMLButtonElement>('btn-cancel-config');
 
+// Modal elements
+const modalUnconfigured = getElement<HTMLDivElement>('modal-unconfigured');
+const btnModalCancel = getElement<HTMLButtonElement>('btn-modal-cancel');
+const btnModalConfigure = getElement<HTMLButtonElement>('btn-modal-configure');
+
 // Feedback & Footer
 const result = getElement<HTMLDivElement>('result');
 const btnCopy = getElement<HTMLButtonElement>('copy');
@@ -221,16 +226,10 @@ gatewayToggle.addEventListener('change', () => {
   if (gatewayToggle.checked) {
     const url = gatewayUrlInput.value.trim();
     const token = gatewayTokenInput.value.trim();
-    if (!url) {
-      // 未配置过：切换不成功，开关弹回 OFF，立即展开表单引导用户配置
+    if (!url || !token) {
+      // 未配置过：保持开关为 OFF，弹出毛玻璃模态引导弹窗
       gatewayToggle.checked = false;
-      isEditingGatewayConfig = true;
-      gatewayContentEnabled.style.display = 'block';
-      gatewayContentDisabled.style.display = 'none';
-      gatewayViewConnected.style.display = 'none';
-      gatewayViewForm.style.display = 'block';
-      setResult('未配置云端网关，请先填写地址与密钥保存', true);
-      gatewayUrlInput.focus();
+      modalUnconfigured.style.display = 'flex';
       return;
     }
     // 之前已配置过：开关直接切换为 ON，立即发起云端连接
@@ -241,6 +240,20 @@ gatewayToggle.addEventListener('change', () => {
     isEditingGatewayConfig = false;
     void switchMode('local');
   }
+});
+
+btnModalCancel.addEventListener('click', () => {
+  modalUnconfigured.style.display = 'none';
+});
+
+btnModalConfigure.addEventListener('click', () => {
+  modalUnconfigured.style.display = 'none';
+  isEditingGatewayConfig = true;
+  gatewayContentEnabled.style.display = 'block';
+  gatewayContentDisabled.style.display = 'none';
+  gatewayViewConnected.style.display = 'none';
+  gatewayViewForm.style.display = 'block';
+  gatewayUrlInput.focus();
 });
 
 btnEditConfig.addEventListener('click', () => {

@@ -387,6 +387,75 @@
       .feedback.success { color: var(--success); }
       .feedback.error { color: var(--danger); }
 
+      /* Frosted Glass Modal Overlay */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        animation: fadeIn 0.15s ease;
+      }
+
+      .modal-card {
+        background: var(--bg);
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 16px 14px 14px;
+        width: 100%;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
+        text-align: center;
+        animation: scaleUp 0.15s ease;
+      }
+
+      .modal-badge-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(37, 99, 235, 0.1);
+        color: var(--primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        margin: 0 auto 8px;
+      }
+
+      .modal-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+
+      .modal-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.45;
+        margin-bottom: 14px;
+        padding: 0 4px;
+      }
+
+      .modal-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes scaleUp {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+
       /* Footer */
       .footer {
         display: flex;
@@ -499,6 +568,21 @@
     <div class="footer">
       <button class="text-btn" id="copy" type="button">复制诊断信息</button>
       <span class="version">v0.1.0</span>
+    </div>
+
+    <!-- Frosted Glass Modal for Unconfigured Cloud Gateway -->
+    <div id="modal-unconfigured" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-badge-icon">🌐</div>
+        <div class="modal-title">未配置云端网关</div>
+        <div class="modal-desc">
+          云端网关用于支持 Notion AI 等远程应用调度当前浏览器。检测到您尚未配置网关地址与密钥。
+        </div>
+        <div class="modal-actions">
+          <button id="btn-modal-cancel" class="btn btn-outline" type="button">暂不配置</button>
+          <button id="btn-modal-configure" class="btn btn-primary" type="button">立即配置</button>
+        </div>
+      </div>
     </div>
 
     <script src="debug/debug.js"></script>
