@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -7,6 +7,7 @@ import {
   initializeRemoteConfig,
   readRemoteConfig,
   rotateRemoteToken,
+  setRemoteAccessMode,
   tokenHash,
 } from '../src/mcp/remote-config';
 
@@ -50,6 +51,7 @@ describe('remote-config', () => {
     const config = await readRemoteConfig(configPath);
     expect(config.version).toBe(1);
     expect(config.port).toBe(8767);
+    expect(config.access_mode).toBe('read-only');
     expect(config.token_hash).toBe(tokenHash(token));
     expect(config.allowed_hosts).toContain('tunnel.example.com');
     expect(config.allowed_hosts).toContain('127.0.0.1:8767');
@@ -79,5 +81,21 @@ describe('remote-config', () => {
     const updatedConfig = await readRemoteConfig(configPath);
     expect(authenticates(`Bearer ${newToken}`, updatedConfig)).toBe(true);
     expect(authenticates(`Bearer ${originalToken}`, updatedConfig)).toBe(false);
+  });
+
+  it('keeps legacy configs interactive and can switch access mode without changing the token', async () => {
+    const token = await initializeRemoteConfig(configPath, 'https://tunnel.example.com', bridgeConfigPath);
+    const original = await readRemoteConfig(configPath);
+    const legacy = { ...original } as Record<string, unknown>;
+    delete legacy.access_mode;
+    await writeFile(configPath, JSON.stringify(legacy));
+
+    expect((await readRemoteConfig(configPath)).access_mode).toBe('interactive');
+    await setRemoteAccessMode(configPath, 'read-only');
+    const updated = await readRemoteConfig(configPath);
+    expect(updated.access_mode).toBe('read-only');
+    expect(updated.token_hash).toBe(original.token_hash);
+    expect(authenticates(`Bearer ${token}`, updated)).toBe(true);
+    expect(JSON.parse(await readFile(configPath, 'utf8'))).toHaveProperty('access_mode', 'read-only');
   });
 });

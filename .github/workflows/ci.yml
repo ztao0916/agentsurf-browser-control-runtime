@@ -32,3 +32,21 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  remote-extension-smoke:
+    name: Remote extension smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build extension and gateway
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Exercise remote browser flow
+        run: npm run test:e2e:remote

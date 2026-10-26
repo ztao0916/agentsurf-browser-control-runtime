@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { getDefaultConfigPath, getRuntimeRoot } from '../native-host/config';
+import type { RemoteAccessMode } from '../core/remote-policy';
 
 const configSchema = z.object({
   version: z.literal(1),
@@ -12,6 +13,7 @@ const configSchema = z.object({
   allowed_hosts: z.array(z.string().min(1)).min(1).max(16),
   allowed_origins: z.array(z.string().url()).max(16),
   bridge_config: z.string().min(1),
+  access_mode: z.enum(['read-only', 'interactive']).optional().default('interactive'),
 }).strict();
 
 export type RemoteConfig = z.infer<typeof configSchema>;
@@ -51,7 +53,7 @@ export async function initializeRemoteConfig(
   const config: RemoteConfig = configSchema.parse({
     version: 1, principal: randomUUID(), token_hash: tokenHash(token), port,
     allowed_hosts: [url.host, `127.0.0.1:${port}`, `localhost:${port}`],
-    allowed_origins: allowedOrigins, bridge_config: resolve(bridgeConfig),
+    allowed_origins: allowedOrigins, bridge_config: resolve(bridgeConfig), access_mode: 'read-only',
   });
   await mkdir(dirname(resolve(path)), { recursive: true, mode: 0o700 });
   await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
@@ -63,6 +65,11 @@ export async function rotateRemoteToken(path: string): Promise<string> {
   const token = randomBytes(32).toString('base64url');
   await writePrivateJson(path, { ...config, token_hash: tokenHash(token) });
   return token;
+}
+
+export async function setRemoteAccessMode(path: string, accessMode: RemoteAccessMode): Promise<void> {
+  const config = await readRemoteConfig(path);
+  await writePrivateJson(path, { ...config, access_mode: accessMode });
 }
 
 export async function writePrivateJson(path: string, value: unknown): Promise<void> {

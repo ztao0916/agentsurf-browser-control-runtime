@@ -42,6 +42,7 @@ describe('RemoteSessions', () => {
       'browser.start_session',
       { name: 'test-task' },
       authorized,
+      () => 'interactive',
     ) as { session: { session_id: string } };
 
     expect(startResult.session.session_id).toMatch(/^remote_[a-f0-9-]+$/);
@@ -53,6 +54,7 @@ describe('RemoteSessions', () => {
       'browser.open',
       { session_id: sessionId, url: 'https://example.com' },
       authorized,
+      () => 'interactive',
     );
     expect(calls.some((c) => c.tool === 'browser.open' && c.sessionId === sessionId)).toBe(true);
 
@@ -62,6 +64,7 @@ describe('RemoteSessions', () => {
       'browser.open',
       { session_id: 'remote_nonexistent', url: 'https://example.com' },
       authorized,
+      () => 'interactive',
     )).rejects.toThrowError(ToolFailure);
 
     // 4. Call with wrong principal fails
@@ -70,6 +73,7 @@ describe('RemoteSessions', () => {
       'browser.open',
       { session_id: sessionId, url: 'https://example.com' },
       authorized,
+      () => 'interactive',
     )).rejects.toThrowError(ToolFailure);
 
     // 5. Explicit end
@@ -78,6 +82,7 @@ describe('RemoteSessions', () => {
       'browser.end_session',
       { session_id: sessionId },
       authorized,
+      () => 'interactive',
     ) as { ended: boolean };
     expect(endResult.ended).toBe(true);
 
@@ -87,6 +92,7 @@ describe('RemoteSessions', () => {
       'browser.open',
       { session_id: sessionId, url: 'https://example.com' },
       authorized,
+      () => 'interactive',
     )).rejects.toThrowError(ToolFailure);
   });
 
@@ -105,7 +111,7 @@ describe('RemoteSessions', () => {
     };
 
     const sessions = new RemoteSessions(memoryStore(), bridge);
-    const startResult = await sessions.call(principal, 'browser.start_session', {}, authorized) as { session: { session_id: string } };
+    const startResult = await sessions.call(principal, 'browser.start_session', {}, authorized, () => 'interactive') as { session: { session_id: string } };
     const sessionId = startResult.session.session_id;
 
     // Click times out with dispatched error
@@ -114,6 +120,7 @@ describe('RemoteSessions', () => {
       'browser.click',
       { session_id: sessionId, tab_id: 1, element_id: 'btn1', operation_id: 'op_click_1' },
       authorized,
+      () => 'interactive',
     )).rejects.toThrowError(/operation_unknown|may have executed/);
 
     // Next mutating action is blocked because of uncertain prior outcome
@@ -122,6 +129,7 @@ describe('RemoteSessions', () => {
       'browser.click',
       { session_id: sessionId, tab_id: 1, element_id: 'btn2', operation_id: 'op_click_2' },
       authorized,
+      () => 'interactive',
     )).rejects.toThrowError(/prior operation has an unknown outcome/);
 
     // Read-only tools like list_tabs are still permitted
@@ -130,6 +138,7 @@ describe('RemoteSessions', () => {
       'browser.list_tabs',
       { session_id: sessionId },
       authorized,
+      () => 'interactive',
     );
     expect(listTabsResult).toEqual({ ok: true });
 
@@ -140,6 +149,7 @@ describe('RemoteSessions', () => {
       'browser.get_operation',
       { session_id: sessionId, operation_id: 'op_click_1' },
       authorized,
+      () => 'interactive',
     ) as OperationResult;
     expect(queryResult.state).toBe('completed');
 
@@ -149,7 +159,29 @@ describe('RemoteSessions', () => {
       'browser.click',
       { session_id: sessionId, tab_id: 1, element_id: 'btn2', operation_id: 'op_click_2' },
       authorized,
+      () => 'interactive',
     );
     expect(nextCall).toEqual({ ok: true });
+  });
+
+  it('allows session lifecycle and reads in read-only mode but refuses browser changes', async () => {
+    const calls: ToolName[] = [];
+    const bridge: RemoteBridgeCall = (tool) => {
+      calls.push(tool);
+      if (tool === 'browser.start_session') return Promise.resolve({ session: { session_id: 'remote_test' } });
+      return Promise.resolve({ ok: true });
+    };
+    const sessions = new RemoteSessions(memoryStore(), bridge);
+    const readOnly = () => 'read-only' as const;
+    const started = await sessions.call(principal, 'browser.start_session', {}, authorized, readOnly) as { session: { session_id: string } };
+    await sessions.call(principal, 'browser.list_tabs', { session_id: started.session.session_id }, authorized, readOnly);
+    await expect(sessions.call(
+      principal,
+      'browser.click',
+      { session_id: started.session.session_id, tab_id: 1, element_id: 'button' },
+      authorized,
+      readOnly,
+    )).rejects.toThrow(/read-only access/);
+    expect(calls).toEqual(['browser.start_session', 'browser.list_tabs']);
   });
 });

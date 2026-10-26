@@ -18,14 +18,14 @@
 > 请阅读本项目中的 docs/remote-gateway.md，帮我完成 AgentSurf 云端远程网关的构建与部署：
 > 1. 我的云服务器 IP 是：[填写你的服务器IP]，SSH 账号是：root（已配置密钥或请提示我输入密码）；
 > 2. 我的域名是：[填写你的域名，例如 mcp.example.com]（已解析到该服务器 IP）；
-> 3. 请帮我在本地执行 npm run build 编译最新的 standalone-gateway.js，并上传部署到云服务器常驻运行；
+> 3. 请帮我在本地执行 npm run build 编译最新的 standalone-gateway.js，并上传到云服务器；在服务器上使用 PM2 后台运行并配置开机恢复；
 > 4. 在云服务器上配置好 Caddy 反向代理（如 443 被占用请使用 9443 备用端口）；
 > 5. 部署完成后，请直接告诉我：
 >    - 云端 MCP 客户端（如 Notion AI / 自定义 Agent）中填写的 Server URL 和 Bearer Token
 >    - Chrome 扩展中填写的 Gateway WSS URL 和 Token
 > ```
 
-AI Agent 会自动替你完成依赖打包、服务器配置和后台常驻。你只需要在 Chrome 扩展和云端 Agent 里填入最终密钥即可！
+AI Agent 会自动替你完成依赖打包、服务器配置和 PM2 进程管理。部署完成后，你只需要在 Chrome 扩展和云端 Agent 里填入配对密钥即可！
 
 ---
 
@@ -105,7 +105,7 @@ npm run build
 scp dist/mcp/standalone-gateway.js root@<服务器IP>:/root/
 ```
 
-#### C. 在云服务器上初始化配置并启动
+#### C. 在云服务器上初始化配置并用 PM2 运行
 登录云服务器：
 ```bash
 ssh root@<服务器IP>
@@ -113,17 +113,74 @@ ssh root@<服务器IP>
 # 1. 确保云服务器已安装 Node.js (>=20)
 node -v || (curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs)
 
-# 2. 初始化远程配置（会自动生成配对 Bearer Token）
+# 2. 安装 PM2（若尚未安装）
+pm2 -v || npm install -g pm2
+
+# 3. 初始化远程配置（首次部署时运行，会生成配对 Bearer Token）
 node /root/standalone-gateway.js init-remote --url https://mcp.example.com:9443
 
-# 3. 在后台常驻启动网关服务
-nohup node /root/standalone-gateway.js start-remote > /root/gateway.log 2>&1 &
+# 4. 通过 PM2 在后台启动网关
+pm2 start /root/standalone-gateway.js --name agentsurf-gateway -- start-remote
+
+# 5. 检查进程和服务器本机健康接口
+pm2 status
+curl -i http://127.0.0.1:8767/health
 ```
 
-此时终端会输出生成的配置凭证：
-* **Bearer Token**：`[自动生成的安全配对密钥]`
+运行 `init-remote` 时，终端会输出以下信息。请保存 Bearer Token，后续配置 Chrome 扩展和远程 MCP 客户端时都要用到；不要重复运行 `init-remote`，除非确实要重新初始化配置。
+
+* **Bearer Token**：自动生成的配对密钥
 * **Public MCP URL**：`https://mcp.example.com:9443/mcp`
 * **Gateway WS URL**：`wss://mcp.example.com:9443/ws`
+
+健康检查应返回 `HTTP/1.1 200 OK` 和 `"status":"ok"`。完成 Chrome 扩展配对后，`extension_connected` 应为 `true`；配对前为 `false` 是正常的。
+
+新初始化的网关默认使用 **只读权限**：可读取页面并查看标签页，但不会开放点击、输入或导航。需要网页交互时，在服务器上显式切换为交互模式，并重启 PM2 进程使 MCP 工具列表刷新：
+
+```bash
+node /root/standalone-gateway.js set-remote-access --mode interactive
+pm2 restart agentsurf-gateway
+```
+
+切回只读模式：
+
+```bash
+node /root/standalone-gateway.js set-remote-access --mode read-only
+pm2 restart agentsurf-gateway
+```
+
+升级前创建的配置没有权限字段，会继续沿用交互模式。可用 `node /root/standalone-gateway.js doctor` 检查配置、本机健康接口和扩展连接；追加 `--url https://mcp.example.com:9443` 可检查公网入口。诊断输出不会显示配对 Token。
+
+PM2 的进程后台运行和服务器开机恢复是两步。首次部署时继续执行：
+
+```bash
+# 生成开机启动配置；按输出提示复制并执行 PM2 给出的命令
+pm2 startup
+
+# 保存当前进程列表，供重启服务器后恢复
+pm2 save
+```
+
+部署命令均以 `root` 为例。后续管理时也要使用同一个 Linux 账号运行 PM2 命令，否则会看到另一份进程列表。常用命令：
+
+```bash
+pm2 status
+pm2 logs agentsurf-gateway
+pm2 restart agentsurf-gateway
+pm2 stop agentsurf-gateway
+```
+
+修改或重新创建 PM2 进程后，运行 `pm2 save` 更新开机恢复列表。更多信息见 [PM2 开机启动说明](https://pm2.keymetrics.io/docs/usage/startup/) 和 [内存超限重启说明](https://pm2.keymetrics.io/docs/usage/restart-strategies/)。
+
+如果服务器内存较小，可用下面这条命令替换上面的 PM2 启动命令（不要两条都运行）：
+
+```bash
+pm2 start /root/standalone-gateway.js --name agentsurf-gateway --max-memory-restart 128M -- start-remote
+```
+
+该阈值表示 PM2 检测到网关超过指定内存后重启进程，不是硬性内存上限；PM2 大约每 30 秒检查一次。按服务器剩余内存选择阈值，不要直接照搬示例。
+
+更新已部署的网关时，重新构建并上传 `standalone-gateway.js` 到 `/root/standalone-gateway.js`，然后运行 `pm2 restart agentsurf-gateway`。通常不需要再次运行 `init-remote`。
 
 ---
 
@@ -183,20 +240,22 @@ AgentSurf 采用双通道互斥开关设计，单面板即可自由切换：
 
 ## 六、 常见问题与排查 (FAQ)
 
-### 1. 扩展提示 `Connection closed (code 1006)`
-* **原因**：填写的 Token 与服务器保存的 Token 不一致，导致鉴权失败关闭连接。
-* **解决办法**：
-  1. 在云服务器上删除旧配置：
-     ```bash
-     rm -f /root/AppData/Local/BrowserControlRuntime/remote-config.json
-     ```
-  2. 重新生成配置并重启：
-     ```bash
-     node /root/standalone-gateway.js init-remote --url https://mcp.example.com:9443
-     pkill -f standalone-gateway
-     nohup node /root/standalone-gateway.js start-remote > /root/gateway.log 2>&1 &
-     ```
-  3. 将新生成的 Token 复制并重新粘贴到 Chrome 扩展中保存连接。
+### 1. 扩展连不上，或远程 MCP 客户端报 502
+先确认网关进程仍在运行，并检查服务器本机健康接口：
+
+```bash
+pm2 status
+curl -i http://127.0.0.1:8767/health
+pm2 logs agentsurf-gateway --lines 100
+```
+
+* 本机健康接口无法连接：网关未运行或启动失败，查看 PM2 日志后运行 `pm2 restart agentsurf-gateway`。
+* 本机健康接口返回 `200 OK`，但公网仍报 502：检查 Caddy 的 `reverse_proxy` 是否指向 `127.0.0.1:8767`，再查看 `sudo journalctl -u caddy -n 100 --no-pager`。
+* 本机健康接口正常，但扩展仍无法连接：确认 Gateway WSS URL 以 `/ws` 结尾，并检查 PM2 日志中的握手错误。只有确认配对密钥不匹配时才轮换密钥；轮换后把新密钥更新到 Chrome 扩展及远程 MCP 客户端：
+  ```bash
+  node /root/standalone-gateway.js rotate-remote-token
+  pm2 restart agentsurf-gateway
+  ```
 
 ### 2. 服务器 443 端口被其他服务占用
 * **解决办法**：让 Caddy 监听备用端口（例如 `9443` 或 `8443`），并在云服务器安全组放行该端口。Caddy 依然可以通过 80 端口自动申请合法的 SSL 证书。

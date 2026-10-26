@@ -27,7 +27,7 @@ import {
 import { fileSessionStore, RemoteSessions } from './remote-sessions';
 import {
   remoteDescriptionFor,
-  remoteToolSchemas,
+  buildRemoteToolSchemas,
   toContent,
 } from './tool-definitions';
 
@@ -239,7 +239,7 @@ export async function startHttpMcpServer(options: {
       }],
     }));
 
-    for (const [tool, schema] of Object.entries(remoteToolSchemas)) {
+    for (const [tool, schema] of Object.entries(buildRemoteToolSchemas(config.access_mode))) {
       const toolName = tool as ToolName;
       const mcpName = tool.replaceAll('.', '_');
       server.registerTool(mcpName, {
@@ -248,7 +248,7 @@ export async function startHttpMcpServer(options: {
         inputSchema: schema,
       }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
         try {
-          const result = await remoteSessions.call(config.principal, toolName, args, isAuthorized);
+          const result = await remoteSessions.call(config.principal, toolName, args, isAuthorized, () => config.access_mode);
           return { content: toContent(toolName, result) };
         } catch (error: unknown) {
           if (error instanceof ToolFailure) {
@@ -345,6 +345,7 @@ export async function startHttpMcpServer(options: {
     const isAuthorized = async (): Promise<boolean> => {
       try {
         const current = await readRemoteConfig(resolvedConfigPath);
+        config = current;
         return authenticates(authHeader, current);
       } catch {
         return authenticates(authHeader, config);

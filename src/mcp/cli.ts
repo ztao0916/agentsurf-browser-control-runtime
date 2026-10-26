@@ -6,7 +6,9 @@ import { installNativeHost } from './install-native-host';
 import {
   getDefaultRemoteConfigPath,
   initializeRemoteConfig,
+  readRemoteConfig,
   rotateRemoteToken,
+  setRemoteAccessMode,
 } from './remote-config';
 import { startMcpServer } from './server';
 
@@ -30,6 +32,14 @@ async function main(): Promise<void> {
   }
   if (command === 'rotate-remote-token') {
     await handleRotateToken(args);
+    return;
+  }
+  if (command === 'set-remote-access') {
+    await handleSetRemoteAccess(args);
+    return;
+  }
+  if (command === 'doctor') {
+    await handleDoctor(args);
     return;
   }
   if (command === 'help' || command === '--help' || command === '-h') {
@@ -64,6 +74,21 @@ function parseRemoteArgs(args: string[]): {
   return result;
 }
 
+function parseDoctorArgs(args: string[]): { config?: string; url?: string } {
+  const result: { config?: string; url?: string } = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (!arg) continue;
+    const [flag, inlineValue] = arg.split('=', 2);
+    const value = inlineValue ?? args[i + 1];
+    if (inlineValue === undefined) i += 1;
+    if (flag === '--config' && value) result.config = value;
+    else if (flag === '--url' && value) result.url = value;
+    else throw new Error(`Unknown option: ${arg}`);
+  }
+  return result;
+}
+
 async function handleInitRemote(args: string[]): Promise<void> {
   const options = parseRemoteArgs(args);
   if (!options.url) {
@@ -84,6 +109,7 @@ async function handleInitRemote(args: string[]): Promise<void> {
       + `  Config file:    ${configPath}\n`
       + `  Bearer Token:   ${token}\n`
       + `  Public MCP URL: ${cleanUrl}/mcp\n`
+      + `  Access mode:    read-only (change with set-remote-access --mode interactive)\n`
       + `  Gateway WS URL: ${wsUrl}/ws\n\n`
       + `Remote Client Setup (e.g. Notion AI, Custom Agent, Dify):\n`
       + `  1. Add MCP connection in your remote client or platform:\n`
@@ -98,6 +124,72 @@ async function handleInitRemote(args: string[]): Promise<void> {
       + `Start the gateway server with:\n`
       + `  agentsurf-mcp start-gateway\n`,
   );
+}
+
+async function handleSetRemoteAccess(args: string[]): Promise<void> {
+  let mode: 'read-only' | 'interactive' | undefined;
+  let configPath = getDefaultRemoteConfigPath();
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (!arg) continue;
+    const [flag, inlineValue] = arg.split('=', 2);
+    const value = inlineValue ?? args[i + 1];
+    if (inlineValue === undefined) i += 1;
+    if (flag === '--mode' && (value === 'read-only' || value === 'interactive')) mode = value;
+    else if (flag === '--config' && value) configPath = value;
+    else throw new Error(`Usage: agentsurf-mcp set-remote-access --mode read-only|interactive [--config <path>]`);
+  }
+  if (!mode) throw new Error('Usage: agentsurf-mcp set-remote-access --mode read-only|interactive [--config <path>]');
+  await setRemoteAccessMode(configPath, mode);
+  process.stdout.write(`Remote access mode set to ${mode}. Restart the gateway to refresh the published MCP tools.\n`);
+}
+
+async function handleDoctor(args: string[]): Promise<void> {
+  const options = parseDoctorArgs(args);
+  const configPath = options.config ?? getDefaultRemoteConfigPath();
+  let config;
+  try {
+    config = await readRemoteConfig(configPath);
+    process.stdout.write(`PASS remote config: ${configPath}\n`);
+    process.stdout.write(`INFO access mode: ${config.access_mode}\n`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`FAIL remote config: ${message}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const localUrl = `http://127.0.0.1:${config.port}/healthz`;
+  let extensionConnected = false;
+  try {
+    const response = await fetch(localUrl, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const health = await response.json() as { status?: string; extension_connected?: boolean };
+    if (health.status !== 'ok') throw new Error('Unexpected health response');
+    extensionConnected = health.extension_connected === true;
+    process.stdout.write(`PASS local gateway health: ${localUrl}\n`);
+    process.stdout.write(`${extensionConnected ? 'PASS' : 'WARN'} Chrome extension: ${extensionConnected ? 'connected' : 'not connected'}\n`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`FAIL local gateway health: ${message}\n`);
+    process.exitCode = 1;
+  }
+
+  if (options.url) {
+    let healthUrl: string;
+    try {
+      const url = new URL(options.url);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('URL must use HTTP or HTTPS');
+      healthUrl = `${url.origin}${url.pathname.replace(/\/+$/u, '')}/healthz`;
+      const response = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      process.stdout.write(`PASS public gateway health: ${healthUrl}\n`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`FAIL public gateway health: ${message}\n`);
+      process.exitCode = 1;
+    }
+  }
 }
 
 async function handleStartRemote(args: string[]): Promise<void> {
@@ -134,6 +226,8 @@ function printUsage(): void {
       + '  agentsurf-mcp install-native-host --extension-id <extension-id> [--browser chrome|edge] [--port <port>]\n'
       + '  agentsurf-mcp init-remote --url <public-https-url> [--config <path>] [--port <port>]\n'
       + '  agentsurf-mcp start-remote [--config <path>]\n'
+      + '  agentsurf-mcp doctor [--config <path>] [--url <public-gateway-url>]\n'
+      + '  agentsurf-mcp set-remote-access --mode read-only|interactive [--config <path>]\n'
       + '  agentsurf-mcp rotate-remote-token [--config <path>]\n',
   );
 }

@@ -9,6 +9,17 @@ export const REMOTE_EXCLUDED_TOOLS: readonly ToolName[] = [
   'browser.reset_sessions', 'browser.set_files', 'browser.list_downloads', 'browser.wait_for_download',
 ];
 
+export type RemoteAccessMode = 'read-only' | 'interactive';
+
+const REMOTE_SESSION_TOOLS: readonly ToolName[] = [
+  'browser.start_session', 'browser.end_session', 'browser.get_operation',
+];
+
+export function isRemoteToolAllowed(tool: ToolName, mode: RemoteAccessMode): boolean {
+  if (REMOTE_EXCLUDED_TOOLS.includes(tool)) return false;
+  return mode === 'interactive' || REMOTE_READ_TOOLS.includes(tool) || REMOTE_SESSION_TOOLS.includes(tool);
+}
+
 /** Stable hashing input; argument order must not turn a retry into a different operation. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;

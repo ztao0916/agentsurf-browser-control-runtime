@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { ToolName } from '../core/protocol/tool-contract';
-import { REMOTE_EXCLUDED_TOOLS } from '../core/remote-policy';
+import { isRemoteToolAllowed, REMOTE_EXCLUDED_TOOLS, type RemoteAccessMode } from '../core/remote-policy';
 
 const tabId = { tab_id: z.number().int().describe('Chrome tab ID.') };
 const optionalTabId = { tab_id: z.number().int().optional().describe('Chrome tab ID. Defaults to the active tab when omitted.') };
@@ -126,6 +126,10 @@ for (const [tool, schema] of Object.entries(schemas)) {
 }
 export const remoteToolSchemas: Record<string, z.ZodRawShape> = builtRemoteToolSchemas;
 
+export function buildRemoteToolSchemas(mode: RemoteAccessMode = 'interactive'): Record<string, z.ZodRawShape> {
+  if (mode === 'interactive') return remoteToolSchemas;
+  return Object.fromEntries(Object.entries(remoteToolSchemas).filter(([tool]) => isRemoteToolAllowed(tool as ToolName, mode)));
+}
 type ContentBlock = CallToolResult['content'][number];
 
 interface ScreenshotPayload {

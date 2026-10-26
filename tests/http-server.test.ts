@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isValidHost, isValidOrigin, startHttpMcpServer } from '../src/mcp/http-server';
-import { initializeRemoteConfig } from '../src/mcp/remote-config';
+import { initializeRemoteConfig, setRemoteAccessMode } from '../src/mcp/remote-config';
 
 interface HealthResponse {
   status: string;
@@ -65,6 +65,7 @@ describe('http-server', () => {
         bridgeConfigPath,
         0, // use random port for test
       );
+      await setRemoteAccessMode(configPath, 'interactive');
 
       serverHandle = await startHttpMcpServer({ configPath });
     });

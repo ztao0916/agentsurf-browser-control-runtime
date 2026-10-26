@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { ToolName, ToolRequest } from '../core/protocol/tool-contract';
-import { REMOTE_READ_TOOLS } from '../core/remote-policy';
+import { isRemoteToolAllowed, REMOTE_READ_TOOLS, type RemoteAccessMode } from '../core/remote-policy';
 import { createToolError, ToolFailure } from '../core/protocol/errors';
 import { BridgeDeliveryError, LocalBridgeError } from './bridge-client';
 import { writePrivateJson } from './remote-config';
@@ -60,9 +60,16 @@ export class RemoteSessions {
     });
   }
 
-  public async call(principal: string, tool: ToolName, args: Record<string, unknown>, authorized: () => Promise<boolean>): Promise<unknown> {
+  public async call(
+    principal: string,
+    tool: ToolName,
+    args: Record<string, unknown>,
+    authorized: () => Promise<boolean>,
+    accessMode: () => RemoteAccessMode,
+  ): Promise<unknown> {
     await this.ready;
     if (this.stopping || !await authorized()) throw denied();
+    if (!isRemoteToolAllowed(tool, accessMode())) throw permissionDenied();
     const operationId = typeof args.operation_id === 'string' ? args.operation_id : randomUUID();
     let session: RemoteSession;
     if (tool === 'browser.start_session') {
@@ -97,6 +104,7 @@ export class RemoteSessions {
     if (tool === 'browser.end_session') session.state = 'ending';
     const run = async (): Promise<unknown> => {
       if (!await authorized()) throw denied();
+      if (!isRemoteToolAllowed(tool, accessMode())) throw permissionDenied();
       if (session.state === 'ended' && tool !== 'browser.get_operation') throw missing();
       if (Date.now() - session.touched > 30 * 60_000 && tool !== 'browser.end_session' && tool !== 'browser.get_operation') throw missing();
       if (session.uncertain.length > 0 && tool !== 'browser.get_operation' && !REMOTE_READ_TOOLS.includes(tool)) {
@@ -190,6 +198,7 @@ export class RemoteSessions {
 
 const missing = () => new ToolFailure(createToolError('session_not_found', 'Task is missing, expired, ended or belongs to another principal. Start a new task explicitly.', false));
 const denied = () => new ToolFailure(createToolError('permission_denied', 'Remote access was revoked or the service is stopping.', false));
+const permissionDenied = () => new ToolFailure(createToolError('permission_denied', 'This remote gateway is configured for read-only access.', false));
 const limit = () => new ToolFailure(createToolError('resource_limit', 'Remote task or queue limit reached.', false));
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 

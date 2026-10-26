@@ -20,10 +20,10 @@ const localToggle = getElement<HTMLInputElement>('local-toggle');
 const localStatusBox = getElement<HTMLDivElement>('local-status-box');
 const localStatusDot = getElement<HTMLSpanElement>('local-status-dot');
 const localStatusText = getElement<HTMLSpanElement>('local-status-text');
-const hostName = getElement<HTMLElement>('host-name');
 
 // Card 2: Remote Gateway elements
 const gatewayToggle = getElement<HTMLInputElement>('gateway-toggle');
+const cardGateway = getElement<HTMLDivElement>('card-gateway');
 const gatewayContentEnabled = getElement<HTMLDivElement>('gateway-content-enabled');
 const gatewayContentDisabled = getElement<HTMLDivElement>('gateway-content-disabled');
 
@@ -103,9 +103,6 @@ function renderState(state: TransportConnectionSnapshot): void {
   const remoteState = state.remote_state ?? (isRemote ? state.state : 'disconnected');
   const localState = state.local_state ?? (state.mode === 'local' ? state.state : 'connected');
 
-  // Update Host name
-  hostName.textContent = state.host_name ?? 'com.browsercontrol.runtime';
-
   // Mutually exclusive toggle states
   localToggle.checked = !isRemote;
   gatewayToggle.checked = isRemote;
@@ -121,22 +118,24 @@ function renderState(state: TransportConnectionSnapshot): void {
     if (remoteState === 'connected') {
       // Remote Gateway is Active
       cardLocal.className = 'card';
+      cardGateway.className = 'card active';
       localStatusBox.className = 'gateway-status-box standby';
       localStatusDot.style.background = '#94a3b8';
-      localStatusText.textContent = '待命中';
+      localStatusText.textContent = '本地直连待命';
 
       headerStatusBadge.className = 'status-badge connected';
       headerStatusText.textContent = '云端网关生效中';
 
-      gatewayStatusText.textContent = '已配对 · 当前生效';
+      gatewayStatusText.textContent = '已连接';
       gatewayStatusDot.style.background = 'var(--success)';
       gatewayViewConnected.className = 'gateway-status-box';
     } else if (remoteState === 'connecting' || remoteState === 'reconnecting') {
       // Connecting to remote
       cardLocal.className = 'card';
+      cardGateway.className = 'card active';
       localStatusBox.className = 'gateway-status-box standby';
       localStatusDot.style.background = '#94a3b8';
-      localStatusText.textContent = '待命中 (本地可用)';
+      localStatusText.textContent = '本地直连待命';
 
       headerStatusBadge.className = 'status-badge connecting';
       headerStatusText.textContent = '云端连接中...';
@@ -147,23 +146,25 @@ function renderState(state: TransportConnectionSnapshot): void {
     } else {
       // Remote error / disconnected
       cardLocal.className = 'card';
+      cardGateway.className = 'card error';
       localStatusBox.className = 'gateway-status-box standby';
       localStatusDot.style.background = '#94a3b8';
-      localStatusText.textContent = '待命中 (本地可用)';
+      localStatusText.textContent = '本地直连可用';
 
       headerStatusBadge.className = 'status-badge error';
       headerStatusText.textContent = '云端未连接 (本地可用)';
 
-      gatewayStatusText.textContent = state.error ? `连接失败: ${state.error}` : '网关未连接';
+      gatewayStatusText.textContent = state.error ? `连接失败：${state.error}` : '尚未连接';
       gatewayStatusDot.style.background = 'var(--danger)';
       gatewayViewConnected.className = 'gateway-status-box warn';
     }
   } else {
     // Local mode is Active
-    cardLocal.className = 'card';
-    localStatusBox.className = 'gateway-status-box';
-    localStatusDot.style.background = localState === 'error' ? 'var(--danger)' : 'var(--success)';
-    localStatusText.textContent = localState === 'error' ? '本地异常' : '当前生效';
+    cardLocal.className = localState === 'error' ? 'card error' : 'card active';
+    cardGateway.className = 'card';
+    localStatusBox.className = localState === 'connected' ? 'gateway-status-box' : 'gateway-status-box standby';
+    localStatusDot.style.background = localState === 'error' ? 'var(--danger)' : localState === 'connected' ? 'var(--success)' : '#94a3b8';
+    localStatusText.textContent = localState === 'error' ? '本地连接失败' : localState === 'connected' ? '连接正常' : '等待本机客户端';
 
     gatewayContentEnabled.style.display = 'none';
     gatewayContentDisabled.style.display = 'flex';
