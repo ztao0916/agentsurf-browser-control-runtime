@@ -14,3 +14,4 @@
   - 提交 `punkpeye/awesome-mcp-servers` **PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)**（`Browser Automation` 分类，`2/2` checks 通过，当前等待 `missing-glama` 条件补齐）；
   - 仓库新增 [Dockerfile](../../Dockerfile)、[.dockerignore](../../.dockerignore) 与 [glama.json](../../glama.json)（`aab2e94`），验证 stdio `tools/list` 无头返回 29 个工具后，完成 **Glama** `Runs from source` 表单提交审核；
   - 通过 `wong2/awesome-mcp-servers` 指定的官方入口 `https://mcpservers.org/submit` 完成 `$0` 免费提交（`AgentSurf`）。
+- **npm 包名确定与首次上传（`e753ae7`）**：定名 `agentsurf-mcp`（与 `bin` 同名），配置 `mcpName`（`io.github.ztao0916/agentsurf`）与 `publishConfig.registry`；已上传 `agentsurf-mcp@0.7.0`（`535.7 kB` / `9` files）至 npm 官方源，当前处于 staged release（`0.0.0-stage`）待网页端放行。
