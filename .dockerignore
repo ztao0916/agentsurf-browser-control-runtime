@@ -1,0 +1,7 @@
+.git/
+node_modules/
+dist/
+coverage/
+docs/assets/
+memory-bank/
+*.log
