@@ -18,16 +18,22 @@ AgentSurf 可以接入 **Claude Desktop、Cursor、Codex、Gemini 网页端、No
 
 ## 为什么选择 AgentSurf？
 
-绝大多数浏览器 MCP 会新起一个无头 Playwright / Puppeteer 实例，导致每次都要重新登录，还容易触发反爬与人机校验。AgentSurf 直接连接你日常使用的真实浏览器：
+如果你在对比 **Playwright / Puppeteer MCP**、**腾讯 BrowserSkill (`bsk`)** 等大厂本地浏览器 Skill 与 **AgentSurf**，下面这些差异正是开发者选择 AgentSurf 的核心原因：
 
-| 对比项 | AgentSurf | 常见无头浏览器 MCP |
-| --- | --- | --- |
-| **登录态与 Cookie** | 直接复用你当前已登录的 Chrome / Edge | 每次需重新登录或手动搬运 Profile |
-| **风控与反爬** | 真实桌面浏览器指纹与会话环境 | 容易被识别为自动化无头环境 |
-| **云端网页 Agent 接入** | 内置 **Streamable HTTP + OAuth 2.0 (PKCE)** 与 **反向 WSS 网关** | 通常仅支持本机 `stdio` |
-| **家里 + 公司多电脑协同** | 多台浏览器连同一网关不互踢，按活跃窗口自动路由 | 仅限单机单实例 |
-| **多对话并发隔离** | 会话级标签页租约 + Chrome 彩色 Tab Group 分组隔离 | 多个任务易互相干扰 |
-| **安全护栏** | 远程默认 `read-only`；不向页面 `MAIN` 世界注入 `console` 劫持 | 默认开放全量控制 |
+- **不仅能本地用，更能从云端 / 网页端 AI 直接操控**：`BrowserSkill` 主打本地 Shell 命令行（`bsk`），要求 Agent 必须有本机终端权限；Playwright MCP 默认起本地隔离沙盒。**AgentSurf 原生实现标准 MCP（`stdio` + `Streamable HTTP`）与 OAuth 2.0 (PKCE)**，让 **Gemini 网页端、Notion AI、Dify** 等没有本地终端的云端/网页智能体，也能安全调度你桌面上的真实 Chrome / Edge。
+- **家里 + 公司跨电脑协同，一个网关搞定**：大厂本地 CLI 工具通常绑定单台机器的守护进程；AgentSurf 允许家里和公司浏览器同时挂在同一个 `wss://.../ws` 地址下而不互踢，并按当前活跃操作窗口自动路由。
+- **无需开放 Shell 权限，且为大模型省 Token 而设计**：Agent 调用的是带严格 Schema 校验的 MCP 工具，无需给它本机 Bash/Shell 权限；交互快照在页面内直接过滤与截断（实测 665 个元素的重型页面从 **~66,800 tokens 降至 ~15,100**，开启 `visible_only: true` 后仅 **~380 tokens**）。
+- **私有自托管、零厂商绑定与安全护栏**：无第三方云端中转、无遥测、无需注册账号。支持完全离线本地运行或单文件 `standalone-gateway.js` 自建网关（远程默认 `read-only` 只读、Token/Secret 全量哈希、SHA-256 操作幂等防重放、不向页面 `MAIN` 世界注入 `console` 劫持）。
+
+| 对比维度 | AgentSurf | 本地 CLI 浏览器 Skill（如腾讯 BrowserSkill） | 无头浏览器 MCP（Playwright / Puppeteer） |
+| --- | --- | --- | --- |
+| **复用已登录 Chrome / Edge** | 支持（复用真实标签页与 Cookie） | 支持（通过扩展复用真实浏览器） | 不支持（默认空白环境或需搬运 Profile） |
+| **反爬与风控友好度** | 真实桌面浏览器环境 | 真实桌面浏览器环境 | 容易被无头自动化特征识别拦截 |
+| **接入协议与权限面** | **标准 MCP（`stdio` + `Streamable HTTP`）**，无需给 Agent 开 Shell | 主打本地 **CLI（`bsk`）**，依赖具备本地 Shell 权限的 Agent | 本地 `stdio` / 本地 MCP Server |
+| **云端网页 Agent（Gemini 网页端 / Notion AI / Dify）** | **内置 OAuth 2.0 (PKCE) + Bearer + 反向 WSS** | 仅限本地有终端的编程 Agent | 仅限本地，除非自行封装暴露 |
+| **家里 + 公司多电脑路由** | **支持**（同网关不互踢、活跃窗口自动路由、会话锁定） | 单机本地守护进程 | 单机本地进程 |
+| **上下文与 Token 消耗** | 页面内过滤截断（实测 **~66.8k → ~380 tokens**） | 通过 CLI 命令抽取内容 | 易输出整棵大 DOM / AX 树 |
+| **安全与隔离机制** | 远程默认 `read-only`、会话级 Tab Group 隔离、`operation_unknown` 幂等保护、无 `MAIN` 世界注入 | 独立 Agent 窗口 / 借用归还 + 人工确认 | 共享状态、默认全量读写权限 |
 
 ---
 

@@ -18,16 +18,22 @@ AgentSurf connects **Claude Desktop, Cursor, Codex, Gemini Web, Notion AI, Dify*
 
 ## Why AgentSurf?
 
-Most browser MCP servers launch a fresh headless Playwright/Puppeteer instance. That forces you to re-authenticate on every workflow and often triggers anti-bot challenges. AgentSurf connects directly to the browser you already use every day.
+If you are choosing between **Playwright / Puppeteer MCP**, local shell browser skills like **Tencent BrowserSkill (`bsk`)**, and **AgentSurf**, here is why users pick AgentSurf:
 
-| Capability | AgentSurf | Typical Headless Browser MCP |
-| --- | --- | --- |
-| **Existing logins & sessions** | Reuses your live Chrome / Edge tabs & cookies | Starts logged out or requires brittle profile copies |
-| **Anti-bot friendliness** | Real user browser environment | Often flagged by headless automation signals |
-| **Cloud / Web AI Agents** | Built-in **Streamable HTTP + OAuth 2.0 (PKCE)** & **Reverse WSS** | Usually local `stdio` only |
-| **Home + Office multi-PC** | Multiple browsers share one gateway via active-window routing | Single local instance |
-| **Multi-conversation isolation** | Per-session tab leases + labeled Chrome Tab Groups | Shared browser state across prompts |
-| **Safety guardrails** | Remote mode starts `read-only`; no `MAIN`-world `console` patching | Full read/write exposure by default |
+- **Works with Cloud & Web AI — Not Just Local Terminals**: Local CLI skills (like `BrowserSkill`) require an agent with local bash/shell access, and Playwright MCP launches isolated local sandboxes. AgentSurf exposes **standard MCP (`stdio` + `Streamable HTTP`) with built-in OAuth 2.0 (PKCE)** so **Gemini Web, Notion AI, Dify**, and mobile/cloud workflows can drive your real desktop browser with zero local shell permission required.
+- **Home + Office Multi-PC on One Gateway**: Instead of one daemon bound to one machine, both your home and office browsers connect to the same `wss://.../ws` endpoint without kicking each other offline—automatically routing to whichever Chrome window you are actively using.
+- **No Shell Execution Risk & Built for Token Efficiency**: Unlike CLI-driven browser skills, your agent never needs shell access to control the browser. Interactive snapshots are filtered and capped *inside the page* (benchmarked: a 665-element page drops from **~66,800 tokens** to **~15,100**, or **~380 tokens** with `visible_only: true`).
+- **Self-Hosted Privacy & Zero Lock-In**: No third-party cloud relay, no telemetry, and no account required. Run 100% offline locally or self-host the single-file `standalone-gateway.js` (`read-only` by default on remote, hashed tokens, SHA-256 operation idempotency journal, and zero `MAIN`-world `console` patching).
+
+| Capability | AgentSurf | Local Shell Browser Skills (e.g. Tencent BrowserSkill) | Headless MCP (Playwright / Puppeteer) |
+| --- | --- | --- | --- |
+| **Reuses signed-in Chrome / Edge** | Yes (live tabs & cookies) | Yes (live browser via extension) | No (starts fresh or needs brittle profile copies) |
+| **Anti-bot friendliness** | Real desktop browser session | Real desktop browser session | Often flagged by headless automation signals |
+| **Agent protocol** | **Standard MCP (`stdio` + `Streamable HTTP`)** — no shell required | Local **CLI (`bsk`)** — requires shell-capable coding agent | Local `stdio` / local server MCP |
+| **Cloud Web Agents (Gemini Web, Notion AI, Dify)** | **Built-in OAuth 2.0 (PKCE) + Bearer + Reverse WSS** | Local shell agents only | Local only unless custom-wrapped |
+| **Home + Office multi-PC routing** | **Yes** — active-window auto-routing, session stickiness & pinning | Single local machine daemon | Single local process |
+| **Context & token footprint** | In-page filtered snapshots (**~66.8k → ~380 tokens**) | Page extraction via CLI commands | Large raw DOM / AX tree dumps |
+| **Safety & isolation** | Remote `read-only` default, per-session Tab Groups, `operation_unknown` idempotency, zero `MAIN`-world patching | Dedicated agent window / tab borrowing + human confirmation | Shared browser state; full read/write by default |
 
 ---
 
