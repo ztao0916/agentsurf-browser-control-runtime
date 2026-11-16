@@ -9,4 +9,8 @@
 - **全英文实操演示 GIF 与文档更新（`addbbe6`、`3cc1e63`、`db62c68`）**：
   - 将真实 Gemini Web 操控 Wikipedia（打开蓝色 Tab Group、`AI` 光标输入搜索词、提交跳转、滚动阅读与 3 要点英文总结）剪辑生成为无弹窗纯 GIF [gemini-web-demo.gif](../../docs/assets/gemini-web-demo.gif)（`880×545`、`16.9s`、`2.27 MB`）；
   - 更新 [README.md](../../README.md)、[README.zh-CN.md](../../README.zh-CN.md)、[remote-gateway.en.md](../../docs/remote-gateway.en.md) 与 [remote-gateway.md](../../docs/remote-gateway.md)，明确标注 Gemini Web 对非只读交互工具仍会弹出 `Always allow` 确认卡片的客户端行为限制。
-- **推广渠道调研与项目知识库初始化**：通过 AgentSurf 完成 11 个海内外社区与 MCP 目录的规则与实时状态核验，并在当前项目下建立轻量化 `AGENTS.md` + `memory-bank/` 分层记忆。
+- **推广渠道调研与项目知识库初始化（`e57e11c`、`9901875`）**：通过 AgentSurf 完成海内外社区与 MCP 目录的规则与实时状态核验，并在当前项目下建立轻量化 `AGENTS.md` + `memory-bank/` 分层记忆。
+- **MCP 目录与收录首轮提交（`aab2e94` + 浏览器执行）**：
+  - 提交 `punkpeye/awesome-mcp-servers` **PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)**（`Browser Automation` 分类，`2/2` checks 通过，当前等待 `missing-glama` 条件补齐）；
+  - 仓库新增 [Dockerfile](../../Dockerfile)、[.dockerignore](../../.dockerignore) 与 [glama.json](../../glama.json)（`aab2e94`），验证 stdio `tools/list` 无头返回 29 个工具后，完成 **Glama** `Runs from source` 表单提交审核；
+  - 通过 `wong2/awesome-mcp-servers` 指定的官方入口 `https://mcpservers.org/submit` 完成 `$0` 免费提交（`AgentSurf`）。

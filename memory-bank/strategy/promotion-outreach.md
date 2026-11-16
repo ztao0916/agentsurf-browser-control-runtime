@@ -22,26 +22,28 @@
 
 ## 2. 渠道调研矩阵与执行状态（截至 2026-11-16 实测与范围确认）
 
-### 活跃推进渠道（用户确认保留）
+### 活跃推进渠道（截至 2026-11-16 实测与执行）
 
 | 渠道 | 2026-11-16 实测与执行模式 | 当前进度 |
 | --- | --- | --- |
-| **GitHub `punkpeye/awesome-mcp-servers`** | `97.7k` stars；按 `CONTRIBUTING.md` 规范加至 `Browser Automation` 分类；**节奏 A（先填好 PR 截图确认，不擅自点最终提交）** | 已 Fork 至 `ztao0916/awesome-mcp-servers` 并推送分支 `add-agentsurf`（`5682d52`），PR 表单已预填待确认提交 |
-| **Reddit 养号期（`r/mcp` / `r/LocalLLaMA` / `r/ClaudeAI`）** | 仅对真实技术讨论与求助发干货评论（严禁放自推链接、严禁 `"I found this.."` / astroturfing），先跨过全站外链过滤及 `r/ClaudeAI` `karma > 100` 门槛 | 已锁定首轮 2 条高匹配技术求助帖（`r/mcp` 远程写权限设计 + `r/LocalLLaMA` 本地推理硬件配置）待评论 |
-| **Reddit 正式发布期（`r/mcp` `showcase` / `r/LocalLLaMA` / `r/ClaudeAI`）** | 必须如实披露作者身份（`showcase` tag），附 [docs/assets/gemini-web-demo.gif](../../docs/assets/gemini-web-demo.gif)；**节奏 A（先确认文案后提交）** | 等待养号评论 Karma 积累达标后开启 |
+| **GitHub `punkpeye/awesome-mcp-servers`** | `97.7k` stars；按 `CONTRIBUTING.md` 规范加至 `Browser Automation` 分类 | **已提交 Open PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)**（`5682d52`），`2/2` checks 通过、无冲突；Bot 标记 `missing-glama`，需待 Glama 过审并补充 Glama score badge 后合入 |
+| **Glama (`glama.ai/mcp/servers`)** | 浏览器实测已有登录态；要求公开仓库 + `Dockerfile` 容器构建通过 MCP introspection（`tools/list`），并推荐配置 `glama.json` 声明维护者 | 已提交 `aab2e94` 新增 `Dockerfile`、`.dockerignore` 与 `glama.json`（本地验证 stdio `tools/list` 返回 29 个工具）；已在浏览器以 `Runs from source` 提交审核（`Your server has been submitted for review`），待审核邮件与评分徽章生成 |
+| **`mcpservers.org` (`wong2/awesome-mcp-servers`)** | `wong2/awesome-mcp-servers` 仓库不接收 PR，统一导流至 `https://mcpservers.org/submit`（支持 `$0` 免费提交，最长 2 周审核） | **已免费提交 `AgentSurf`**（`development` 分类），页面确认提交成功待邮件审核通知 |
+| **Reddit 养号与发布（`r/mcp` / `r/LocalLLaMA` / `r/ClaudeAI`）** | 暂缓：2026-11-16 用户指令聚焦先完成 MCP 收录渠道，Reddit 当日暂停推进 | 未发出任何草稿评论，待后续用户确认重启时优先选择自然、口语化的社区互动帖 |
 
-### 已排除 / 暂不推进渠道（2026-11-16 用户确认）
+### 已排除 / 暂不推进渠道（2026-11-16 实测与用户确认）
 
 | 渠道 | 排除原因 |
 | --- | --- |
 | **LINUX DO** / **V2EX** | 用户明确不做中文社区（`V2EX`、`LINUX DO` 均不投） |
-| **Glama / MCP.so / Hacker News `Show HN`** | 账号无法登录（若后续用户手动完成登录可按节奏 A 补交） |
-| **PulseMCP / Smithery** | `PulseMCP` 页顶公告暂停提交；`Smithery` 原 MCP Proxy 服务已关停并入 Arcade |
+| **Hacker News `Show HN`** | 账号无法登录 |
+| **MCP.so (`mcp.so/submit`)** | 实测仅提供 `$39` 一次性付费提交通道，无免费入口，暂跳过 |
+| **PulseMCP / Smithery** | `PulseMCP` 页顶公告暂停提交（建议走 Official MCP Registry）；`Smithery` 账号与代理服务已于 2026-10-31 关停 |
 
 ---
 
 ## 3. 本轮建议推进顺序
 
-1. **P0（待确认即可完成）**：确认提交已预填好的 `punkpeye/awesome-mcp-servers` PR。
-2. **P0（养号进行中）**：在 `r/mcp` 与 `r/LocalLLaMA` 等真实技术求助帖持续发布高价值、无广告评论，积累 `comment karma`。
-3. **P1（Karma 达标后）**：按 **节奏 A** 发布 `r/mcp`（`showcase` tag）及 `r/LocalLLaMA`（`<= 10%` 自推比例），Karma `> 100` 后再发 `r/ClaudeAI`。
+1. **P0（等待 Glama 审核邮件）**：收到 `glama.ai` 通过邮件后（若需在后台补填或自动识别仓库 `Dockerfile`），取得 `https://glama.ai/mcp/servers/ztao0916/agentsurf-browser-control-runtime/badges/score.svg`，更新 PR `#19670` 移除 `missing-glama` 标签。
+2. **P1（可选加分项）**：若后续决定发布 npm 包 `@agentsurf/mcp-server`（当前 `npm` 未登录、`E404` 未发包），可同步用 `mcp-publisher` 发布至 **Official MCP Registry**（`registry.modelcontextprotocol.io`），以自动同步至 PulseMCP 与其他聚合站。
+3. **P2（按需重启）**：等 MCP 目录流程跑通、用户明确继续时再推进轻量 Reddit 社区互动。
