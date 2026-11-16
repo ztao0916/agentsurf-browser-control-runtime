@@ -28,6 +28,8 @@ import {
 import { OAuthService, resolvePublicIssuer } from './remote-oauth';
 import { fileSessionStore, RemoteSessions } from './remote-sessions';
 import {
+  annotationsFor,
+  PROBE_TOOL_ANNOTATIONS,
   remoteDescriptionFor,
   buildRemoteToolSchemas,
   toContent,
@@ -291,6 +293,7 @@ export async function startHttpMcpServer(options: {
       title: 'probe_echo',
       description: 'Test MCP connection with echo text.',
       inputSchema: { text: z.string().optional().describe('Text to echo back') },
+      annotations: PROBE_TOOL_ANNOTATIONS,
     }, (args): CallToolResult => ({
       content: [{ type: 'text', text: `AgentSurf probe OK: ${args.text ?? 'hello'}` }],
     }));
@@ -299,6 +302,7 @@ export async function startHttpMcpServer(options: {
       title: 'probe_image',
       description: 'Test MCP image delivery with a small static PNG.',
       inputSchema: {},
+      annotations: PROBE_TOOL_ANNOTATIONS,
     }, (): CallToolResult => ({
       content: [
         { type: 'image', data: PROBE_PNG_BASE64, mimeType: 'image/png' },
@@ -310,6 +314,7 @@ export async function startHttpMcpServer(options: {
       title: 'probe_status',
       description: 'Test MCP authentication, server status, and list connected browser devices.',
       inputSchema: {},
+      annotations: PROBE_TOOL_ANNOTATIONS,
     }, (): CallToolResult => {
       const openDevices = getOpenExtensions();
       const active = resolveTargetExtension(defaultDevice);
@@ -343,6 +348,7 @@ export async function startHttpMcpServer(options: {
         title: mcpName,
         description: remoteDescriptionFor(toolName),
         inputSchema: schema,
+        annotations: annotationsFor(toolName),
       }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
         try {
           const effectiveArgs = toolName === 'browser.start_session' && args['device'] === undefined && defaultDevice !== undefined

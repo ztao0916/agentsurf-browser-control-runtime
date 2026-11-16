@@ -1,4 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { ToolName } from '../core/protocol/tool-contract';
 import { isRemoteToolAllowed, REMOTE_EXCLUDED_TOOLS, type RemoteAccessMode } from '../core/remote-policy';
@@ -220,4 +220,114 @@ export function remoteDescriptionFor(tool: ToolName): string {
     return 'Start a new remote browser task. Returns a server-generated session_id that must be supplied to all subsequent browser operations.';
   }
   return descriptionFor(tool);
+}
+
+export const PROBE_TOOL_ANNOTATIONS: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const readLocalAnnotations: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const readPageAnnotations: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+const waitReadAnnotations: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+const sessionWriteAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+
+const sessionIdempotentAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const pageActionAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+const pageIdempotentActionAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+const destructiveTabAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+
+const destructiveSessionAnnotations: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const TOOL_ANNOTATIONS: Record<ToolName, ToolAnnotations> = {
+  'browser.start_session': sessionWriteAnnotations,
+  'browser.end_session': sessionIdempotentAnnotations,
+  'browser.get_operation': readLocalAnnotations,
+  'browser.claim_tab': sessionIdempotentAnnotations,
+  'browser.reset_sessions': destructiveSessionAnnotations,
+  'browser.close_tab': destructiveTabAnnotations,
+  'browser.back': pageActionAnnotations,
+  'browser.forward': pageActionAnnotations,
+  'browser.reload': pageActionAnnotations,
+  'browser.list_downloads': readLocalAnnotations,
+  'browser.wait_for_download': waitReadAnnotations,
+  'browser.set_files': pageActionAnnotations,
+  'browser.list_tabs': readLocalAnnotations,
+  'browser.get_frames': readPageAnnotations,
+  'browser.get_page': readPageAnnotations,
+  'browser.get_interactives': readPageAnnotations,
+  'browser.get_page_content': readPageAnnotations,
+  'browser.click': pageActionAnnotations,
+  'browser.double_click': pageActionAnnotations,
+  'browser.type': pageActionAnnotations,
+  'browser.press': pageActionAnnotations,
+  'browser.select_text': pageIdempotentActionAnnotations,
+  'browser.set_checked': pageIdempotentActionAnnotations,
+  'browser.select_option': pageIdempotentActionAnnotations,
+  'browser.drag': pageActionAnnotations,
+  'browser.wait_for_element': readPageAnnotations,
+  'browser.scroll': pageActionAnnotations,
+  'browser.screenshot': readPageAnnotations,
+  'browser.observe': readPageAnnotations,
+  'browser.switch_tab': sessionIdempotentAnnotations,
+  'browser.open': pageActionAnnotations,
+  'browser.handle_dialog': pageActionAnnotations,
+};
+
+/** Returns MCP ToolAnnotations hints so clients separate read-only queries from browser actions. */
+export function annotationsFor(tool: ToolName): ToolAnnotations {
+  return TOOL_ANNOTATIONS[tool];
 }

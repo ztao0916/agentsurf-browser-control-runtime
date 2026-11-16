@@ -18,7 +18,16 @@ interface JsonRpcResponse<T> {
 }
 
 interface ToolListResult {
-  tools: Array<{ name: string; description?: string }>;
+  tools: Array<{
+    name: string;
+    description?: string;
+    annotations?: {
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    };
+  }>;
 }
 
 interface CallResult {
@@ -196,6 +205,14 @@ describe('http-server', () => {
       expect(toolNames).not.toContain('browser_set_files');
       expect(toolNames).not.toContain('browser_list_downloads');
       expect(toolNames).not.toContain('browser_wait_for_download');
+
+      // Verify MCP tool annotations separate read-only, non-destructive, and destructive tools
+      const byName = new Map(listData.result.tools.map((t) => [t.name, t]));
+      expect(byName.get('probe_status')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+      expect(byName.get('browser_get_page')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+      expect(byName.get('browser_get_page_content')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+      expect(byName.get('browser_open')?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+      expect(byName.get('browser_close_tab')?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
 
       // Execute probe_echo
       const echoRes = await fetch(`http://127.0.0.1:${port}/mcp`, {

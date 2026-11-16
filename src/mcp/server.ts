@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { TOOL_NAMES, UNADVERTISED_TOOL_NAMES } from '../core/protocol/schemas';
 import { callLocalBridge, LocalBridgeError } from './bridge-client';
 import { stripLeadingBom } from './stdio-input';
-import { toolSchemas, toContent, descriptionFor } from './tool-definitions';
+import { toolSchemas, toContent, descriptionFor, annotationsFor } from './tool-definitions';
 
 // One MCP server process serves one conversation (the client spawns a process per conversation), so
 // the server can own a session by itself: tabs it opens are claimed and grouped automatically and
@@ -94,6 +94,7 @@ export async function startMcpServer(): Promise<void> {
       title: mcpName,
       description: descriptionFor(tool),
       inputSchema: toolSchemas[tool],
+      annotations: annotationsFor(tool),
     }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
       try {
         // Forwarded at the request root, and left in args for the session tools that read it there.
