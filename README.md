@@ -12,7 +12,7 @@
 
 AgentSurf connects **Claude Desktop, Cursor, Codex, Gemini Web, Notion AI, Dify**, and any MCP-compatible agent to your real desktop browser. It reuses your existing logins and open tabs without launching headless browsers, exporting cookies, or triggering bot-detection walls.
 
-![AgentSurf demo: an agent controls the user's signed-in Chrome through the local runtime](docs/assets/agentsurf-demo.svg)
+![AgentSurf live demo: MCP controls a signed-in browser tab with the AI cursor](docs/assets/agentsurf-demo-live.gif)
 
 ---
 

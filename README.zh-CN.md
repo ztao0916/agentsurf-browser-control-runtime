@@ -12,7 +12,7 @@
 
 AgentSurf 可以接入 **Claude Desktop、Cursor、Codex、Gemini 网页端、Notion AI、Dify** 等任意支持 MCP 的智能体。它直接复用你本机现有的登录态和标签页，无需启动无头浏览器、无需导出 Cookie，也无需重复登录。
 
-![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
+![AgentSurf 实操演示：通过 MCP 控制已登录的浏览器标签页与 AI 光标交互](docs/assets/agentsurf-demo-live.gif)
 
 ---
 
