@@ -22,7 +22,7 @@ AgentSurf 可以接入 **Claude Desktop、Cursor、Codex、Gemini 网页端、No
 
 - **不仅能本地用，更能从云端 / 网页端 AI 直接操控**：`BrowserSkill` 主打本地 Shell 命令行（`bsk`），要求 Agent 必须有本机终端权限；Playwright MCP 默认起本地隔离沙盒。**AgentSurf 原生实现标准 MCP（`stdio` + `Streamable HTTP`）与 OAuth 2.0 (PKCE)**，让 **Gemini 网页端、Notion AI、Dify** 等没有本地终端的云端/网页智能体，也能安全调度你桌面上的真实 Chrome / Edge。
 - **家里 + 公司跨电脑协同，一个网关搞定**：大厂本地 CLI 工具通常绑定单台机器的守护进程；AgentSurf 允许家里和公司浏览器同时挂在同一个 `wss://.../ws` 地址下而不互踢，并按当前活跃操作窗口自动路由。
-- **无需开放 Shell 权限，且为大模型省 Token 而设计**：Agent 调用的是带严格 Schema 校验的 MCP 工具，无需给它本机 Bash/Shell 权限；交互快照在页面内直接过滤与截断（实测 665 个元素的重型页面从 **~66,800 tokens 降至 ~15,100**，开启 `visible_only: true` 后仅 **~380 tokens**）。
+- **无需开放 Shell 权限，且为大模型省 Token 而设计**：Agent 调用的是带严格 Schema 校验的 MCP 工具，无需给它本机 Bash/Shell 权限；交互快照直接在页面内完成过滤与截断后再回传——在某 665 元素重型页面（245 KB 原始 JSON）的参考测量中，默认 150 上限即可将输出从 **~66,800 降至 ~15,100 tokens**，配合 `visible_only: true` 或 `tag` / `role` / `name_contains` 过滤隐藏面板后可进一步大幅缩减。
 - **私有自托管、零厂商绑定与安全护栏**：无第三方云端中转、无遥测、无需注册账号。支持完全离线本地运行或单文件 `standalone-gateway.js` 自建网关（远程默认 `read-only` 只读、Token/Secret 全量哈希、SHA-256 操作幂等防重放、不向页面 `MAIN` 世界注入 `console` 劫持）。
 
 | 对比维度 | AgentSurf | 本地 CLI 浏览器 Skill（如腾讯 BrowserSkill） | 无头浏览器 MCP（Playwright / Puppeteer） |
@@ -32,7 +32,7 @@ AgentSurf 可以接入 **Claude Desktop、Cursor、Codex、Gemini 网页端、No
 | **接入协议与权限面** | **标准 MCP（`stdio` + `Streamable HTTP`）**，无需给 Agent 开 Shell | 主打本地 **CLI（`bsk`）**，依赖具备本地 Shell 权限的 Agent | 本地 `stdio` / 本地 MCP Server |
 | **云端网页 Agent（Gemini 网页端 / Notion AI / Dify）** | **内置 OAuth 2.0 (PKCE) + Bearer + 反向 WSS** | 仅限本地有终端的编程 Agent | 仅限本地，除非自行封装暴露 |
 | **家里 + 公司多电脑路由** | **支持**（同网关不互踢、活跃窗口自动路由、会话锁定） | 单机本地守护进程 | 单机本地进程 |
-| **上下文与 Token 消耗** | 页面内过滤截断（实测 **~66.8k → ~380 tokens**） | 通过 CLI 命令抽取内容 | 易输出整棵大 DOM / AX 树 |
+| **上下文与 Token 消耗** | 页面内过滤（`visible_only` / `tag` / `role` / `name_contains`）+ 默认 150 上限 | 通过 CLI 命令抽取内容 | 易输出整棵大 DOM / AX 树 |
 | **安全与隔离机制** | 远程默认 `read-only`、会话级 Tab Group 隔离、`operation_unknown` 幂等保护、无 `MAIN` 世界注入 | 独立 Agent 窗口 / 借用归还 + 人工确认 | 共享状态、默认全量读写权限 |
 
 ---

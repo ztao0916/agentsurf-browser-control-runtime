@@ -22,7 +22,7 @@ If you are choosing between **Playwright / Puppeteer MCP**, local shell browser 
 
 - **Works with Cloud & Web AI — Not Just Local Terminals**: Local CLI skills (like `BrowserSkill`) require an agent with local bash/shell access, and Playwright MCP launches isolated local sandboxes. AgentSurf exposes **standard MCP (`stdio` + `Streamable HTTP`) with built-in OAuth 2.0 (PKCE)** so **Gemini Web, Notion AI, Dify**, and mobile/cloud workflows can drive your real desktop browser with zero local shell permission required.
 - **Home + Office Multi-PC on One Gateway**: Instead of one daemon bound to one machine, both your home and office browsers connect to the same `wss://.../ws` endpoint without kicking each other offline—automatically routing to whichever Chrome window you are actively using.
-- **No Shell Execution Risk & Built for Token Efficiency**: Unlike CLI-driven browser skills, your agent never needs shell access to control the browser. Interactive snapshots are filtered and capped *inside the page* (benchmarked: a 665-element page drops from **~66,800 tokens** to **~15,100**, or **~380 tokens** with `visible_only: true`).
+- **No Shell Execution Risk & Built for Token Efficiency**: Unlike CLI-driven browser skills, your agent never needs shell access to control the browser. Interactive snapshots are filtered and capped *inside the page* before crossing the wire—on a reference 665-element app page (245 KB raw JSON), the default 150-element cap cuts output from **~66,800 to ~15,100 tokens**, and filtering hidden UI (`visible_only: true`) or querying by `tag` / `role` / `name_contains` shrinks it further depending on visible page density.
 - **Self-Hosted Privacy & Zero Lock-In**: No third-party cloud relay, no telemetry, and no account required. Run 100% offline locally or self-host the single-file `standalone-gateway.js` (`read-only` by default on remote, hashed tokens, SHA-256 operation idempotency journal, and zero `MAIN`-world `console` patching).
 
 | Capability | AgentSurf | Local Shell Browser Skills (e.g. Tencent BrowserSkill) | Headless MCP (Playwright / Puppeteer) |
@@ -32,7 +32,7 @@ If you are choosing between **Playwright / Puppeteer MCP**, local shell browser 
 | **Agent protocol** | **Standard MCP (`stdio` + `Streamable HTTP`)** — no shell required | Local **CLI (`bsk`)** — requires shell-capable coding agent | Local `stdio` / local server MCP |
 | **Cloud Web Agents (Gemini Web, Notion AI, Dify)** | **Built-in OAuth 2.0 (PKCE) + Bearer + Reverse WSS** | Local shell agents only | Local only unless custom-wrapped |
 | **Home + Office multi-PC routing** | **Yes** — active-window auto-routing, session stickiness & pinning | Single local machine daemon | Single local process |
-| **Context & token footprint** | In-page filtered snapshots (**~66.8k → ~380 tokens**) | Page extraction via CLI commands | Large raw DOM / AX tree dumps |
+| **Context & token footprint** | In-page filtering (`visible_only`, `tag`, `role`, `name_contains`) + 150-element cap | Page extraction via CLI commands | Large raw DOM / AX tree dumps |
 | **Safety & isolation** | Remote `read-only` default, per-session Tab Groups, `operation_unknown` idempotency, zero `MAIN`-world patching | Dedicated agent window / tab borrowing + human confirmation | Shared browser state; full read/write by default |
 
 ---
@@ -51,7 +51,7 @@ If you are choosing between **Playwright / Puppeteer MCP**, local shell browser 
   - Connect multiple computers (e.g., `Home` and `Office`) to the same `wss://.../ws` endpoint without kicking each other offline.
   - Routes automatically to whichever Chrome window you actively focused/used most recently, locks active sessions to their originating computer, and supports pinning in the extension popup or explicit `device` targeting.
 - **29 Browser Control Tools (Token-Efficient by Design)**:
-  - Semantic interactive element snapshots (`browser_get_interactives` with opaque `element_id`s, in-page filtering by `tag` / `role` / `name_contains` / `visible_only`, and default `150` cap—cutting a heavy 665-element app page from **~66,800 tokens** to **~15,100**, or **~380 tokens** with `visible_only: true`).
+  - Semantic interactive element snapshots (`browser_get_interactives` with opaque `element_id`s, in-page filtering by `tag` / `role` / `name_contains` / `visible_only`, and default `150` cap—trimming a 245 KB / 665-element raw snapshot to 150 elements by default, and much smaller when scoped to visible or matching controls).
   - Page content extraction, click/double-click/type/press/select/checkbox/drag/scroll, viewport & full-page screenshots, iframe navigation, JS dialog handling, downloads, and file uploads (`DOM.setFileInputFiles`).
 
 ---
