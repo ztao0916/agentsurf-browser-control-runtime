@@ -12,19 +12,17 @@
 
 ## Current Next Item
 
-**当前主线：MCP 目录与开源列表收录推进中（详见 `memory-bank/strategy/promotion-outreach.md`）；Reddit 养号按用户指令暂缓**
+**当前主线：已完成首轮免费 MCP 目录提交；所有未申请渠道正式放弃，后续仅做结果收尾（详见 `memory-bank/strategy/promotion-outreach.md`）**
 
 1. **GitHub `punkpeye/awesome-mcp-servers` PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)**：
-   - 已提交并开启，`2/2` checks 通过、无冲突；Bot 贴有 `missing-glama` 标签，待 Glama 审核上线后追加 Glama score badge 即可继续合入评审。
+   - 已提交并开启，`2/2` checks 通过、无冲突；待 Glama 过审后补充 score badge 即可继续合入。
 2. **Glama (`glama.ai/mcp/servers`)**：
-   - 已推送 `Dockerfile` + `.dockerignore` + `glama.json` 至 `main`（`aab2e94`），并验证 `dist/mcp/cli.js` 与 `dist/mcp/standalone-gateway.js` 在无 Chrome 环境下通过 stdio 正常响应 `initialize` + `tools/list`（`29` 个工具）。
-   - 已在浏览器提交 `AgentSurf`（`Runs from source` -> `Your server has been submitted for review`），等待审核通知邮件。
+   - 已推送 `Dockerfile` + `.dockerignore` + `glama.json`（`aab2e94`）并在浏览器完成提交审核，等待审核结果邮件。
 3. **`mcpservers.org`（`wong2/awesome-mcp-servers` 入口）**：
-   - 已通过 `$0` 免费通道提交 `AgentSurf`，页面提示最长 2 周内审核并邮件通知。
-4. **暂缓 / 跳过渠道**：Reddit（今日按用户指示暂不处理）、V2EX、LINUX DO、Hacker News、`MCP.so`（仅 `$39` 付费提交）、`PulseMCP`（暂停提交）、`Smithery`（旧代理与账号体系已于 2026-10-31 关停）。
+   - 已通过 `$0` 免费通道提交 `AgentSurf`，等待审核邮件。
+4. **已放弃渠道**：今天未申请的渠道（Reddit 养号及发帖、V2EX、LINUX DO、Hacker News、`MCP.so`、`PulseMCP`、`Smithery`）全部正式放弃，不再投入时间。
+5. **npm 发布准备中**：本机 `.npmrc` 默认指向 `https://registry.npmmirror.com/`，需通过 `https://registry.npmjs.org` 完成 CLI 鉴权并确认包名（`@agentsurf/mcp-server` vs `agentsurf-mcp`）。
 
 ## Current Risks / Constraints
 
 1. **Gemini Web 客户端确认弹窗限制（已实测）**：即便在 Gemini `App actions` 将 `Write / delete (19)` 设为 `Always allow / 始终允许`，调用非只读工具（`browser_start_session`、`browser_open`、`browser_click`、`browser_type`、`browser_scroll` 等）时对话内仍可能弹窗确认；只读工具（`Read (12)`）已可自动放行。
-2. **Reddit 新号/低 Karma 外链风控**：低 `comment karma` 账号直接发外链帖子易触发 `removed by Reddit's filters`，且 `r/ClaudeAI` 强制要求 `OP karma > 100`。
-3. **PulseMCP 与 Smithery 现状（2026-11-16 实测）**：`PulseMCP` 当前暂停新服务提交，`Smithery` 旧托管代理已关停并并入 Arcade，本轮目录投入不分配给这两家。
