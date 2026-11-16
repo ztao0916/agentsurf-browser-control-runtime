@@ -30,6 +30,8 @@ const gatewayContentDisabled = getElement<HTMLDivElement>('gateway-content-disab
 const gatewayViewConnected = getElement<HTMLDivElement>('gateway-view-connected');
 const gatewayStatusDot = getElement<HTMLSpanElement>('gateway-status-dot');
 const gatewayStatusText = getElement<HTMLSpanElement>('gateway-status-text');
+const gatewayDeviceLabel = getElement<HTMLSpanElement>('gateway-device-label');
+const btnPinDevice = getElement<HTMLButtonElement>('btn-pin-device');
 const btnEditConfig = getElement<HTMLButtonElement>('btn-edit-config');
 const btnConfigGateway = getElement<HTMLButtonElement>('btn-config-gateway');
 
@@ -43,6 +45,7 @@ const btnModalClose = getElement<HTMLButtonElement>('btn-modal-close');
 
 const gatewayUrlInput = getElement<HTMLInputElement>('gateway-url');
 const gatewayTokenInput = getElement<HTMLInputElement>('gateway-token');
+const gatewayDeviceNameInput = getElement<HTMLInputElement>('gateway-device-name');
 const btnClearConfig = getElement<HTMLButtonElement>('btn-clear-config');
 const btnCancelConfig = getElement<HTMLButtonElement>('btn-cancel-config');
 const btnSaveRemote = getElement<HTMLButtonElement>('btn-save-remote');
@@ -114,6 +117,14 @@ function renderState(state: TransportConnectionSnapshot): void {
     if (state.gateway_url && !gatewayUrlInput.value) {
       gatewayUrlInput.value = state.gateway_url;
     }
+    if (state.device_name) {
+      gatewayDeviceLabel.textContent = state.pinned ? `Device: ${state.device_name} (Pinned)` : `Device: ${state.device_name}`;
+      if (!gatewayDeviceNameInput.value) {
+        gatewayDeviceNameInput.value = state.device_name;
+      }
+    }
+    btnPinDevice.textContent = state.pinned ? 'Unpin active' : 'Pin as active';
+    btnPinDevice.style.display = remoteState === 'connected' ? 'inline-block' : 'none';
 
     if (remoteState === 'connected') {
       // Remote Gateway is Active
@@ -121,12 +132,12 @@ function renderState(state: TransportConnectionSnapshot): void {
       cardGateway.className = 'card active';
       localStatusBox.className = 'gateway-status-box standby';
       localStatusDot.style.background = '#94a3b8';
-      localStatusText.textContent = '本地直连待命';
+      localStatusText.textContent = 'Local Native Standby';
 
       headerStatusBadge.className = 'status-badge connected';
-      headerStatusText.textContent = '云端网关生效中';
+      headerStatusText.textContent = 'Remote Gateway Active';
 
-      gatewayStatusText.textContent = '已连接';
+      gatewayStatusText.textContent = 'Connected';
       gatewayStatusDot.style.background = 'var(--success)';
       gatewayViewConnected.className = 'gateway-status-box';
     } else if (remoteState === 'connecting' || remoteState === 'reconnecting') {
@@ -135,12 +146,12 @@ function renderState(state: TransportConnectionSnapshot): void {
       cardGateway.className = 'card active';
       localStatusBox.className = 'gateway-status-box standby';
       localStatusDot.style.background = '#94a3b8';
-      localStatusText.textContent = '本地直连待命';
+      localStatusText.textContent = 'Local Native Standby';
 
       headerStatusBadge.className = 'status-badge connecting';
-      headerStatusText.textContent = '云端连接中...';
+      headerStatusText.textContent = 'Connecting...';
 
-      gatewayStatusText.textContent = state.reconnect_attempt > 0 ? `重试连接 (${state.reconnect_attempt})...` : '正在连接云端网关...';
+      gatewayStatusText.textContent = state.reconnect_attempt > 0 ? `Reconnecting (${state.reconnect_attempt})...` : 'Connecting to Remote Gateway...';
       gatewayStatusDot.style.background = 'var(--warn)';
       gatewayViewConnected.className = 'gateway-status-box warn';
     } else {
@@ -149,12 +160,12 @@ function renderState(state: TransportConnectionSnapshot): void {
       cardGateway.className = 'card error';
       localStatusBox.className = 'gateway-status-box standby';
       localStatusDot.style.background = '#94a3b8';
-      localStatusText.textContent = '本地直连可用';
+      localStatusText.textContent = 'Local Native Available';
 
       headerStatusBadge.className = 'status-badge error';
-      headerStatusText.textContent = '云端未连接 (本地可用)';
+      headerStatusText.textContent = 'Remote Offline (Local Ready)';
 
-      gatewayStatusText.textContent = state.error ? `连接失败：${state.error}` : '尚未连接';
+      gatewayStatusText.textContent = state.error ? `Failed: ${state.error}` : 'Disconnected';
       gatewayStatusDot.style.background = 'var(--danger)';
       gatewayViewConnected.className = 'gateway-status-box warn';
     }
@@ -164,13 +175,13 @@ function renderState(state: TransportConnectionSnapshot): void {
     cardGateway.className = 'card';
     localStatusBox.className = localState === 'connected' ? 'gateway-status-box' : 'gateway-status-box standby';
     localStatusDot.style.background = localState === 'error' ? 'var(--danger)' : localState === 'connected' ? 'var(--success)' : '#94a3b8';
-    localStatusText.textContent = localState === 'error' ? '本地连接失败' : localState === 'connected' ? '连接正常' : '等待本机客户端';
+    localStatusText.textContent = localState === 'error' ? 'Local connection failed' : localState === 'connected' ? 'Connected' : 'Waiting for local client';
 
     gatewayContentEnabled.style.display = 'none';
     gatewayContentDisabled.style.display = 'flex';
 
     headerStatusBadge.className = 'status-badge connected';
-    headerStatusText.textContent = '本地直连生效中';
+    headerStatusText.textContent = 'Local Native Active';
   }
 
   if (state.error && isRemote) {
@@ -195,17 +206,25 @@ async function refresh(): Promise<void> {
         if (response.config.gatewayToken && !gatewayTokenInput.value) {
           gatewayTokenInput.value = response.config.gatewayToken;
         }
+        if (response.config.deviceName && !gatewayDeviceNameInput.value) {
+          gatewayDeviceNameInput.value = response.config.deviceName;
+        }
       }
       renderState(response.state);
       return;
     }
-    setResult('无法获取扩展运行时状态', true);
+    setResult('Failed to read extension runtime state', true);
   } catch (error: unknown) {
-    setResult(`无法连接扩展后台: ${error instanceof Error ? error.message : String(error)}`, true);
+    setResult(`Failed to reach extension background: ${error instanceof Error ? error.message : String(error)}`, true);
   }
 }
 
-async function switchMode(targetMode: 'local' | 'remote', url?: string, token?: string): Promise<void> {
+async function switchMode(
+  targetMode: 'local' | 'remote',
+  url?: string,
+  token?: string,
+  deviceName?: string,
+): Promise<void> {
   setResult('');
   const response = await sendRuntimeMessage({
     kind: 'transport-control',
@@ -213,13 +232,14 @@ async function switchMode(targetMode: 'local' | 'remote', url?: string, token?: 
     mode: targetMode,
     ...(url !== undefined ? { gatewayUrl: url } : {}),
     ...(token !== undefined ? { gatewayToken: token } : {}),
+    ...(deviceName !== undefined ? { deviceName } : {}),
   } satisfies TransportControlRequest);
 
   if (isTransportControlResponse(response) && response.ok) {
     renderState(response.state);
-    setResult(targetMode === 'remote' ? '已启用并连接云端网关' : '已切换为仅本地模式');
+    setResult(targetMode === 'remote' ? 'Switched to Remote Gateway' : 'Switched to Local Native mode');
   } else {
-    setResult('操作失败', true);
+    setResult('Operation failed', true);
   }
 }
 
@@ -244,9 +264,9 @@ function diagnosticsText(): string {
 async function copyDiagnostics(): Promise<void> {
   try {
     await navigator.clipboard.writeText(diagnosticsText());
-    setResult('诊断日志已复制到剪贴板。');
+    setResult('Diagnostics copied to clipboard.');
   } catch (error: unknown) {
-    setResult(`复制失败: ${error instanceof Error ? error.message : String(error)}`, true);
+    setResult(`Copy failed: ${error instanceof Error ? error.message : String(error)}`, true);
   }
 }
 
@@ -322,20 +342,36 @@ btnClearConfig.addEventListener('click', async () => {
   localToggle.checked = true;
   gatewayToggle.checked = false;
   await switchMode('local', '', '');
-  setResult('已清空云端配置，回归本地直连模式');
+  setResult('Cleared remote configuration; switched to Local Native mode');
 });
 
 btnSaveRemote.addEventListener('click', () => {
   const url = gatewayUrlInput.value.trim();
   const token = gatewayTokenInput.value.trim();
+  const deviceName = gatewayDeviceNameInput.value.trim();
   if (!url) {
-    setResult('请输入网关地址', true);
+    setResult('Please enter a Gateway WSS URL', true);
     return;
   }
   closeModal();
   localToggle.checked = false;
   gatewayToggle.checked = true;
-  void switchMode('remote', url, token);
+  void switchMode('remote', url, token, deviceName);
+});
+
+btnPinDevice.addEventListener('click', async () => {
+  const nextPin = !snapshot?.pinned;
+  const response = await sendRuntimeMessage({
+    kind: 'transport-control',
+    action: 'set-device',
+    pinActive: nextPin,
+  } satisfies TransportControlRequest);
+  if (isTransportControlResponse(response) && response.ok) {
+    renderState(response.state);
+    setResult(nextPin ? 'Pinned this browser as the active target' : 'Unpinned; automatic active-browser routing resumed');
+  } else {
+    setResult('Failed to update active device pin', true);
+  }
 });
 
 modalGateway.addEventListener('click', (event) => {

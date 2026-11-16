@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isValidHost, isValidOrigin, startHttpMcpServer } from '../src/mcp/http-server';
-import { initializeRemoteConfig, setRemoteAccessMode } from '../src/mcp/remote-config';
+import { initializeOAuthClient, initializeRemoteConfig, rotateOAuthSecret, setRemoteAccessMode } from '../src/mcp/remote-config';
 
 interface HealthResponse {
   status: string;
@@ -25,10 +26,13 @@ interface CallResult {
 }
 
 describe('http-server', () => {
-  it('validates host headers correctly', () => {
-    const allowed = ['tunnel.example.com', '127.0.0.1:8767', 'localhost:8767'];
+  it('validates host headers correctly (including port-agnostic non-loopback domains)', () => {
+    const allowed = ['tunnel.example.com', 'legacy.example.com:9443', '127.0.0.1:8767', 'localhost:8767'];
     expect(isValidHost('tunnel.example.com', allowed)).toBe(true);
     expect(isValidHost('tunnel.example.com:443', allowed)).toBe(true);
+    expect(isValidHost('tunnel.example.com:9444', allowed)).toBe(true);
+    expect(isValidHost('legacy.example.com:9444', allowed)).toBe(true);
+    expect(isValidHost('legacy.example.com', allowed)).toBe(true);
     expect(isValidHost('127.0.0.1:8767', allowed)).toBe(true);
     expect(isValidHost('localhost:8767', allowed)).toBe(true);
 
@@ -39,12 +43,17 @@ describe('http-server', () => {
   });
 
   it('validates origin headers correctly', () => {
-    const allowed = ['https://tunnel.example.com', 'https://www.notion.so'];
+    const allowed = ['https://tunnel.example.com:9443', 'https://www.notion.so'];
+    const allowedHosts = ['tunnel.example.com:9443', '127.0.0.1:8767'];
     expect(isValidOrigin(undefined, allowed)).toBe(true);
-    expect(isValidOrigin('https://tunnel.example.com', allowed)).toBe(true);
-    expect(isValidOrigin('https://www.notion.so', allowed)).toBe(true);
+    expect(isValidOrigin('https://tunnel.example.com:9443', allowed)).toBe(true);
+    expect(isValidOrigin('https://tunnel.example.com:9444', allowed, allowedHosts)).toBe(true);
+    expect(isValidOrigin('https://tunnel.example.com', allowed, allowedHosts)).toBe(true);
+    expect(isValidOrigin('https://www.notion.so', allowed, allowedHosts)).toBe(true);
 
-    expect(isValidOrigin('https://evil.com', allowed)).toBe(false);
+    expect(isValidOrigin('https://www.notion.so:9444', allowed, allowedHosts)).toBe(false);
+    expect(isValidOrigin('http://tunnel.example.com:9444', allowed, allowedHosts)).toBe(false);
+    expect(isValidOrigin('https://evil.com', allowed, allowedHosts)).toBe(false);
   });
 
   describe('live server HTTP interactions', () => {
@@ -348,6 +357,435 @@ describe('http-server', () => {
       expect(parsedTabs.tabs[0]?.title).toBe('Test Page');
 
       ws.close();
+    });
+
+    it('supports MCP OAuth discovery, authorization code + PKCE flow, token refresh, and revocation', async () => {
+      const port = serverHandle!.port;
+
+      // Without OAuth configured, well-known discovery returns 404
+      const unconfiguredRes = await fetch(`http://127.0.0.1:${port}/.well-known/oauth-protected-resource`, {
+        headers: { host: 'tunnel.example.com' },
+      });
+      expect(unconfiguredRes.status).toBe(404);
+
+      const redirectUri = 'https://gemini.google.com/oauth/callback';
+      const oauth = await initializeOAuthClient(configPath, {
+        redirectUris: [redirectUri],
+      });
+
+      // Unauthenticated /mcp returns 401 with resource_metadata challenge
+      const unauthMcp = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: { host: 'tunnel.example.com', 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+      });
+      expect(unauthMcp.status).toBe(401);
+      expect(unauthMcp.headers.get('www-authenticate')).toContain('resource_metadata="https://tunnel.example.com/.well-known/oauth-protected-resource"');
+
+      // Discovery metadata endpoints
+      const prmRes = await fetch(`http://127.0.0.1:${port}/.well-known/oauth-protected-resource/mcp`, {
+        headers: { host: 'tunnel.example.com' },
+      });
+      expect(prmRes.status).toBe(200);
+      const prm = await prmRes.json() as { resource: string; authorization_servers: string[] };
+      expect(prm.resource).toBe('https://tunnel.example.com/mcp');
+      expect(prm.authorization_servers).toEqual(['https://tunnel.example.com']);
+
+      const asRes = await fetch(`http://127.0.0.1:${port}/.well-known/oauth-authorization-server`, {
+        headers: { host: 'tunnel.example.com' },
+      });
+      expect(asRes.status).toBe(200);
+      const asMeta = await asRes.json() as { authorization_endpoint: string; token_endpoint: string };
+      expect(asMeta.authorization_endpoint).toBe('https://tunnel.example.com/oauth/authorize');
+      expect(asMeta.token_endpoint).toBe('https://tunnel.example.com/oauth/token');
+
+      // Rejects unregistered redirect_uri
+      const badRedirectRes = await fetch(
+        `http://127.0.0.1:${port}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(oauth.clientId)}&redirect_uri=${encodeURIComponent('https://evil.example.com/cb')}`,
+        { headers: { host: 'tunnel.example.com' } },
+      );
+      expect(badRedirectRes.status).toBe(400);
+
+      // Authorize GET returns consent form with CSRF token
+      const verifier = 'agentsurf-test-pkce-code-verifier-0123456789abcdef';
+      const challenge = createHash('sha256').update(verifier, 'ascii').digest('base64url');
+      const authQuery = new URLSearchParams({
+        response_type: 'code',
+        client_id: oauth.clientId,
+        redirect_uri: redirectUri,
+        state: 'xyz-state',
+        scope: 'mcp:tools',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+      });
+      const authGetRes = await fetch(`http://127.0.0.1:${port}/oauth/authorize?${authQuery.toString()}`, {
+        headers: { host: 'tunnel.example.com' },
+      });
+      expect(authGetRes.status).toBe(200);
+      const html = await authGetRes.text();
+      const csrfMatch = /name="csrf_token"\s+value="([^"]+)"/u.exec(html);
+      expect(csrfMatch?.[1]).toBeTruthy();
+      const csrfToken = csrfMatch![1]!;
+
+      // Invalid pairing token fails with 401 and provides fresh CSRF token
+      const badPost = await fetch(`http://127.0.0.1:${port}/oauth/authorize`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          origin: 'https://tunnel.example.com',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          response_type: 'code',
+          client_id: oauth.clientId,
+          redirect_uri: redirectUri,
+          state: 'xyz-state',
+          scope: 'mcp:tools',
+          code_challenge: challenge,
+          code_challenge_method: 'S256',
+          csrf_token: csrfToken,
+          pairing_token: 'wrong-pairing-token',
+          decision: 'allow',
+        }).toString(),
+        redirect: 'manual',
+      });
+      expect(badPost.status).toBe(401);
+      const retryHtml = await badPost.text();
+      const retryCsrf = /name="csrf_token"\s+value="([^"]+)"/u.exec(retryHtml)?.[1];
+      expect(retryCsrf).toBeTruthy();
+
+      // Valid pairing token issues authorization code via 302 redirect
+      const goodPost = await fetch(`http://127.0.0.1:${port}/oauth/authorize`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          origin: 'https://tunnel.example.com',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          response_type: 'code',
+          client_id: oauth.clientId,
+          redirect_uri: redirectUri,
+          state: 'xyz-state',
+          scope: 'mcp:tools',
+          code_challenge: challenge,
+          code_challenge_method: 'S256',
+          csrf_token: retryCsrf!,
+          pairing_token: token,
+          decision: 'allow',
+        }).toString(),
+        redirect: 'manual',
+      });
+      expect(goodPost.status).toBe(302);
+      const location = goodPost.headers.get('location');
+      expect(location).toBeTruthy();
+      const callbackUrl = new URL(location!);
+      expect(callbackUrl.origin + callbackUrl.pathname).toBe(redirectUri);
+      expect(callbackUrl.searchParams.get('state')).toBe('xyz-state');
+      const code = callbackUrl.searchParams.get('code');
+      expect(code).toBeTruthy();
+
+      // Exchange code for access_token + refresh_token using client_secret_basic
+      const basicAuth = Buffer.from(`${encodeURIComponent(oauth.clientId)}:${encodeURIComponent(oauth.clientSecret)}`).toString('base64');
+      const tokenRes = await fetch(`http://127.0.0.1:${port}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          authorization: `Basic ${basicAuth}`,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: code!,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+        }).toString(),
+      });
+      expect(tokenRes.status).toBe(200);
+      const tokenBody = await tokenRes.json() as {
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        refresh_token: string;
+      };
+      expect(tokenBody.token_type).toBe('Bearer');
+      expect(tokenBody.access_token.startsWith('as_at_')).toBe(true);
+      expect(tokenBody.refresh_token.startsWith('as_rt_')).toBe(true);
+
+      // Replaying the same code fails
+      const replayRes = await fetch(`http://127.0.0.1:${port}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: oauth.clientId,
+          client_secret: oauth.clientSecret,
+          code: code!,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+        }).toString(),
+      });
+      expect(replayRes.status).toBe(400);
+
+      // Access token authenticates /mcp requests
+      const mcpInitRes = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          authorization: `Bearer ${tokenBody.access_token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'gemini-web', version: '1.0' } },
+        }),
+      });
+      expect(mcpInitRes.status).toBe(200);
+
+      // Refresh token issues a fresh access_token via client_secret_post
+      const refreshRes = await fetch(`http://127.0.0.1:${port}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          client_id: oauth.clientId,
+          client_secret: oauth.clientSecret,
+          refresh_token: tokenBody.refresh_token,
+        }).toString(),
+      });
+      expect(refreshRes.status).toBe(200);
+      const refreshBody = await refreshRes.json() as { access_token: string };
+      expect(refreshBody.access_token.startsWith('as_at_')).toBe(true);
+
+      // Rotating OAuth client secret revokes issued OAuth access tokens immediately
+      await rotateOAuthSecret(configPath);
+      const revokedRes = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com',
+          authorization: `Bearer ${refreshBody.access_token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'gemini-web', version: '1.0' } },
+        }),
+      });
+      expect(revokedRes.status).toBe(401);
+    });
+
+    it('supports multiple simultaneously connected browsers with active-device routing and session stickiness', async () => {
+      const port = serverHandle!.port;
+
+      const connectDevice = async (deviceId: string, deviceName: string, tabTitle: string, lastActiveAt: number) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`);
+        await new Promise<void>((resolve, reject) => {
+          ws.onopen = () => resolve();
+          ws.onerror = () => reject(new Error(`WebSocket failed for ${deviceId}`));
+        });
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(typeof event.data === 'string' ? event.data : String(event.data)) as {
+            type: string;
+            request?: { request_id: string; tool: string; args?: { session_id?: string } };
+          };
+          if (msg.type === 'tool_request' && msg.request) {
+            const req = msg.request;
+            const result = req.tool === 'browser.start_session'
+              ? { session: { session_id: req.args?.session_id ?? 'sess-1', name: 'test' } }
+              : { tabs: [{ tab_id: 1, title: tabTitle, url: 'https://example.com' }] };
+            ws.send(JSON.stringify({
+              type: 'tool_response',
+              response: { request_id: req.request_id, ok: true, result },
+            }));
+          }
+        };
+        ws.send(JSON.stringify({
+          type: 'extension_hello',
+          protocol_version: '1',
+          extension_id: 'test-ext',
+          device_id: deviceId,
+          device_name: deviceName,
+          last_active_at: lastActiveAt,
+        }));
+        return ws;
+      };
+
+      const companyWs = await connectDevice('dev-company', '公司', 'Company Tab', 1_000);
+      const homeWs = await connectDevice('dev-home', '家里', 'Home Tab', 2_000);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Both browsers stay connected at the same time
+      expect(companyWs.readyState).toBe(WebSocket.OPEN);
+      expect(homeWs.readyState).toBe(WebSocket.OPEN);
+
+      // OAuth metadata dynamically matches incoming Host port (e.g. :9444 vs :9443)
+      await initializeOAuthClient(configPath, { redirectUris: ['https://gemini.google.com/oauth/callback'] });
+      const prm9444 = await new Promise<{ status: number; body: { resource: string } }>((resolve, reject) => {
+        const req = http.request({
+          hostname: '127.0.0.1',
+          port,
+          path: '/.well-known/oauth-protected-resource',
+          method: 'GET',
+          headers: {
+            Host: 'tunnel.example.com:9444',
+            'X-Forwarded-Proto': 'https',
+          },
+        }, (response) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('end', () => {
+            resolve({
+              status: response.statusCode ?? 0,
+              body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as { resource: string },
+            });
+          });
+        });
+        req.on('error', reject);
+        req.end();
+      });
+      expect(prm9444.status).toBe(200);
+      expect(prm9444.body.resource).toBe('https://tunnel.example.com:9444/mcp');
+
+      // Initialize MCP session
+      const initRes = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com:9444',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'gemini', version: '1.0' } },
+        }),
+      });
+      const mcpSessionId = initRes.headers.get('mcp-session-id')!;
+
+      // probe_status lists both devices and shows "家里" as active
+      const statusRes = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com:9444',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'mcp-session-id': mcpSessionId,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: { name: 'probe_status', arguments: {} },
+        }),
+      });
+      const statusPayload = JSON.parse(
+        ((await statusRes.json()) as JsonRpcResponse<CallResult>).result.content[0]!.text!,
+      ) as { active_device: { device_name: string }; devices: Array<{ device_name: string }> };
+      expect(statusPayload.active_device.device_name).toBe('家里');
+      expect(statusPayload.devices.map((d) => d.device_name).sort()).toEqual(['公司', '家里']);
+
+      // Start session without specifying device -> routes to active ("家里")
+      const startHome = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com:9444',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'mcp-session-id': mcpSessionId,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'tools/call',
+          params: { name: 'browser_start_session', arguments: { name: 'home-task' } },
+        }),
+      });
+      const homeSessionId = (JSON.parse(
+        ((await startHome.json()) as JsonRpcResponse<CallResult>).result.content[0]!.text!,
+      ) as { session: { session_id: string } }).session.session_id;
+
+      // Even if company becomes active later, existing homeSessionId stays bound to "家里"
+      companyWs.send(JSON.stringify({
+        type: 'extension_status',
+        device_id: 'dev-company',
+        device_name: '公司',
+        last_active_at: 5_000,
+      }));
+      await new Promise((r) => setTimeout(r, 30));
+
+      const homeTabsRes = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com:9444',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'mcp-session-id': mcpSessionId,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'tools/call',
+          params: { name: 'browser_list_tabs', arguments: { session_id: homeSessionId } },
+        }),
+      });
+      const homeTabs = JSON.parse(
+        ((await homeTabsRes.json()) as JsonRpcResponse<CallResult>).result.content[0]!.text!,
+      ) as { tabs: Array<{ title: string }> };
+      expect(homeTabs.tabs[0]?.title).toBe('Home Tab');
+
+      // Explicitly targeting "家里" when "公司" is active routes to "家里"
+      const explicitStart = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com:9444',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'mcp-session-id': mcpSessionId,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 5,
+          method: 'tools/call',
+          params: { name: 'browser_start_session', arguments: { name: 'work-task', device: '公司' } },
+        }),
+      });
+      const workSessionId = (JSON.parse(
+        ((await explicitStart.json()) as JsonRpcResponse<CallResult>).result.content[0]!.text!,
+      ) as { session: { session_id: string } }).session.session_id;
+
+      const workTabsRes = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          host: 'tunnel.example.com:9444',
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'mcp-session-id': mcpSessionId,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 6,
+          method: 'tools/call',
+          params: { name: 'browser_list_tabs', arguments: { session_id: workSessionId } },
+        }),
+      });
+      const workTabs = JSON.parse(
+        ((await workTabsRes.json()) as JsonRpcResponse<CallResult>).result.content[0]!.text!,
+      ) as { tabs: Array<{ title: string }> };
+      expect(workTabs.tabs[0]?.title).toBe('Company Tab');
+
+      companyWs.close();
+      homeWs.close();
     });
   });
 });

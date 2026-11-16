@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  addOAuthRedirectUri,
   authenticates,
+  initializeOAuthClient,
   initializeRemoteConfig,
   readRemoteConfig,
+  rotateOAuthSecret,
   rotateRemoteToken,
   setRemoteAccessMode,
   tokenHash,
@@ -97,5 +100,40 @@ describe('remote-config', () => {
     expect(updated.token_hash).toBe(original.token_hash);
     expect(authenticates(`Bearer ${token}`, updated)).toBe(true);
     expect(JSON.parse(await readFile(configPath, 'utf8'))).toHaveProperty('access_mode', 'read-only');
+  });
+
+  it('initializes OAuth client, adds redirect URIs, and rotates client secret without changing pairing token', async () => {
+    const token = await initializeRemoteConfig(configPath, 'https://tunnel.example.com', bridgeConfigPath);
+    const oauth = await initializeOAuthClient(configPath, {
+      redirectUris: ['https://gemini.google.com/oauth/callback'],
+    });
+
+    expect(oauth.clientId.startsWith('as_cid_')).toBe(true);
+    expect(oauth.clientSecret.startsWith('as_sec_')).toBe(true);
+    expect(oauth.redirectUris).toEqual(['https://gemini.google.com/oauth/callback']);
+
+    const config = await readRemoteConfig(configPath);
+    expect(config.oauth?.client_id).toBe(oauth.clientId);
+    expect(config.oauth?.client_secret_hash).toBe(tokenHash(oauth.clientSecret));
+    expect(config.allowed_origins).toContain('https://gemini.google.com');
+    expect(authenticates(`Bearer ${token}`, config)).toBe(true);
+
+    await expect(addOAuthRedirectUri(configPath, 'http://evil.example.com/cb'))
+      .rejects.toThrow('Redirect URI must use HTTPS');
+    await expect(addOAuthRedirectUri(configPath, 'https://gemini.google.com/cb#frag'))
+      .rejects.toThrow('Redirect URI must not contain a fragment');
+
+    const updatedUris = await addOAuthRedirectUri(configPath, 'http://127.0.0.1:8080/callback');
+    expect(updatedUris).toEqual([
+      'https://gemini.google.com/oauth/callback',
+      'http://127.0.0.1:8080/callback',
+    ]);
+
+    const rotated = await rotateOAuthSecret(configPath);
+    expect(rotated.clientId).toBe(oauth.clientId);
+    expect(rotated.clientSecret).not.toBe(oauth.clientSecret);
+    const afterRotate = await readRemoteConfig(configPath);
+    expect(afterRotate.oauth?.client_secret_hash).toBe(tokenHash(rotated.clientSecret));
+    expect(afterRotate.token_hash).toBe(config.token_hash);
   });
 });

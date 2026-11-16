@@ -10,48 +10,104 @@ for (const size of [16, 32, 48, 128]) {
 
 function createIcon(size) {
   const pixels = Buffer.alloc(size * size * 4);
-  const setPixel = (x, y, color) => {
-    if (x < 0 || y < 0 || x >= size || y >= size) return;
-    const offset = (y * size + x) * 4;
-    pixels.set(color, offset);
-  };
-  const scale = size / 128;
-  const center = size / 2;
-  const radius = size * 0.16;
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const edge = Math.min(x, y, size - 1 - x, size - 1 - y);
-      const distance = Math.hypot(x - center, y - center);
-      const alpha = edge < radius && distance > size / 2 - radius ? 0 : 255;
-      setPixel(x, y, [11, 31, 51, alpha]);
+  const sub = 4;
+  const invSub = 1 / sub;
+  const weight = 1 / (sub * sub);
+  const arrow = [[68, 22], [104, 90], [80, 81], [69, 105], [56, 78]];
+  const arrowShadow = arrow.map(([x, y]) => [x + 2, y + 3]);
+
+  for (let py = 0; py < size; py += 1) {
+    for (let px = 0; px < size; px += 1) {
+      let accR = 0;
+      let accG = 0;
+      let accB = 0;
+      let accA = 0;
+
+      for (let sy = 0; sy < sub; sy += 1) {
+        const y = ((py + (sy + 0.5) * invSub) / size) * 128;
+        for (let sx = 0; sx < sub; sx += 1) {
+          const x = ((px + (sx + 0.5) * invSub) / size) * 128;
+          const sample = sampleScene(x, y, arrow, arrowShadow);
+          const a = sample[3] / 255;
+          accR += sample[0] * a * weight;
+          accG += sample[1] * a * weight;
+          accB += sample[2] * a * weight;
+          accA += a * weight;
+        }
+      }
+
+      const offset = (py * size + px) * 4;
+      if (accA > 0) {
+        pixels[offset] = Math.min(255, Math.round(accR / accA));
+        pixels[offset + 1] = Math.min(255, Math.round(accG / accA));
+        pixels[offset + 2] = Math.min(255, Math.round(accB / accA));
+        pixels[offset + 3] = Math.min(255, Math.round(accA * 255));
+      }
     }
   }
-  for (let x = 20; x <= 108; x += 1) {
-    const waveY = 91 - Math.sin((x - 20) / 88 * Math.PI) * 13;
-    for (let y = Math.floor(waveY - 4); y <= Math.ceil(waveY + 4); y += 1) {
-      setPixel(Math.round(x * scale), Math.round(y * scale), [45, 211, 191, 255]);
-    }
-  }
-  const points = [[70, 25], [104, 93], [82, 84], [72, 106], [59, 81]];
-  fillPolygon(points.map(([x, y]) => [x * scale, y * scale]), [255, 255, 255, 255], setPixel);
   return encodePng(size, size, pixels);
 }
 
-function fillPolygon(points, color, setPixel) {
-  const minY = Math.floor(Math.min(...points.map((point) => point[1])));
-  const maxY = Math.ceil(Math.max(...points.map((point) => point[1])));
-  for (let y = minY; y <= maxY; y += 1) {
-    const intersections = [];
-    for (let index = 0; index < points.length; index += 1) {
-      const [x1, y1] = points[index];
-      const [x2, y2] = points[(index + 1) % points.length];
-      if ((y1 <= y && y < y2) || (y2 <= y && y < y1)) intersections.push(x1 + (y - y1) * (x2 - x1) / (y2 - y1));
-    }
-    intersections.sort((a, b) => a - b);
-    for (let index = 0; index < intersections.length; index += 2) {
-      for (let x = Math.ceil(intersections[index]); x <= intersections[index + 1]; x += 1) setPixel(x, y, color);
+function sampleScene(x, y, arrow, arrowShadow) {
+  // Rounded square centered at (64, 64), radius 26, half-extent 60
+  const dist = roundedBoxSdf(x - 64, y - 64, 60, 60, 26);
+  if (dist > 0) return [0, 0, 0, 0];
+
+  const t = (x + y) / 256;
+  let r = 11 + t * 9;
+  let g = 31 + t * 23;
+  let b = 56 + t * 40;
+
+  // Subtle top inner highlight
+  if (dist > -2 && y < 64) {
+    const sheen = 0.14 * (1 - y / 64);
+    r += (255 - r) * sheen;
+    g += (255 - g) * sheen;
+    b += (255 - b) * sheen;
+  }
+
+  // Teal-to-sky surf wave clipped inside rounded square
+  if (x >= 10 && x <= 118) {
+    const waveY = 92 - Math.sin(((x - 10) / 108) * Math.PI) * 15;
+    const halfStroke = 4.6;
+    if (Math.abs(y - waveY) <= halfStroke) {
+      const wt = (x - 10) / 108;
+      r = 38 + wt * 18;
+      g = 212 - wt * 22;
+      b = 188 + wt * 60;
     }
   }
+
+  // Soft shadow under pointer
+  if (pointInPolygon(x, y, arrowShadow)) {
+    r *= 0.48;
+    g *= 0.48;
+    b *= 0.48;
+  }
+
+  // Crisp white pointer
+  if (pointInPolygon(x, y, arrow)) {
+    return [255, 255, 255, 255];
+  }
+
+  return [Math.round(r), Math.round(g), Math.round(b), 255];
+}
+
+function roundedBoxSdf(dx, dy, halfW, halfH, radius) {
+  const qx = Math.abs(dx) - (halfW - radius);
+  const qy = Math.abs(dy) - (halfH - radius);
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - radius;
+}
+
+function pointInPolygon(x, y, points) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+    const [xi, yi] = points[i];
+    const [xj, yj] = points[j];
+    const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 function encodePng(width, height, pixels) {

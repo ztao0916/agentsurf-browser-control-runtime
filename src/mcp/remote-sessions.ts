@@ -13,6 +13,7 @@ interface RemoteSession {
   state: 'starting' | 'active' | 'ending' | 'ended';
   touched: number;
   uncertain: string[];
+  device_id?: string;
 }
 
 export interface RemoteSessionStore {
@@ -41,10 +42,17 @@ function validSession(value: unknown): boolean {
   const v = value as Record<string, unknown>;
   return typeof v.id === 'string' && v.id.startsWith('remote_') && typeof v.principal === 'string' &&
     typeof v.start_operation === 'string' && ['starting', 'active', 'ending', 'ended'].includes(String(v.state)) &&
-    typeof v.touched === 'number' && Array.isArray(v.uncertain) && v.uncertain.every((id) => typeof id === 'string');
+    typeof v.touched === 'number' && Array.isArray(v.uncertain) && v.uncertain.every((id) => typeof id === 'string') &&
+    (v.device_id === undefined || typeof v.device_id === 'string');
 }
 
-export type RemoteBridgeCall = (tool: ToolName, args: ToolRequest['args'], sessionId: string, operationId?: string) => Promise<unknown>;
+export type RemoteBridgeCall = (
+  tool: ToolName,
+  args: ToolRequest['args'],
+  sessionId: string,
+  operationId?: string,
+  deviceHint?: string,
+) => Promise<unknown>;
 
 /** HTTP connections own no browser state. This registry binds random task handles to principals. */
 export class RemoteSessions {
@@ -95,9 +103,13 @@ export class RemoteSessions {
       if (session.state === 'ended' && tool !== 'browser.get_operation') throw missing();
       if (session.state === 'ending' && tool !== 'browser.get_operation' && tool !== 'browser.end_session') throw missing();
     }
+    const requestedDevice = tool === 'browser.start_session' && typeof args.device === 'string'
+      ? args.device.trim() || undefined
+      : undefined;
     const forwarded = { ...args };
     delete forwarded.operation_id;
     delete forwarded.session_id;
+    delete forwarded.device;
     if (tool === 'browser.start_session' || tool === 'browser.claim_tab') forwarded.session_id = session.id;
     if (tool === 'browser.get_operation') forwarded.operation_id = operationId;
     // Set ending before awaiting the queue, so later requests cannot overtake an explicit end.
@@ -113,8 +125,22 @@ export class RemoteSessions {
       session.touched = Date.now();
       await this.persist();
       try {
-        const result = await this.bridge(tool, forwarded, session.id, tool === 'browser.get_operation' ? undefined : operationId);
-        if (tool === 'browser.start_session') session.state = 'active';
+        const deviceHint = tool === 'browser.start_session'
+          ? (session.device_id ?? requestedDevice)
+          : session.device_id;
+        const result = await this.bridge(
+          tool,
+          forwarded,
+          session.id,
+          tool === 'browser.get_operation' ? undefined : operationId,
+          deviceHint,
+        );
+        if (tool === 'browser.start_session') {
+          session.state = 'active';
+          if (isRecord(result) && isRecord(result.device) && typeof result.device.device_id === 'string') {
+            session.device_id = result.device.device_id;
+          }
+        }
         if (tool === 'browser.end_session') session.state = 'ended';
         if (isRecord(result) && (result.state === 'running' || result.state === 'unknown')) {
           if (!session.uncertain.includes(operationId)) session.uncertain.push(operationId);
@@ -151,7 +177,7 @@ export class RemoteSessions {
     for (const session of this.sessions.values()) {
       if (session.state === 'ended' || session.uncertain.length || this.queues.get(session.id)?.count || Date.now() - session.touched < 30 * 60_000) continue;
       try {
-        await this.bridge('browser.end_session', { close_opened_tabs: false }, session.id, `idle_${randomUUID()}`);
+        await this.bridge('browser.end_session', { close_opened_tabs: false }, session.id, `idle_${randomUUID()}`, session.device_id);
         session.state = 'ended';
       } catch { /* Keep protected ownership until the browser confirms release. */ }
     }
@@ -166,7 +192,7 @@ export class RemoteSessions {
     for (const session of this.sessions.values()) {
       if (session.state === 'ended' || session.uncertain.length || this.queues.get(session.id)?.count) continue;
       try {
-        await this.bridge('browser.end_session', { close_opened_tabs: false }, session.id, `shutdown_${randomUUID()}`);
+        await this.bridge('browser.end_session', { close_opened_tabs: false }, session.id, `shutdown_${randomUUID()}`, session.device_id);
         session.state = 'ended';
       } catch { /* Durable browser-side records and protected leases are retained for recovery. */ }
     }

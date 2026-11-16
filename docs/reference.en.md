@@ -2,7 +2,7 @@
 
 [中文](reference.md) ｜ **English**
 
-This is the deep-dive companion to the [README](../README.en.md): tool reference, error codes, development and debugging, the external protocol, and implementation notes. **For installation and day-to-day use, read the [README](../README.en.md).**
+This is the deep-dive companion to the [README](../README.md): tool reference, error codes, development and debugging, the external protocol, and implementation notes. **For installation and day-to-day use, read the [README](../README.md).**
 
 ## Table of contents
 
@@ -34,7 +34,7 @@ This is the deep-dive companion to the [README](../README.en.md): tool reference
 | Files | `browser.list_downloads` / `browser.wait_for_download` / `browser.set_files` |
 | Sessions and tab ownership | `browser.claim_tab` / `browser.reset_sessions` (finish a task: ungroup + close the tabs this conversation opened) |
 
-> `browser.start_session` is still part of the protocol (usable by scripts and external clients) but is **not advertised as an MCP tool**: the MCP server establishes a session per conversation automatically. See [README section 6.5](../README.en.md#65-parallel-conversations-isolated-by-default).
+> `browser.start_session` is still part of the protocol (usable by scripts and external clients) but is **not advertised as an MCP tool** in local stdio mode: the MCP server establishes a session per conversation automatically.
 
 - `modifiers: ["Alt"|"Control"|"Meta"|"Shift"]` is accepted by `browser.press`, `browser.click`, `browser.double_click`.
 - `browser.open` and `browser.claim_tab` accept an optional `name` (**the session's tab group title**, about 12 characters), which the agent sets from what the conversation is doing. Without it the group is titled after the claimed page's title — its hostname while the tab is still loading — and `AgentSurf` last.

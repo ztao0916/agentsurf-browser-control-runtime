@@ -7,6 +7,18 @@ export interface ExtensionHelloMessage {
   type: 'extension_hello';
   protocol_version: '1';
   extension_id: string;
+  device_id?: string;
+  device_name?: string;
+  last_active_at?: number;
+  pinned?: boolean;
+}
+
+export interface ExtensionStatusMessage {
+  type: 'extension_status';
+  device_id: string;
+  device_name: string;
+  last_active_at: number;
+  pinned?: boolean;
 }
 
 export interface HostReadyMessage {
@@ -43,6 +55,7 @@ export interface NativeHostErrorMessage {
 
 export type ExtensionToHostMessage =
   | ExtensionHelloMessage
+  | ExtensionStatusMessage
   | NativeToolResponseMessage
   | NativePingMessage
   | NativePongMessage;
@@ -81,4 +94,11 @@ export function isNativePongMessage(value: unknown): value is NativePongMessage 
 
 export function isNativeHostErrorMessage(value: unknown): value is NativeHostErrorMessage {
   return isRecord(value) && value.type === 'host_error' && isRecord(value.error);
+}
+
+export function isExtensionStatusMessage(value: unknown): value is ExtensionStatusMessage {
+  return isRecord(value) && value.type === 'extension_status' &&
+    typeof value.device_id === 'string' &&
+    typeof value.device_name === 'string' &&
+    typeof value.last_active_at === 'number';
 }

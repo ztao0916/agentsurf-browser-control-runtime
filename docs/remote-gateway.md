@@ -191,10 +191,12 @@ pm2 start /root/standalone-gateway.js --name agentsurf-gateway --max-memory-rest
 1. 打开 Chrome 扩展管理 `chrome://extensions`，找到 **AgentSurf**，点击卡片右下角的 **🔄 刷新**；
 2. 点击 Chrome 右上角工具栏中的 **AgentSurf** 图标打开面板；
 3. 在【云端网关 (Remote Gateway)】卡片上点击 **【修改配置】**（或开启开关后点击弹出的配置按钮）；
-   * **云端网关地址 (Gateway WSS)**：输入 `wss://mcp.example.com:9443/ws`
+   * **云端网关地址 (Gateway WSS)**：输入 `wss://mcp.example.com:9443/ws`（若反代监听 443 可直接填 `wss://mcp.example.com/ws`）
    * **配对密钥 (Bearer Token)**：粘贴服务器上生成的配对密钥；
+   * **本机设备名称 (可选)**：可填写如 `家里`、`公司`（不填则自动生成），多台电脑同时连接同一网关时用于区分和按需指定；
    * 点击 **【保存并连接】**；
 4. 状态即刻显示为绿色的 **`● 已配对 · 当前生效`**！连接成功后域名与密钥自动折叠保护，杜绝隐私泄漏。
+   * 多设备共存：家里与公司浏览器可同时连接同一个 `/ws` 地址而不再互踢；网关默认路由到最近活跃操作窗口的浏览器，也可在面板点击 **【设为当前主控】** 锁定，或在 `browser_start_session` 中显式传入 `device` 参数（或 URL `?device=家里`）指定设备。
 
 *(此时若在浏览器访问 `https://mcp.example.com:9443/health`，会看到 `"extension_connected": true`)*
 
@@ -218,6 +220,28 @@ pm2 start /root/standalone-gateway.js --name agentsurf-gateway --max-memory-rest
    * **认证类型 (Authentication)**：选择 `Bearer Token`
    * **Token / 凭证**：粘贴配对密钥
 3. 点击 **保存 (Save)** 即可完成。在 Notion 对话框中以自然语言提问，即可直接指挥你电脑上的本地浏览器完成数据整理、网页抓取与操作！
+
+### 3. Gemini 网页端等 OAuth 2.0 客户端接入配置
+Gemini 网页端（「连接到 MCP 服务器」->「其他设置」）要求填写 **OAuth 客户端 ID**、**OAuth 客户端密钥**，并提供一个**重定向 URI**。
+
+1. 如果你在执行 `init-remote` 时尚未生成 OAuth 凭据，可在服务器上直接补充初始化（不会改动原有的配对 Bearer Token）：
+   ```bash
+   node /root/standalone-gateway.js init-oauth
+   ```
+   终端会输出 `OAuth Client ID` 和 `OAuth Client Secret`。
+2. 在 Gemini 网页端填入：
+   * **MCP 服务器网址**：`https://mcp.example.com:9443/mcp`
+   * **客户端 ID**：填入 `OAuth Client ID`
+   * **客户端密钥**：填入 `OAuth Client Secret`
+3. 点击 Gemini 弹窗中的 **【复制重定向 URI】**，在服务器上将其加入白名单：
+   ```bash
+   node /root/standalone-gateway.js add-oauth-redirect --uri "<粘贴你复制的重定向 URI>"
+   ```
+4. 在 Gemini 点击 **【下一步】**，浏览器会跳转到网关授权确认页；输入你的 **AgentSurf 配对密钥 (Bearer Token)** 并点击 **【授权连接】** 即可完成配对。
+5. 如需轮换 OAuth 客户端密钥（会立即吊销已签发的 OAuth Token）：
+   ```bash
+   node /root/standalone-gateway.js rotate-oauth-secret
+   ```
 
 ---
 

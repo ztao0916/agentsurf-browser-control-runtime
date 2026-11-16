@@ -1,186 +1,185 @@
 # AgentSurf
 
-[![CI](https://github.com/ztao0916/agentsurf-browser-control-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/ztao0916/agentsurf-browser-control-runtime/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/ztao0916/agentsurf-browser-control-runtime?label=License)](LICENSE)
-[![Open Source](https://img.shields.io/badge/Open%20Source-Yes-2ea44f)](https://opensource.org/license/apache-2-0)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-339933)](package.json)
+[![MCP](https://img.shields.io/badge/MCP-stdio%20%2B%20Streamable%20HTTP-2563eb)](https://modelcontextprotocol.io/)
+[![OAuth 2.0](https://img.shields.io/badge/Auth-OAuth%202.0%20%2B%20PKCE-0ea5e9)](docs/remote-gateway.en.md)
+[![Browser](https://img.shields.io/badge/Browser-Chrome%20%2F%20Edge%20MV3-f59e0b)](manifest.json)
 
-**中文** ｜ [English](README.en.md)
+**English** | [简体中文](README.zh-CN.md)
 
-> 本项目已在 [LINUX DO](https://linux.do/) 社区发布。
+**Give any AI agent — local or cloud — safe control over the Chrome or Edge browser you are already signed into.**
 
-AgentSurf 让你正在使用的 AI Agent 直接操作你的本机 Chrome 或 Edge。可以把它理解为 ChatGPT 浏览器插件的通用版本：不绑定某个模型或客户端，任何支持 MCP 的 Agent 都可以接入。
+AgentSurf connects **Claude Desktop, Cursor, Codex, Gemini Web, Notion AI, Dify**, and any MCP-compatible agent to your real desktop browser. It reuses your existing logins and open tabs without launching headless browsers, exporting cookies, or triggering bot-detection walls.
 
-它复用你当前的登录态和标签页，支持读取页面、点击、输入、滚动、截图、文件上传和 iframe 等常见操作。你不需要换浏览器，也不需要重新登录。Chrome 和 Edge 可以同时安装，各自使用独立端口和配置。
-
-![AgentSurf 动态演示：Agent 通过本地运行时操作用户已登录的 Chrome](docs/assets/agentsurf-demo.svg)
-
-> 已在 Codex、Command Code agent 和 pi agent 实测，均可正常接入和操作。Windows 与 macOS 均已真机验证；首次接入通常需要 5–10 分钟。
-
-## 实测场景
-
-- **Pinterest**：在已登录的 Pinterest 中上传图片、填写 Pin 信息，并在发布前停下来等待确认。
-- **禅道**：读取你有权限访问的任务，汇总待办、负责人和优先级；修改任务前仍需确认。
-- **Google Trends**：切换关键词、地区和日期范围，读取趋势页面并整理关键变化。
-
-## 快速开始
-
-把本 README 交给能操作电脑的 Agent，让它带你完成安装；也可以按下面的步骤手动操作。
-
-> **请选择你的部署模式：**
-> 
-> | 模式 | 适用场景 | 说明与入口 |
-> | :--- | :--- | :--- |
-> | 💻 **[本地部署 (默认)](#-本地部署-默认)** | Claude Desktop、Cursor、Codex 等本机 Agent | [查看下方本地步骤 👇](#-本地部署-默认)（0 网络依赖、断网可用） |
-> | ☁️ **[云端远程部署](docs/remote-gateway.md)** | 云端 Agent、远程 MCP 客户端、Notion AI、工作流等 | [跳转远程网关指南 ↗](docs/remote-gateway.md)（反向连接网关，本地 0 终端） |
+![AgentSurf demo: an agent controls the user's signed-in Chrome through the local runtime](docs/assets/agentsurf-demo.svg)
 
 ---
 
-### 💻 本地部署 (默认)
+## Why AgentSurf?
 
-#### 1. 准备环境
+Most browser MCP servers launch a fresh headless Playwright/Puppeteer instance. That forces you to re-authenticate on every workflow and often triggers anti-bot challenges. AgentSurf connects directly to the browser you already use every day.
 
-| 需要 | 要求与检查方式 |
-| --- | --- |
-| Node.js | 20+，终端执行 `node -v` |
-| Git | 终端执行 `git --version` |
-| Chrome 或 Edge | 116+，Chrome 打开 `chrome://version`，Edge 打开 `edge://version` |
-
-> 不需要管理员权限，也不会修改你 Chrome 里已有的登录态和设置。
-
-#### 2. 安装
-
-1. 克隆仓库并进入项目目录：
-
-```bash
-git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
-cd agentsurf-browser-control-runtime
-```
-
-2. 执行安装向导：
-
-```bash
-npm run setup
-```
-
-默认不改变原有行为：只安装 Chrome，继续使用 `agentsurf`、根目录 `config.json` 和原有启动器。同时使用 Chrome 和 Edge 时执行：
-
-```bash
-npm run setup -- --browser all
-```
-
-已有的 `agentsurf` 配置不需要删除，仍会连接 Chrome；新增的 `agentsurf-chrome` 和 `agentsurf-edge` 用于显式选择目标浏览器。
-
-| MCP 名称 | 目标 | 使用场景 |
+| Capability | AgentSurf | Typical Headless Browser MCP |
 | --- | --- | --- |
-| `agentsurf` | Chrome | 默认安装和旧配置，保持兼容 |
-| `agentsurf-chrome` | Chrome | 多浏览器模式下的显式 Chrome |
-| `agentsurf-edge` | Edge | 多浏览器模式下的显式 Edge |
+| **Existing logins & sessions** | Reuses your live Chrome / Edge tabs & cookies | Starts logged out or requires brittle profile copies |
+| **Anti-bot friendliness** | Real user browser environment | Often flagged by headless automation signals |
+| **Cloud / Web AI Agents** | Built-in **Streamable HTTP + OAuth 2.0 (PKCE)** & **Reverse WSS** | Usually local `stdio` only |
+| **Home + Office multi-PC** | Multiple browsers share one gateway via active-window routing | Single local instance |
+| **Multi-conversation isolation** | Per-session tab leases + labeled Chrome Tab Groups | Shared browser state across prompts |
+| **Safety guardrails** | Remote mode starts `read-only`; no `MAIN`-world `console` patching | Full read/write exposure by default |
 
-向导会自动完成依赖安装、构建和 Native Host 注册，并提示你分别操作要使用的浏览器：
+---
 
-1. 在 Chrome 打开 `chrome://extensions`，在 Edge 打开 `edge://extensions`，开启开发者模式；
-2. 点击“加载已解压的扩展程序”，选择项目里的 `dist/`；
-3. 复制每个浏览器中 AgentSurf 卡片显示的扩展 ID，粘贴回终端；
-4. 保存终端最后打印的 MCP 配置 JSON。
+## Key Features
 
-![在 Chrome 扩展卡片上获取 AgentSurf 扩展 ID](docs/assets/agentsurf-extension-id.png)
+- **Dual-Channel Transport**:
+  - **Local Native (`stdio`)**: Zero network dependencies, ultra-low latency via Chrome Native Messaging + loopback bridge (`127.0.0.1:8765`).
+  - **Cloud Remote Gateway (`Streamable HTTP` + `Reverse WSS`)**: Deploy a single self-contained `standalone-gateway.js` on any VPS. Your local browser initiates an outbound encrypted WebSocket connection—no port forwarding, SSH tunnels, or public IP needed on your PC.
+- **Full OAuth 2.0 + PKCE & Bearer Token Support**:
+  - Implements MCP OAuth discovery (`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`), `Client ID` / `Client Secret`, `S256` PKCE, consent UI, and refresh tokens—ready for **Gemini Web**.
+  - Also supports static **Bearer Token** headers for **Notion AI**, **Dify**, and custom HTTP MCP agents.
+- **Port-Agnostic Public Routing**:
+  - Host, Origin, and OAuth metadata adapt dynamically to the incoming request `Host` and `X-Forwarded-Proto`, so one gateway config works across standard port `443` or any alternate reverse-proxy port.
+- **Multi-Computer Coexistence (Home + Office)**:
+  - Connect multiple computers (e.g., `Home` and `Office`) to the same `wss://.../ws` endpoint without kicking each other offline.
+  - Routes automatically to whichever Chrome window you actively focused/used most recently, locks active sessions to their originating computer, and supports pinning in the extension popup or explicit `device` targeting.
+- **29 Browser Control Tools (Token-Efficient by Design)**:
+  - Semantic interactive element snapshots (`browser_get_interactives` with opaque `element_id`s, in-page filtering by `tag` / `role` / `name_contains` / `visible_only`, and default `150` cap—cutting a heavy 665-element app page from **~66,800 tokens** to **~15,100**, or **~380 tokens** with `visible_only: true`).
+  - Page content extraction, click/double-click/type/press/select/checkbox/drag/scroll, viewport & full-page screenshots, iframe navigation, JS dialog handling, downloads, and file uploads (`DOM.setFileInputFiles`).
 
-> 图中 **ID** 就是安装向导需要填写的 AgentSurf 扩展 ID。
+---
 
-#### 3. 检查扩展连接
+## Architecture
 
-1. 回到每个浏览器的扩展页面，点 AgentSurf 卡片上的 **重新加载**；
-2. 点击浏览器工具栏里的 AgentSurf 图标；
-3. 确认扩展面板中 **「本地直连」** 或 **「云端网关」** 处于开启生效状态（默认本地直连开启）。
+```mermaid
+flowchart LR
+  subgraph Local["Local Mode (Zero Network)"]
+    LAgent["Claude Desktop / Cursor / Codex"] -->|stdio MCP| LServer["agentsurf-mcp"]
+    LServer -->|Local WS| NHost["Native Messaging Host"]
+    NHost -->|Native Messaging| Ext["AgentSurf Extension (Chrome / Edge)"]
+  end
 
-![AgentSurf 扩展面板状态](docs/assets/agentsurf-extension-panel.png)
-
-#### 4. 接入你的 Agent（MCP 配置）
-
-安装脚本最后会打印一段 MCP 配置，核心是启动器的绝对路径。选择下面任意一种方式接入：
-
-**方式 A：通过 [CC Switch](https://github.com/farion1231/cc-switch)**
-
-1. 打开 CC Switch，点击顶部的 **MCP**；
-2. 点击右上角 **+**，选择 **自定义**；
-3. 服务器 ID 填 `agentsurf-chrome` 或 `agentsurf-edge`，传输类型选 `stdio`，把安装脚本打印的对应 `command` 路径填入 **命令**；
-4. 保存后，打开对应 Agent 的同步开关（如 Claude、Codex、Gemini）；
-5. 重启对应 Agent。
-
-> 如果 CC Switch 的同步列表里没有你正在用的 Agent，使用方式 B。
-
-**方式 B：交给 AI Agent 自动配置**
-
-把安装脚本的完整输出发给正在使用的 Agent，然后直接说：
-
-```text
-请把这段 MCP 配置加入你当前使用的 Agent，名称使用配置中的 key，完成后告诉我如何重启和验证。
-```
-
-完成后重启 Agent。
-
-`npm run setup` 会为本次安装的每个浏览器分别打印 MCP 配置。把完整输出加入你的 Agent 即可。同时安装 Chrome 和 Edge 时，结构如下：
-
-```json
-{
-  "mcpServers": {
-    "agentsurf-chrome": {
-      "command": "<Chrome 启动器绝对路径>"
-    },
-    "agentsurf-edge": {
-      "command": "<Edge 启动器绝对路径>"
-    }
-  }
-}
+  subgraph Cloud["Cloud Mode (OAuth 2.0 + Reverse WSS)"]
+    CAgent["Gemini Web (OAuth 2.0) / Notion AI / Dify"] -->|HTTPS Streamable MCP| Proxy["Caddy / Nginx HTTPS"]
+    Proxy --> GW["standalone-gateway.js (:8767)"]
+    HomeExt["Home Chrome Extension"] -->|Outbound WSS| GW
+    WorkExt["Office Chrome Extension"] -->|Outbound WSS| GW
+  end
 ```
 
 ---
 
-### ☁️ 云端远程部署 (适配各类云端 Agent 与不同环境)
+## Quick Start
 
-如果你需要让运行在云端服务器、SaaS 平台或私有环境中的 AI 智能体（如自定义云端 Agent、Dify、Coze、Notion AI、远程自动化流水线等）安全调度你本地的真实 Chrome / Edge 浏览器，推荐使用 **远程网关模式**：
+### Prerequisites
 
-* **多环境通用适配**：提供标准 Streamed HTTP MCP 接口，可无缝接入任意支持 MCP 协议的云端应用与智能体；
-* **本地 0 终端门槛**：本地电脑无需常驻命令行、无需 SSH 隧道或申请公网 IP，在扩展面板即可一键连接；
-* **服务永久在线**：云端常驻轻量反向网关，跨网络、跨设备、支持自动断线重连；
-* **一键交给 AI 部署**：文档内附完整的服务端部署 Prompt，复制发给任何 AI 编程工具即可自动完成服务器配置；
-* 详细部署与配置指南请参阅独立文档：👉 **[云端远程网关部署与多环境接入指南 (docs/remote-gateway.md)](docs/remote-gateway.md)**。
+| Requirement | Version & Check |
+| --- | --- |
+| **Node.js** | `20+` (`node -v`) |
+| **Git** | `git --version` |
+| **Chrome or Edge** | `116+` (`chrome://version` / `edge://version`) |
+
+> No administrator privileges required. Your existing browser profiles, passwords, and settings are never modified.
 
 ---
 
-## 同时使用多个浏览器
+### Path A: Local Deployment (Claude Desktop, Cursor, Codex, etc.)
 
-浏览器由 MCP Server 名称选择，不是在 `browser.*` 工具参数里填写浏览器名称。
+1. **Clone and run the setup wizard**:
 
-- 旧的 `agentsurf` 和显式的 `agentsurf-chrome` 都操作 Chrome；
-- `agentsurf-edge` 操作 Edge；
-- 两个浏览器拥有独立的标签页、页面 revision 和会话，不要把 Chrome 的 `tab_id` 或 `element_id` 传给 Edge；
-- `browser.reset_sessions` 也只清理当前 MCP Server 对应的浏览器。
+   ```bash
+   git clone https://github.com/ztao0916/agentsurf-browser-control-runtime.git
+   cd agentsurf-browser-control-runtime
+   npm run setup
+   ```
 
-在支持选择 MCP Server 的 Agent 中，可以直接用自然语言指定目标：
+   To configure **both** Chrome and Edge simultaneously (with separate ports and configs):
+
+   ```bash
+   npm run setup -- --browser all
+   ```
+
+2. **Load the extension in Chrome / Edge**:
+   - Open `chrome://extensions` (or `edge://extensions`) and enable **Developer mode**.
+   - Click **Load unpacked** and select the project's `dist/` folder.
+   - Copy the generated **Extension ID** from the AgentSurf card and paste it into the terminal prompt.
+
+   ![Getting the AgentSurf extension ID from its Chrome extension card](docs/assets/agentsurf-extension-id.png)
+
+3. **Reload & verify the extension popup**:
+   - Click **Reload** on the AgentSurf extension card, then click the AgentSurf toolbar icon and verify **Local Native** is active.
+
+   ![AgentSurf extension panel status](docs/assets/agentsurf-extension-panel.png)
+
+4. **Add the printed MCP config to your agent**:
+
+   ```json
+   {
+     "mcpServers": {
+       "agentsurf": {
+         "command": "<absolute launcher path printed by setup>"
+       }
+     }
+   }
+   ```
+
+   When installed with `--browser all`, `setup` prints separate `agentsurf-chrome` and `agentsurf-edge` entries so you can target either browser cleanly.
+
+---
+
+### Path B: Remote Cloud Gateway (Gemini Web, Notion AI, Dify, Remote Agents)
+
+Use Remote Gateway mode when your AI runs in the cloud and needs to control your local browser over HTTPS/WSS.
+
+1. Build the single-file gateway locally (`npm run build` produces `dist/mcp/standalone-gateway.js` with zero `node_modules` needed on the server).
+2. Upload `dist/mcp/standalone-gateway.js` to your server behind Caddy/Nginx HTTPS, initialize credentials (`init-remote --url https://mcp.example.com`), and start it with PM2 (`start-remote`).
+3. Pair your Chrome/Edge extension in the popup under **Remote Gateway** using your `wss://.../ws` URL, Pairing Token, and an optional **Device Name** (e.g., `Home` / `Office`).
+4. Connect your cloud client:
+   - **Gemini Web**: Use the generated `OAuth Client ID` and `OAuth Client Secret`, register Gemini's Redirect URI with `add-oauth-redirect --uri "..."`, and approve the browser prompt with your Pairing Token.
+   - **Notion AI / Dify / Custom HTTP MCP**: Use `https://mcp.example.com/mcp` with `Authorization: Bearer <token>`.
+
+👉 **Full step-by-step instructions**: **[Remote Gateway & OAuth 2.0 Guide (docs/remote-gateway.en.md)](docs/remote-gateway.en.md)**
+
+---
+
+## Multi-Browser & Multi-Computer Routing
+
+### Multiple browsers on one PC (Chrome + Edge)
+Each MCP server entry (`agentsurf` / `agentsurf-chrome` vs `agentsurf-edge`) runs its own isolated bridge, tab leases, and sessions. Do not pass a Chrome `tab_id` or `element_id` to the Edge server.
+
+### Multiple PCs on one Cloud Gateway (Home + Office)
+1. Connect both browsers to the same `wss://mcp.example.com/ws` URL with the same Pairing Token and distinct **Device Names** (e.g., `Home`, `Office`).
+2. **Automatic active routing**: The gateway defaults to whichever computer's Chrome window was most recently focused or used by you—idle/background browsers reconnecting will not steal control.
+3. **Session stickiness**: Once `browser_start_session` starts on a computer, every step of that task stays pinned to that same computer until completion.
+4. **Manual control when needed**: Click **Pin as active** in the extension popup to lock a browser, pass `device: "Office"` to `browser_start_session`, or connect via `https://mcp.example.com/mcp?device=Home`.
+
+---
+
+## Use and verify
+
+Ask your connected agent:
 
 ```text
-用 agentsurf 打开 https://example.com，并告诉我 Chrome 中的页面标题。
+Open https://example.com and tell me the page title.
 ```
 
-```text
-用 agentsurf-edge 打开 https://example.com，并告诉我 Edge 中的页面标题。
-```
+> Seeing *"Chrome is being debugged"* during screenshots or file uploads is normal Chrome CDP behavior.
 
-如果 Agent 会把工具名前缀写成 Server 名称，则分别选择 `agentsurf` / `agentsurf-chrome` 和 `agentsurf-edge` 下的 `browser_list_tabs`、`browser_open` 等工具。不要连续把同一组标签页操作切换给不同 Server；每个 Server 只会看到自己浏览器中的标签页。
+### Safety Recommendations
 
-## 使用与检查
+- **Start in `read-only` mode** when deploying the remote gateway (`init-remote` defaults to `read-only`; explicitly switch to `interactive` only when ready).
+- **Keep human confirmation** before consequential actions such as submitting forms, making purchases, deleting records, uploading files, or sending messages.
+- **Never share secrets** (passwords, OTPs, cookies, or pairing tokens) inside prompts, and never commit local `config.json` or `remote-config.json` files.
 
-在对话里直接对 Agent 说：
+---
 
-```text
-打开 https://example.com，告诉我页面标题。
-```
+## Documentation & Links
 
-如果它能打开网页并返回标题，就说明 AgentSurf 已经可以正常使用了。之后你可以继续让它读取、点击、输入、截图或完成其他浏览器操作。
+- **[Remote Gateway Deployment & OAuth 2.0 Guide](docs/remote-gateway.en.md)** ([中文版](docs/remote-gateway.md))
+- **[Developer & Protocol Reference](docs/reference.en.md)** ([中文版](docs/reference.md))
+- **[Security Policy](SECURITY.md)**
+- **[Contributing](CONTRIBUTING.md)**
+- **[Changelog](CHANGELOG.md)**
 
-> 截图时看到“Chrome 正在被调试”或“AgentSurf 已开始调试此浏览器”属于正常现象。
-
-> 首次使用建议先操作普通网页。请先以只读方式使用；提交、保存、删除、发布、上传、发送消息等操作前由你确认。不要把密码、验证码、Cookie 或 Token 发给 Agent。
-
-本项目采用 [Apache License 2.0](LICENSE)。
+Licensed under the [Apache License 2.0](LICENSE).

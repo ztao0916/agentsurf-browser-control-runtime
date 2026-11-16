@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -524,45 +524,45 @@
       </div>
       <div id="header-status-badge" class="status-badge connected">
         <span class="dot"></span>
-        <span id="header-status-text">本地直连生效中</span>
+        <span id="header-status-text">Local Native Active</span>
       </div>
     </div>
 
-    <!-- CARD 1: 本地直连 (Local Native) -->
+    <!-- CARD 1: Local Native -->
     <div class="card" id="card-local">
       <div class="card-header">
-        <span class="card-title">本地直连 (Local Native)</span>
-        <label class="switch" title="启用/关闭本地直连">
+        <span class="card-title">Local Native</span>
+        <label class="switch" title="Enable/Disable Local Native">
           <input type="checkbox" id="local-toggle" checked />
           <span class="slider"></span>
         </label>
       </div>
 
       <p class="card-hint" style="margin: 0 0 6px 0; padding: 0; border: none;">
-        默认基石通道，支持本地 AI 客户端零延迟操控当前浏览器。
+        Default baseline channel for zero-latency local AI clients (Claude, Cursor, Codex).
       </p>
 
       <!-- Local Status Box -->
       <div id="local-status-box" class="gateway-status-box">
         <div style="display: flex; align-items: center; gap: 5px;">
           <span class="dot" id="local-status-dot" style="background: var(--success);"></span>
-          <span id="local-status-text">连接正常</span>
+          <span id="local-status-text">Connected</span>
         </div>
       </div>
     </div>
 
-    <!-- CARD 2: 云端网关 (Remote Gateway) -->
+    <!-- CARD 2: Remote Gateway -->
     <div class="card" id="card-gateway">
       <div class="card-header">
-        <span class="card-title">云端网关 (Remote Gateway)</span>
-        <label class="switch" title="启用/关闭云端网关">
+        <span class="card-title">Remote Gateway</span>
+        <label class="switch" title="Enable/Disable Remote Gateway">
           <input type="checkbox" id="gateway-toggle" />
           <span class="slider"></span>
         </label>
       </div>
 
       <p class="card-hint" style="margin: 0 0 6px 0; padding: 0; border: none;">
-        为云端 AI 应用提供安全反向通道，远程调度本地浏览器。
+        Encrypted reverse WSS tunnel for cloud agents (Gemini Web, Notion AI, Dify).
       </p>
 
       <!-- Gateway Enabled View -->
@@ -570,9 +570,13 @@
         <div id="gateway-view-connected" class="gateway-status-box">
           <div style="display: flex; align-items: center; gap: 5px;">
             <span class="dot" id="gateway-status-dot" style="background: var(--success);"></span>
-            <span id="gateway-status-text">已连接</span>
+            <span id="gateway-status-text">Connected</span>
           </div>
-          <button class="text-action" id="btn-edit-config" type="button">修改配置</button>
+          <button class="text-action" id="btn-edit-config" type="button">Edit Config</button>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding: 0 2px; font-size: 11px; color: var(--text-muted);">
+          <span id="gateway-device-label">Device: --</span>
+          <button class="text-action" id="btn-pin-device" type="button">Pin as active</button>
         </div>
       </div>
 
@@ -580,9 +584,9 @@
       <div id="gateway-content-disabled" class="gateway-status-box standby" style="display: none;">
         <div style="display: flex; align-items: center; gap: 5px;">
           <span class="dot" style="background: #94a3b8;"></span>
-          <span>云端网关未启用</span>
+          <span>Remote Gateway Disabled</span>
         </div>
-        <button class="text-action" id="btn-config-gateway" type="button">配置网关</button>
+        <button class="text-action" id="btn-config-gateway" type="button">Configure</button>
       </div>
     </div>
 
@@ -591,7 +595,7 @@
 
     <!-- Minimal Footer -->
     <div class="footer">
-      <button class="text-btn" id="copy" type="button">复制诊断信息</button>
+      <button class="text-btn" id="copy" type="button">Copy Diagnostics</button>
       <span class="version" id="version-label">v0.7.0</span>
     </div>
 
@@ -601,34 +605,38 @@
         <!-- View 1: Unconfigured Prompt (Form A) -->
         <div id="modal-view-prompt" style="text-align: center;">
           <div class="modal-badge-icon">🌐</div>
-          <div class="modal-title">未配置云端网关</div>
+          <div class="modal-title">Remote Gateway Not Configured</div>
           <div class="modal-desc">
-            云端网关用于支持各类云端 AI Agent、远程工作流及自动化应用调度当前浏览器。检测到您尚未配置网关地址与密钥。
+            Remote Gateway lets cloud AI agents and remote workflows control this browser over an outbound WSS connection. Set your gateway URL and token to connect.
           </div>
           <div class="modal-actions">
-            <button id="btn-modal-cancel" class="btn btn-outline" type="button">暂不配置</button>
-            <button id="btn-modal-configure" class="btn btn-primary" type="button">立即配置</button>
+            <button id="btn-modal-cancel" class="btn btn-outline" type="button">Later</button>
+            <button id="btn-modal-configure" class="btn btn-primary" type="button">Configure Now</button>
           </div>
         </div>
 
         <!-- View 2: Configuration Form -->
         <div id="modal-view-form" style="display: none; text-align: left;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-            <div class="modal-title" style="margin: 0;">云端网关配置</div>
-            <button id="btn-modal-close" class="text-btn" style="font-size: 14px; padding: 0 4px;" type="button" title="关闭">✕</button>
+            <div class="modal-title" style="margin: 0;">Remote Gateway Settings</div>
+            <button id="btn-modal-close" class="text-btn" style="font-size: 14px; padding: 0 4px;" type="button" title="Close">✕</button>
           </div>
           <div class="field">
-            <label class="field-label" for="gateway-url">云端网关地址 (Gateway WSS):</label>
-            <input id="gateway-url" type="text" placeholder="wss://mcp.example.com:9443/ws" />
+            <label class="field-label" for="gateway-url">Gateway WSS URL:</label>
+            <input id="gateway-url" type="text" placeholder="wss://mcp.example.com/ws" />
           </div>
           <div class="field">
-            <label class="field-label" for="gateway-token">配对密钥 (Bearer Token):</label>
-            <input id="gateway-token" type="password" placeholder="粘贴从服务器生成的配对密钥" />
+            <label class="field-label" for="gateway-token">Pairing Token (Bearer Token):</label>
+            <input id="gateway-token" type="password" placeholder="Paste the Bearer Token generated on your server" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="gateway-device-name">Device Name (Optional):</label>
+            <input id="gateway-device-name" type="text" placeholder="e.g. Home / Office (auto-generated if empty)" />
           </div>
           <div class="modal-actions" style="margin-top: 12px;">
-            <button id="btn-clear-config" class="btn btn-danger" type="button" style="display: none; flex: 0 0 auto;">清空配置</button>
-            <button id="btn-cancel-config" class="btn btn-outline" type="button">取消</button>
-            <button id="btn-save-remote" class="btn btn-primary" type="button">保存并连接</button>
+            <button id="btn-clear-config" class="btn btn-danger" type="button" style="display: none; flex: 0 0 auto;">Clear</button>
+            <button id="btn-cancel-config" class="btn btn-outline" type="button">Cancel</button>
+            <button id="btn-save-remote" class="btn btn-primary" type="button">Save & Connect</button>
           </div>
         </div>
       </div>

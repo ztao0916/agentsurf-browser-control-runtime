@@ -98,6 +98,7 @@ for (const [tool, schema] of Object.entries(schemas)) {
   if (tool === 'browser.start_session') {
     builtRemoteToolSchemas[tool] = {
       name: z.string().min(1).optional().describe('Session or task name describing the goal, e.g. "search flight prices". Labels the tab group in Chrome.'),
+      device: z.string().min(1).optional().describe('Optional target browser device name or device_id when multiple browsers are connected (e.g. "家里" or "公司"). Defaults to the currently active browser.'),
       ...optionalOperationId,
     };
   } else if (tool === 'browser.end_session') {

@@ -28,14 +28,14 @@
 
 ## 不在范围内
 
-- **用户已明确授权的破坏性操作**：AgentSurf 的设计就是让 Agent 操作用户的登录态，这一点已在 [README 使用与检查](README.md#使用与检查) 中声明，运行时**不内置人工审批**
+- **用户已明确授权的破坏性操作**：AgentSurf 的设计就是让 Agent 操作用户的登录态，这一点已在 [README 使用与检查](README.zh-CN.md#使用与检查) 中声明，运行时**不内置人工审批**
 - **需要本机已被攻陷或已具备管理员权限**的攻击
 - **[当前边界](docs/browser-tooling-report.md#当前边界) 里已列出的已知行为**（无 OCR、不支持 Shadow DOM、iframe 需显式寻址、受保护页面不可注入等）
 - 第三方依赖自身的漏洞（欢迎一并告知，但上游才是修复方）
 
 ## 部署建议
 
-AgentSurf 会操作用户登录态下的页面，请勿把 Bridge 暴露到公网，也不要提交本机 `config.json` 或 token。详见 [README 使用与检查](README.md#使用与检查)。
+AgentSurf 会操作用户登录态下的页面，请勿把 Bridge 暴露到公网，也不要提交本机 `config.json` 或 token。详见 [README 使用与检查](README.zh-CN.md#使用与检查)。
 
 ---
 
@@ -69,11 +69,11 @@ We aim to acknowledge reports within **72 hours**, and will credit you in the ad
 
 ## Out of scope
 
-- **Destructive actions the user explicitly authorized**: AgentSurf exists to let an agent drive the user's logged-in session. The runtime does **not** implement human approval, as stated in the [README use and safety notes](README.en.md#use-and-verify)
+- **Destructive actions the user explicitly authorized**: AgentSurf exists to let an agent drive the user's logged-in session. The runtime does **not** implement human approval, as stated in the [README use and safety notes](README.md#use-and-verify)
 - Attacks that require the machine to be already compromised or to hold admin rights
 - **Known behaviors already listed under [current boundaries](docs/browser-tooling-report.md#当前边界)** (no OCR, no Shadow DOM support, iframes need explicit addressing, protected pages cannot be injected, etc.)
 - Vulnerabilities in third-party dependencies (tell us anyway, but upstream is the fixer)
 
 ## Deployment guidance
 
-AgentSurf drives pages under the user's logged-in session. Do not expose the bridge to the public internet, and never commit your local `config.json` or token. See the [README use and safety notes](README.en.md#use-and-verify).
+AgentSurf drives pages under the user's logged-in session. Do not expose the bridge to the public internet, and never commit your local `config.json` or token. See the [README use and safety notes](README.md#use-and-verify).

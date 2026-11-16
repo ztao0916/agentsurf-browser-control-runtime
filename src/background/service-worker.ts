@@ -45,6 +45,14 @@ const handleTool = (request: ToolRequest) => request.remote || request.tool === 
 let currentMode: 'local' | 'remote' = 'local';
 let gatewayUrl = '';
 let gatewayToken = '';
+let deviceId = '';
+let deviceName = '';
+
+function defaultDeviceName(id: string): string {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const browser = ua.includes('Edg/') ? 'Edge' : 'Chrome';
+  return `${browser}-${id.slice(0, 4)}`;
+}
 
 const nativeTransport = new NativeMessagingTransport(
   handleTool,
@@ -66,10 +74,18 @@ function getActiveSnapshot(): TransportConnectionSnapshot {
     local_state: local.state,
     remote_state: remote.state,
     remote_error: remote.error,
+    ...(deviceId ? { device_id: deviceId } : {}),
+    ...(deviceName ? { device_name: deviceName } : {}),
   };
 }
 
-chrome.storage.local.get(['agentSurfMode', 'agentSurfGatewayUrl', 'agentSurfGatewayToken']).then((stored) => {
+chrome.storage.local.get([
+  'agentSurfMode',
+  'agentSurfGatewayUrl',
+  'agentSurfGatewayToken',
+  'agentSurfDeviceId',
+  'agentSurfDeviceName',
+]).then(async (stored) => {
   if (stored['agentSurfMode'] === 'remote') {
     currentMode = 'remote';
   }
@@ -79,10 +95,37 @@ chrome.storage.local.get(['agentSurfMode', 'agentSurfGatewayUrl', 'agentSurfGate
   if (typeof stored['agentSurfGatewayToken'] === 'string') {
     gatewayToken = stored['agentSurfGatewayToken'];
   }
+  const updates: Record<string, string> = {};
+  if (typeof stored['agentSurfDeviceId'] === 'string' && stored['agentSurfDeviceId'].length > 0) {
+    deviceId = stored['agentSurfDeviceId'];
+  } else {
+    deviceId = crypto.randomUUID();
+    updates['agentSurfDeviceId'] = deviceId;
+  }
+  if (typeof stored['agentSurfDeviceName'] === 'string' && stored['agentSurfDeviceName'].trim().length > 0) {
+    deviceName = stored['agentSurfDeviceName'].trim();
+  } else {
+    deviceName = defaultDeviceName(deviceId);
+    updates['agentSurfDeviceName'] = deviceName;
+  }
+  if (Object.keys(updates).length > 0) {
+    await chrome.storage.local.set(updates).catch(() => undefined);
+  }
 
+  remoteTransport.updateDeviceInfo(deviceId, deviceName);
   remoteTransport.updateCredentials(gatewayUrl, gatewayToken);
 
   if (currentMode === 'remote') {
+    try {
+      const win = typeof chrome !== 'undefined' && chrome.windows?.getLastFocused
+        ? await chrome.windows.getLastFocused()
+        : undefined;
+      if (win?.focused) {
+        remoteTransport.markActive();
+      }
+    } catch {
+      // Ignore if windows API is unavailable
+    }
     remoteTransport.connect();
   } else {
     nativeTransport.connect();
@@ -92,6 +135,19 @@ chrome.storage.local.get(['agentSurfMode', 'agentSurfGatewayUrl', 'agentSurfGate
   nativeTransport.connect();
   clearExtensionBadge();
 });
+
+if (typeof chrome !== 'undefined') {
+  chrome.windows?.onFocusChanged?.addListener((windowId) => {
+    if (windowId !== chrome.windows.WINDOW_ID_NONE && currentMode === 'remote' && !remoteTransport.isBusy()) {
+      remoteTransport.markActive();
+    }
+  });
+  chrome.tabs?.onActivated?.addListener(() => {
+    if (currentMode === 'remote' && !remoteTransport.isBusy()) {
+      remoteTransport.markActive();
+    }
+  });
+}
 
 registerRuntimeMessageHandler(async (message) => {
   if (isTransportControlRequest(message)) {
@@ -135,6 +191,9 @@ async function handleTransportControl(message: TransportControlRequest): Promise
         const targetMode = message.mode;
         if (message.gatewayUrl !== undefined) gatewayUrl = message.gatewayUrl;
         if (message.gatewayToken !== undefined) gatewayToken = message.gatewayToken;
+        if (message.deviceName !== undefined) {
+          deviceName = message.deviceName.trim() || defaultDeviceName(deviceId || crypto.randomUUID());
+        }
 
         if (targetMode !== currentMode) {
           if (currentMode === 'remote') remoteTransport.disconnect();
@@ -142,18 +201,36 @@ async function handleTransportControl(message: TransportControlRequest): Promise
           currentMode = targetMode;
         }
 
+        if (deviceId) {
+          remoteTransport.updateDeviceInfo(deviceId, deviceName);
+        }
         remoteTransport.updateCredentials(gatewayUrl, gatewayToken);
 
         await chrome.storage.local.set({
           agentSurfMode: currentMode,
           agentSurfGatewayUrl: gatewayUrl,
           agentSurfGatewayToken: gatewayToken,
+          ...(deviceName ? { agentSurfDeviceName: deviceName } : {}),
         });
 
         if (currentMode === 'remote') {
+          remoteTransport.markActive(false);
           remoteTransport.connect();
         } else {
           nativeTransport.connect();
+        }
+        break;
+      }
+      case 'set-device': {
+        if (message.deviceName !== undefined) {
+          deviceName = message.deviceName.trim() || defaultDeviceName(deviceId || crypto.randomUUID());
+          await chrome.storage.local.set({ agentSurfDeviceName: deviceName });
+        }
+        if (deviceId) {
+          remoteTransport.updateDeviceInfo(deviceId, deviceName);
+        }
+        if (message.pinActive !== undefined) {
+          remoteTransport.markActive(message.pinActive);
         }
         break;
       }
@@ -169,6 +246,7 @@ async function handleTransportControl(message: TransportControlRequest): Promise
         mode: currentMode,
         gatewayUrl,
         gatewayToken,
+        ...(deviceName ? { deviceName } : {}),
       },
     };
   } catch (error: unknown) {

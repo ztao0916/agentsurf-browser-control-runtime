@@ -8,6 +8,9 @@ export interface TransportConnectionSnapshot {
   host_name?: string;
   bridge_url?: string | null;
   gateway_url?: string | null;
+  device_id?: string;
+  device_name?: string;
+  pinned?: boolean;
   reconnect_attempt: number;
   pending_requests: number;
   error: string | null;
@@ -27,10 +30,11 @@ export type TransportControlRequest =
   | { kind: 'transport-control'; action: 'reconnect' }
   | { kind: 'transport-control'; action: 'get-state' }
   | { kind: 'transport-control'; action: 'get-config' }
-  | { kind: 'transport-control'; action: 'set-mode'; mode: 'local' | 'remote'; gatewayUrl?: string | undefined; gatewayToken?: string | undefined };
+  | { kind: 'transport-control'; action: 'set-mode'; mode: 'local' | 'remote'; gatewayUrl?: string | undefined; gatewayToken?: string | undefined; deviceName?: string | undefined }
+  | { kind: 'transport-control'; action: 'set-device'; deviceName?: string | undefined; pinActive?: boolean | undefined };
 
 export type TransportControlResponse =
-  | { ok: true; state: TransportConnectionSnapshot; config?: { mode: 'local' | 'remote'; gatewayUrl: string; gatewayToken: string } }
+  | { ok: true; state: TransportConnectionSnapshot; config?: { mode: 'local' | 'remote'; gatewayUrl: string; gatewayToken: string; deviceName?: string } }
   | { ok: false; error: ToolError };
 
 export interface TransportEventMessage {

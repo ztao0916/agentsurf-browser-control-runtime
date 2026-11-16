@@ -2,7 +2,7 @@
 
 **中文** ｜ [English](reference.en.md)
 
-本文是 [README](../README.md) 的深入部分：工具速查、错误码、开发调试、外部协议与实现细节。**安装和日常使用请看 [README](../README.md)。**
+本文是 [中文 README](../README.zh-CN.md) 的深入部分：工具速查、错误码、开发调试、外部协议与实现细节。**安装和日常使用请看 [中文 README](../README.zh-CN.md)。**
 
 ## 目录
 

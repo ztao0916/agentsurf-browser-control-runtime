@@ -4,9 +4,12 @@ import { getDefaultConfigPath } from '../native-host/config';
 import { startHttpMcpServer } from './http-server';
 import { installNativeHost } from './install-native-host';
 import {
+  addOAuthRedirectUri,
   getDefaultRemoteConfigPath,
+  initializeOAuthClient,
   initializeRemoteConfig,
   readRemoteConfig,
+  rotateOAuthSecret,
   rotateRemoteToken,
   setRemoteAccessMode,
 } from './remote-config';
@@ -28,6 +31,18 @@ async function main(): Promise<void> {
   }
   if (command === 'init-remote' || command === 'init-gateway') {
     await handleInitRemote(args);
+    return;
+  }
+  if (command === 'init-oauth') {
+    await handleInitOAuth(args);
+    return;
+  }
+  if (command === 'add-oauth-redirect') {
+    await handleAddOAuthRedirect(args);
+    return;
+  }
+  if (command === 'rotate-oauth-secret') {
+    await handleRotateOAuthSecret(args);
     return;
   }
   if (command === 'rotate-remote-token') {
@@ -57,11 +72,26 @@ function parseRemoteArgs(args: string[]): {
   config?: string | undefined;
   port?: number | undefined;
   bridgeConfig?: string | undefined;
+  redirectUris: string[];
+  uri?: string | undefined;
+  force: boolean;
 } {
-  const result: { url?: string | undefined; config?: string | undefined; port?: number | undefined; bridgeConfig?: string | undefined } = {};
+  const result: {
+    url?: string | undefined;
+    config?: string | undefined;
+    port?: number | undefined;
+    bridgeConfig?: string | undefined;
+    redirectUris: string[];
+    uri?: string | undefined;
+    force: boolean;
+  } = { redirectUris: [], force: false };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (!arg) continue;
+    if (arg === '--force') {
+      result.force = true;
+      continue;
+    }
     const [flag, inlineVal] = arg.split('=', 2);
     const val = inlineVal ?? args[i + 1];
     if (inlineVal === undefined) i += 1;
@@ -69,6 +99,8 @@ function parseRemoteArgs(args: string[]): {
     else if (flag === '--config') result.config = val;
     else if (flag === '--port') result.port = Number(val);
     else if (flag === '--bridge-config') result.bridgeConfig = val;
+    else if (flag === '--redirect-uri' && val) result.redirectUris.push(val);
+    else if (flag === '--uri') result.uri = val;
     else throw new Error(`Unknown option: ${arg}`);
   }
   return result;
@@ -92,7 +124,7 @@ function parseDoctorArgs(args: string[]): { config?: string; url?: string } {
 async function handleInitRemote(args: string[]): Promise<void> {
   const options = parseRemoteArgs(args);
   if (!options.url) {
-    throw new Error('Usage: agentsurf-mcp init-remote --url <public-https-url> [--config <path>] [--port <port>]');
+    throw new Error('Usage: agentsurf-mcp init-remote --url <public-https-url> [--config <path>] [--port <port>] [--redirect-uri <uri>]');
   }
   const configPath = options.config ?? getDefaultRemoteConfigPath();
   const port = options.port ?? 8767;
@@ -102,27 +134,85 @@ async function handleInitRemote(args: string[]): Promise<void> {
     options.bridgeConfig ?? getDefaultConfigPath(),
     port,
   );
+  const oauth = await initializeOAuthClient(configPath, {
+    redirectUris: options.redirectUris,
+    publicUrl: options.url,
+  });
   const cleanUrl = options.url.replace(/\/+$/u, '');
   const wsUrl = cleanUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
   process.stdout.write(
     `AgentSurf Remote Gateway configuration created successfully.\n\n`
-      + `  Config file:    ${configPath}\n`
-      + `  Bearer Token:   ${token}\n`
-      + `  Public MCP URL: ${cleanUrl}/mcp\n`
-      + `  Access mode:    read-only (change with set-remote-access --mode interactive)\n`
-      + `  Gateway WS URL: ${wsUrl}/ws\n\n`
-      + `Remote Client Setup (e.g. Notion AI, Custom Agent, Dify):\n`
+      + `  Config file:         ${configPath}\n`
+      + `  Bearer Token:        ${token}\n`
+      + `  OAuth Client ID:     ${oauth.clientId}\n`
+      + `  OAuth Client Secret: ${oauth.clientSecret}\n`
+      + `  OAuth Redirect URIs: ${oauth.redirectUris.length > 0 ? oauth.redirectUris.join(', ') : '(none yet — run add-oauth-redirect --uri <uri>)'}\n`
+      + `  Public MCP URL:      ${cleanUrl}/mcp\n`
+      + `  Access mode:         read-only (change with set-remote-access --mode interactive)\n`
+      + `  Gateway WS URL:      ${wsUrl}/ws\n\n`
+      + `Remote Client Setup (Bearer Token clients like Notion AI, Dify):\n`
       + `  1. Add MCP connection in your remote client or platform:\n`
       + `     - Server URL:     ${cleanUrl}/mcp\n`
       + `     - Authentication: Bearer Token\n`
       + `     - Token:          ${token}\n\n`
+      + `Remote Client Setup (OAuth 2.0 clients like Gemini Web):\n`
+      + `  1. Enter Server URL, Client ID and Client Secret above.\n`
+      + `  2. Register the client's Redirect URI if not already added:\n`
+      + `     agentsurf-mcp add-oauth-redirect --uri <redirect-uri>\n`
+      + `  3. When prompted in the browser, enter the Bearer Token above to authorize.\n\n`
       + `Chrome Extension Setup (0 terminal commands needed!):\n`
-      + `  2. Click AgentSurf extension in Chrome -> Choose 'Remote Gateway'\n`
+      + `  1. Click AgentSurf extension in Chrome -> Choose 'Remote Gateway'\n`
       + `     - Gateway URL:    ${wsUrl}/ws\n`
       + `     - Pairing Token:  ${token}\n`
       + `     - Click 'Save & Connect'\n\n`
       + `Start the gateway server with:\n`
       + `  agentsurf-mcp start-gateway\n`,
+  );
+}
+
+async function handleInitOAuth(args: string[]): Promise<void> {
+  const options = parseRemoteArgs(args);
+  const configPath = options.config ?? getDefaultRemoteConfigPath();
+  const oauth = await initializeOAuthClient(configPath, {
+    redirectUris: options.redirectUris,
+    ...(options.url !== undefined ? { publicUrl: options.url } : {}),
+    force: options.force,
+  });
+  process.stdout.write(
+    `AgentSurf OAuth client configured successfully.\n\n`
+      + `  Config file:         ${configPath}\n`
+      + `  OAuth Client ID:     ${oauth.clientId}\n`
+      + `  OAuth Client Secret: ${oauth.clientSecret}\n`
+      + `  OAuth Redirect URIs: ${oauth.redirectUris.length > 0 ? oauth.redirectUris.join(', ') : '(none yet — run add-oauth-redirect --uri <uri>)'}\n\n`
+      + `Note: Your existing Bearer Pairing Token is unchanged. Use it to approve OAuth login prompts.\n`,
+  );
+}
+
+async function handleAddOAuthRedirect(args: string[]): Promise<void> {
+  const options = parseRemoteArgs(args);
+  const uri = options.uri ?? options.redirectUris[0];
+  if (!uri) {
+    throw new Error('Usage: agentsurf-mcp add-oauth-redirect --uri <redirect-uri> [--config <path>]');
+  }
+  const configPath = options.config ?? getDefaultRemoteConfigPath();
+  const redirectUris = await addOAuthRedirectUri(configPath, uri);
+  process.stdout.write(
+    `OAuth redirect URI added.\n`
+      + `  Config file:         ${configPath}\n`
+      + `  OAuth Redirect URIs: ${redirectUris.join(', ')}\n`,
+  );
+}
+
+async function handleRotateOAuthSecret(args: string[]): Promise<void> {
+  const options = parseRemoteArgs(args);
+  const configPath = options.config ?? getDefaultRemoteConfigPath();
+  const rotated = await rotateOAuthSecret(configPath);
+  process.stdout.write(
+    `OAuth client secret rotated successfully.\n`
+      + `  Config file:             ${configPath}\n`
+      + `  OAuth Client ID:         ${rotated.clientId}\n`
+      + `  New OAuth Client Secret: ${rotated.clientSecret}\n\n`
+      + `Update the Client Secret in your OAuth MCP client (e.g. Gemini Web).\n`,
   );
 }
 
@@ -224,7 +314,10 @@ function printUsage(): void {
     'Usage:\n'
       + '  agentsurf-mcp\n'
       + '  agentsurf-mcp install-native-host --extension-id <extension-id> [--browser chrome|edge] [--port <port>]\n'
-      + '  agentsurf-mcp init-remote --url <public-https-url> [--config <path>] [--port <port>]\n'
+      + '  agentsurf-mcp init-remote --url <public-https-url> [--config <path>] [--port <port>] [--redirect-uri <uri>]\n'
+      + '  agentsurf-mcp init-oauth [--config <path>] [--url <public-https-url>] [--redirect-uri <uri>] [--force]\n'
+      + '  agentsurf-mcp add-oauth-redirect --uri <redirect-uri> [--config <path>]\n'
+      + '  agentsurf-mcp rotate-oauth-secret [--config <path>]\n'
       + '  agentsurf-mcp start-remote [--config <path>]\n'
       + '  agentsurf-mcp doctor [--config <path>] [--url <public-gateway-url>]\n'
       + '  agentsurf-mcp set-remote-access --mode read-only|interactive [--config <path>]\n'

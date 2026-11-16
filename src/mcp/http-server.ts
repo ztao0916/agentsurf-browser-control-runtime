@@ -10,6 +10,7 @@ import { createToolError, ToolFailure } from '../core/protocol/errors';
 import type { ToolName, ToolRequest } from '../core/protocol/tool-contract';
 import { toExternalToolRequest } from '../transport/external-tool-protocol';
 import {
+  isExtensionStatusMessage,
   isNativePingMessage,
   isNativePongMessage,
   isNativeToolResponseMessage,
@@ -24,6 +25,7 @@ import {
   tokenHash,
   type RemoteConfig,
 } from './remote-config';
+import { OAuthService, resolvePublicIssuer } from './remote-oauth';
 import { fileSessionStore, RemoteSessions } from './remote-sessions';
 import {
   remoteDescriptionFor,
@@ -33,24 +35,50 @@ import {
 
 const PROBE_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
+function stripPort(host: string): string {
+  const normalized = host.toLowerCase().trim();
+  return normalized.startsWith('[')
+    ? normalized.replace(/\]:\d+$/u, ']')
+    : normalized.replace(/:\d+$/u, '');
+}
+
+function isLoopbackHost(host: string): boolean {
+  const withoutPort = stripPort(host);
+  return withoutPort === '127.0.0.1' || withoutPort === 'localhost' || withoutPort === '[::1]';
+}
+
 export function isValidHost(hostHeader: string | undefined, allowedHosts: readonly string[]): boolean {
   if (!hostHeader) return false;
   const normalized = hostHeader.toLowerCase().trim();
-  const withoutPort = normalized.replace(/:\d+$/u, '');
+  const withoutPort = stripPort(normalized);
   return allowedHosts.some((allowed) => {
     const a = allowed.toLowerCase().trim();
     if (a === normalized) return true;
-    if (!a.includes(':') && a === withoutPort) return true;
+    if (!isLoopbackHost(a)) return stripPort(a) === withoutPort;
     if (a.endsWith(':443') && a.slice(0, -4) === withoutPort) return true;
     if (a.endsWith(':80') && a.slice(0, -3) === withoutPort) return true;
     return false;
   });
 }
 
-export function isValidOrigin(originHeader: string | undefined, allowedOrigins: readonly string[]): boolean {
+export function isValidOrigin(
+  originHeader: string | undefined,
+  allowedOrigins: readonly string[],
+  allowedHosts: readonly string[] = [],
+): boolean {
   if (!originHeader) return true;
   const normalized = originHeader.toLowerCase().trim();
-  return allowedOrigins.some((allowed) => allowed.toLowerCase().trim() === normalized);
+  if (allowedOrigins.some((allowed) => allowed.toLowerCase().trim() === normalized)) {
+    return true;
+  }
+  if (allowedHosts.length === 0) return false;
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'https:' || isLoopbackHost(parsed.hostname)) return false;
+    return isValidHost(parsed.host, allowedHosts);
+  } catch {
+    return false;
+  }
 }
 
 interface TransportSessionEntry {
@@ -70,6 +98,18 @@ interface PendingExtensionRequest {
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
   timeout: ReturnType<typeof setTimeout>;
+  deviceKey: string;
+}
+
+interface ConnectedExtension {
+  key: string;
+  deviceId: string;
+  deviceName: string;
+  ws: WebSocket;
+  connectedAt: number;
+  lastActiveAt: number;
+  pinned: boolean;
+  pendingRequestIds: Set<string>;
 }
 
 export async function startHttpMcpServer(options: {
@@ -83,11 +123,40 @@ export async function startHttpMcpServer(options: {
     options.sessionStorePath ?? resolvedConfigPath.replace(/\.json$/iu, '.sessions.json'),
   );
 
-  let activeExtensionSocket: WebSocket | null = null;
+  const connectedExtensions = new Map<string, ConnectedExtension>();
   const pendingExtensionRequests = new Map<string, PendingExtensionRequest>();
 
+  function getOpenExtensions(): ConnectedExtension[] {
+    return [...connectedExtensions.values()].filter((ext) => ext.ws.readyState === WebSocket.OPEN);
+  }
+
+  function resolveTargetExtension(deviceHint?: string): ConnectedExtension | null {
+    const open = getOpenExtensions();
+    if (deviceHint) {
+      const normalized = deviceHint.trim().toLowerCase();
+      const matched = open.find(
+        (ext) => ext.deviceId.toLowerCase() === normalized || ext.deviceName.toLowerCase() === normalized,
+      );
+      if (!matched) {
+        const available = open.length > 0
+          ? open.map((ext) => `${ext.deviceName} (${ext.deviceId})`).join(', ')
+          : 'none';
+        throw new ToolFailure(createToolError(
+          'bridge_unavailable',
+          `Browser device "${deviceHint}" is offline. Connected devices: ${available}.`,
+          true,
+        ));
+      }
+      return matched;
+    }
+    if (open.length === 0) return null;
+    const pinned = open.filter((ext) => ext.pinned);
+    const candidates = pinned.length > 0 ? pinned : open;
+    return [...candidates].sort((a, b) => (b.lastActiveAt - a.lastActiveAt) || (b.connectedAt - a.connectedAt))[0] ?? null;
+  }
+
   function dispatchToExtension(
-    ws: WebSocket,
+    target: ConnectedExtension,
     tool: ToolName,
     args: unknown,
     sessionId: string,
@@ -114,36 +183,50 @@ export async function startHttpMcpServer(options: {
     return new Promise((resolvePromise, rejectPromise) => {
       const timeout = setTimeout(() => {
         pendingExtensionRequests.delete(requestId);
+        target.pendingRequestIds.delete(requestId);
         rejectPromise(new ToolFailure(createToolError('request_timeout', 'Browser action timed out after 35s.', true)));
       }, 35_000);
 
+      target.pendingRequestIds.add(requestId);
       pendingExtensionRequests.set(requestId, {
+        deviceKey: target.key,
         resolve: (val) => {
           clearTimeout(timeout);
+          target.pendingRequestIds.delete(requestId);
           resolvePromise(val);
         },
         reject: (err) => {
           clearTimeout(timeout);
-          rejectPromise(err);
+          target.pendingRequestIds.delete(requestId);
+          rejectPromise(err instanceof Error ? err : new Error(String(err)));
         },
         timeout,
       });
 
       try {
-        ws.send(JSON.stringify(payload));
+        target.ws.send(JSON.stringify(payload));
       } catch (err) {
         clearTimeout(timeout);
         pendingExtensionRequests.delete(requestId);
-        rejectPromise(err);
+        target.pendingRequestIds.delete(requestId);
+        rejectPromise(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }
 
   const store = fileSessionStore(resolvedSessionStorePath);
-  const remoteSessions = new RemoteSessions(store, async (tool, args, sessionId, operationId) => {
-    // 1. Direct WSS connection from Chrome Extension
-    if (activeExtensionSocket && activeExtensionSocket.readyState === WebSocket.OPEN) {
-      return await dispatchToExtension(activeExtensionSocket, tool, args, sessionId, operationId);
+  const remoteSessions = new RemoteSessions(store, async (tool, args, sessionId, operationId, deviceHint) => {
+    // 1. Direct WSS connection from Chrome Extension (routed to bound or active device)
+    const target = resolveTargetExtension(deviceHint);
+    if (target) {
+      const result = await dispatchToExtension(target, tool, args, sessionId, operationId);
+      if (tool === 'browser.start_session' && typeof result === 'object' && result !== null && !Array.isArray(result)) {
+        return {
+          ...(result as Record<string, unknown>),
+          device: { device_id: target.deviceId, device_name: target.deviceName },
+        };
+      }
+      return result;
     }
 
     // 2. Fallback to local bridge if configured and available (legacy / SSH tunnel mode)
@@ -178,15 +261,16 @@ export async function startHttpMcpServer(options: {
   sweepInterval.unref();
 
   const heartbeatInterval = setInterval(() => {
-    if (activeExtensionSocket && activeExtensionSocket.readyState === WebSocket.OPEN) {
+    const ping = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+    for (const ext of getOpenExtensions()) {
       try {
-        activeExtensionSocket.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+        ext.ws.send(ping);
       } catch { /* ignore */ }
     }
   }, 20_000);
   heartbeatInterval.unref();
 
-  function createRemoteServer(isAuthorized: () => Promise<boolean>): McpServer {
+  function createRemoteServer(isAuthorized: () => Promise<boolean>, defaultDevice?: string): McpServer {
     const server = new McpServer(
       { name: 'agentsurf-remote', version: '0.7.0' },
       {
@@ -194,10 +278,11 @@ export async function startHttpMcpServer(options: {
           'AgentSurf controls the user\'s local Chrome browser over remote MCP.',
           '1. Start every browser task by calling browser_start_session with a session_name describing the goal. It returns a server-generated session_id.',
           '2. Every subsequent browser tool call MUST pass that session_id.',
-          '3. Use browser_list_tabs to find tabs or browser_open to navigate.',
-          '4. Before clicking or typing on elements, call browser_get_interactives to retrieve opaque element_ids. Never invent selectors or element IDs.',
-          '5. If an operation fails with session_busy or operation_unknown, call browser_get_operation or browser_observe to inspect page state rather than retrying blindly.',
-          '6. When the task is complete, call browser_end_session with session_id to release tab resources.',
+          '3. If multiple browsers are connected, pass device (from probe_status) to browser_start_session to target a specific computer; otherwise the currently active browser is used automatically.',
+          '4. Use browser_list_tabs to find tabs or browser_open to navigate.',
+          '5. Before clicking or typing on elements, call browser_get_interactives to retrieve opaque element_ids. Never invent selectors or element IDs.',
+          '6. If an operation fails with session_busy or operation_unknown, call browser_get_operation or browser_observe to inspect page state rather than retrying blindly.',
+          '7. When the task is complete, call browser_end_session with session_id to release tab resources.',
         ].join(' '),
       },
     );
@@ -223,21 +308,33 @@ export async function startHttpMcpServer(options: {
 
     server.registerTool('probe_status', {
       title: 'probe_status',
-      description: 'Test MCP authentication and server status.',
+      description: 'Test MCP authentication, server status, and list connected browser devices.',
       inputSchema: {},
-    }, (): CallToolResult => ({
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          ok: true,
-          service: 'agentsurf-remote',
-          principal: config.principal,
-          port: config.port,
-          mode: 'remote',
-          extension_connected: activeExtensionSocket !== null && activeExtensionSocket.readyState === WebSocket.OPEN,
-        }, null, 2),
-      }],
-    }));
+    }, (): CallToolResult => {
+      const openDevices = getOpenExtensions();
+      const active = resolveTargetExtension(defaultDevice);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            ok: true,
+            service: 'agentsurf-remote',
+            principal: config.principal,
+            port: config.port,
+            mode: 'remote',
+            extension_connected: openDevices.length > 0,
+            active_device: active ? { device_id: active.deviceId, device_name: active.deviceName } : null,
+            devices: openDevices.map((ext) => ({
+              device_id: ext.deviceId,
+              device_name: ext.deviceName,
+              active: active?.key === ext.key,
+              pinned: ext.pinned,
+              last_active_at: ext.lastActiveAt,
+            })),
+          }, null, 2),
+        }],
+      };
+    });
 
     for (const [tool, schema] of Object.entries(buildRemoteToolSchemas(config.access_mode))) {
       const toolName = tool as ToolName;
@@ -248,7 +345,10 @@ export async function startHttpMcpServer(options: {
         inputSchema: schema,
       }, async (args: Record<string, unknown>): Promise<CallToolResult> => {
         try {
-          const result = await remoteSessions.call(config.principal, toolName, args, isAuthorized, () => config.access_mode);
+          const effectiveArgs = toolName === 'browser.start_session' && args['device'] === undefined && defaultDevice !== undefined
+            ? { ...args, device: defaultDevice }
+            : args;
+          const result = await remoteSessions.call(config.principal, toolName, effectiveArgs, isAuthorized, () => config.access_mode);
           return { content: toContent(toolName, result) };
         } catch (error: unknown) {
           if (error instanceof ToolFailure) {
@@ -266,6 +366,14 @@ export async function startHttpMcpServer(options: {
     return server;
   }
 
+  const getLatestConfig = async (): Promise<RemoteConfig> => {
+    try {
+      config = await readRemoteConfig(resolvedConfigPath);
+    } catch { /* retain existing config */ }
+    return config;
+  };
+  const oauthService = new OAuthService(getLatestConfig);
+
   const wss = new WebSocketServer({ noServer: true });
 
   const httpServer = http.createServer(async (req, res) => {
@@ -273,11 +381,13 @@ export async function startHttpMcpServer(options: {
     const pathname = url.pathname;
 
     if (pathname === '/healthz' || pathname === '/health' || pathname === '/status') {
+      const openDevices = getOpenExtensions();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'ok',
         service: 'agentsurf-remote',
-        extension_connected: activeExtensionSocket !== null && activeExtensionSocket.readyState === WebSocket.OPEN,
+        extension_connected: openDevices.length > 0,
+        connected_devices: openDevices.length,
       }));
       return;
     }
@@ -288,10 +398,13 @@ export async function startHttpMcpServer(options: {
       return;
     }
 
-    if (!isValidOrigin(req.headers.origin, config.allowed_origins)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Forbidden: origin not allowed' }));
-      return;
+    if (!isValidOrigin(req.headers.origin, config.allowed_origins, effectiveAllowedHosts)) {
+      await getLatestConfig();
+      if (!isValidOrigin(req.headers.origin, config.allowed_origins, effectiveAllowedHosts)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Forbidden: origin not allowed' }));
+        return;
+      }
     }
 
     if (req.method === 'OPTIONS') {
@@ -311,20 +424,23 @@ export async function startHttpMcpServer(options: {
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
     }
 
-    const authHeader = req.headers['authorization'];
-    let authenticated = authenticates(authHeader, config);
-    if (!authenticated) {
-      try {
-        const fresh = await readRemoteConfig(resolvedConfigPath);
-        config = fresh;
-        authenticated = authenticates(authHeader, config);
-      } catch { /* retain existing config */ }
+    if (await oauthService.handleRequest(req, res, url)) {
+      return;
     }
 
+    const authHeader = req.headers['authorization'];
+    const currentConfig = await getLatestConfig();
+    const authenticated = authenticates(authHeader, currentConfig);
+
     if (!authenticated) {
+      const wwwAuthenticate = config.oauth
+        ? (authHeader
+            ? `Bearer error="invalid_token", resource_metadata="${resolvePublicIssuer(req, config)}/.well-known/oauth-protected-resource"`
+            : `Bearer resource_metadata="${resolvePublicIssuer(req, config)}/.well-known/oauth-protected-resource"`)
+        : 'Bearer error="invalid_token"';
       res.writeHead(401, {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer error="invalid_token"',
+        'WWW-Authenticate': wwwAuthenticate,
       });
       res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid Bearer token' }));
       return;
@@ -366,7 +482,8 @@ export async function startHttpMcpServer(options: {
     }
 
     let assignedSessionId: string | undefined;
-    const server = createRemoteServer(isAuthorized);
+    const defaultDevice = url.searchParams.get('device')?.trim() || undefined;
+    const server = createRemoteServer(isAuthorized, defaultDevice);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
@@ -420,26 +537,89 @@ export async function startHttpMcpServer(options: {
       }
 
       wss.handleUpgrade(req, socket, head, (ws) => {
-        if (activeExtensionSocket && activeExtensionSocket !== ws) {
-          try {
-            activeExtensionSocket.close(1000, 'Replaced by new browser connection');
-          } catch { /* ignored */ }
-        }
-        activeExtensionSocket = ws;
+        const tempKey = `pending_${randomUUID()}`;
+        const now = Date.now();
+        const queryDevice = url.searchParams.get('device')?.trim();
+        const entry: ConnectedExtension = {
+          key: tempKey,
+          deviceId: 'default',
+          deviceName: queryDevice || 'Chrome',
+          ws,
+          connectedAt: now,
+          lastActiveAt: 0,
+          pinned: false,
+          pendingRequestIds: new Set(),
+        };
+        connectedExtensions.set(tempKey, entry);
+
+        const assignDeviceKey = (deviceId: string, deviceName: string): void => {
+          const existing = connectedExtensions.get(deviceId);
+          if (existing && existing !== entry && existing.ws !== ws) {
+            try {
+              existing.ws.close(1000, 'Replaced by newer connection for same device');
+            } catch { /* ignored */ }
+          }
+          if (entry.key !== deviceId) {
+            connectedExtensions.delete(entry.key);
+            entry.key = deviceId;
+          }
+          entry.deviceId = deviceId;
+          entry.deviceName = deviceName;
+          connectedExtensions.set(deviceId, entry);
+        };
+
+        const applyPinned = (pinned: boolean): void => {
+          if (pinned) {
+            for (const other of connectedExtensions.values()) {
+              if (other !== entry) other.pinned = false;
+            }
+          }
+          entry.pinned = pinned;
+        };
 
         ws.on('message', (raw) => {
           let message: unknown;
           try {
-            message = JSON.parse(raw.toString());
+            const text = typeof raw === 'string'
+              ? raw
+              : Buffer.isBuffer(raw)
+                ? raw.toString('utf8')
+                : Array.isArray(raw)
+                  ? Buffer.concat(raw).toString('utf8')
+                  : Buffer.from(raw).toString('utf8');
+            message = JSON.parse(text);
           } catch { return; }
 
           if (isRecord(message) && message.type === 'extension_hello') {
+            const rawId = typeof message.device_id === 'string' ? message.device_id.trim() : '';
+            const deviceId = rawId || 'default';
+            const rawName = typeof message.device_name === 'string' ? message.device_name.trim() : '';
+            const deviceName = rawName || queryDevice || (deviceId === 'default' ? 'Chrome' : deviceId);
+            assignDeviceKey(deviceId, deviceName);
+            if (typeof message.last_active_at === 'number' && message.last_active_at > 0) {
+              entry.lastActiveAt = Math.max(entry.lastActiveAt, message.last_active_at);
+            }
+            if (typeof message.pinned === 'boolean') {
+              applyPinned(message.pinned);
+            }
             ws.send(JSON.stringify({
               type: 'host_ready',
               protocol_version: '1',
               bridge_url: 'cloud-gateway',
               authentication_required: true,
             }));
+            return;
+          }
+          if (isExtensionStatusMessage(message)) {
+            const deviceId = message.device_id.trim() || 'default';
+            const deviceName = message.device_name.trim() || entry.deviceName;
+            assignDeviceKey(deviceId, deviceName);
+            if (message.last_active_at > 0) {
+              entry.lastActiveAt = Math.max(entry.lastActiveAt, message.last_active_at);
+            }
+            if (typeof message.pinned === 'boolean') {
+              applyPinned(message.pinned);
+            }
             return;
           }
           if (isNativePingMessage(message)) {
@@ -464,14 +644,18 @@ export async function startHttpMcpServer(options: {
         });
 
         ws.on('close', () => {
-          if (activeExtensionSocket === ws) {
-            activeExtensionSocket = null;
-            for (const [, pending] of pendingExtensionRequests.entries()) {
+          if (connectedExtensions.get(entry.key)?.ws === ws) {
+            connectedExtensions.delete(entry.key);
+          }
+          for (const requestId of entry.pendingRequestIds) {
+            const pending = pendingExtensionRequests.get(requestId);
+            if (pending) {
+              pendingExtensionRequests.delete(requestId);
               clearTimeout(pending.timeout);
               pending.reject(new ToolFailure(createToolError('bridge_unavailable', 'Chrome extension disconnected during execution.', true)));
             }
-            pendingExtensionRequests.clear();
           }
+          entry.pendingRequestIds.clear();
         });
       });
     } else {
@@ -497,10 +681,10 @@ export async function startHttpMcpServer(options: {
   const close = async (): Promise<void> => {
     clearInterval(sweepInterval);
     clearInterval(heartbeatInterval);
-    if (activeExtensionSocket) {
-      try { activeExtensionSocket.close(1000, 'Server shutting down'); } catch { }
-      activeExtensionSocket = null;
+    for (const ext of connectedExtensions.values()) {
+      try { ext.ws.close(1000, 'Server shutting down'); } catch { /* ignore */ }
     }
+    connectedExtensions.clear();
     await new Promise<void>((res) => {
       httpServer.close(() => res());
     });
@@ -514,7 +698,7 @@ export async function startHttpMcpServer(options: {
   return {
     server: httpServer,
     port: actualPort,
-    isExtensionConnected: () => activeExtensionSocket !== null && activeExtensionSocket.readyState === WebSocket.OPEN,
+    isExtensionConnected: () => getOpenExtensions().length > 0,
     close,
   };
 }

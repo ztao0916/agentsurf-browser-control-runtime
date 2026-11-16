@@ -16,12 +16,15 @@ import type { TransportConnectionSnapshot } from './transport-control';
 export interface RemoteGatewayTransportOptions {
   gatewayUrl?: string;
   token?: string;
+  deviceId?: string;
+  deviceName?: string;
   requestTimeoutMs?: number;
   reconnectBaseMs?: number;
   reconnectMaxMs?: number;
 }
 
 const GATEWAY_RECONNECT_ALARM = 'browser-control-gateway-reconnect';
+const ACTIVE_THROTTLE_MS = 2_000;
 
 interface PendingExecution {
   timeout: ReturnType<typeof setTimeout>;
@@ -32,6 +35,11 @@ export class RemoteGatewayTransport {
   private socket: WebSocket | null = null;
   private gatewayUrl: string;
   private token: string;
+  private deviceId: string;
+  private deviceName: string;
+  private lastActiveAt = 0;
+  private lastReportedAt = 0;
+  private pinned = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = false;
@@ -48,6 +56,8 @@ export class RemoteGatewayTransport {
   ) {
     this.gatewayUrl = options.gatewayUrl ?? '';
     this.token = options.token ?? '';
+    this.deviceId = options.deviceId ?? '';
+    this.deviceName = options.deviceName ?? '';
     this.requestTimeoutMs = options.requestTimeoutMs ?? 35_000;
     this.reconnectBaseMs = options.reconnectBaseMs ?? 1_000;
     this.reconnectMaxMs = options.reconnectMaxMs ?? 30_000;
@@ -64,6 +74,42 @@ export class RemoteGatewayTransport {
   public updateCredentials(gatewayUrl: string, token: string): void {
     this.gatewayUrl = gatewayUrl.trim();
     this.token = token.trim();
+  }
+
+  public updateDeviceInfo(deviceId: string, deviceName: string): void {
+    this.deviceId = deviceId.trim();
+    this.deviceName = deviceName.trim();
+    this.sendStatus(true);
+  }
+
+  public markActive(pinned?: boolean): void {
+    const now = Date.now();
+    this.lastActiveAt = now;
+    if (pinned !== undefined) {
+      this.pinned = pinned;
+      this.sendStatus(true);
+      return;
+    }
+    if (now - this.lastReportedAt < ACTIVE_THROTTLE_MS) return;
+    this.sendStatus(false);
+  }
+
+  public isBusy(): boolean {
+    return this.pending.size > 0;
+  }
+
+  private sendStatus(force: boolean): void {
+    if (!this.deviceId || !this.deviceName) return;
+    if (!force && this.socket?.readyState !== WebSocket.OPEN) return;
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.lastReportedAt = Date.now();
+    this.send({
+      type: 'extension_status',
+      device_id: this.deviceId,
+      device_name: this.deviceName,
+      last_active_at: this.lastActiveAt || Date.now(),
+      ...(this.pinned ? { pinned: true } : {}),
+    });
   }
 
   public connect(): void {
@@ -97,6 +143,9 @@ export class RemoteGatewayTransport {
       transport: 'remote_gateway',
       state: this.state,
       gateway_url: this.gatewayUrl || null,
+      ...(this.deviceId ? { device_id: this.deviceId } : {}),
+      ...(this.deviceName ? { device_name: this.deviceName } : {}),
+      ...(this.pinned ? { pinned: true } : {}),
       reconnect_attempt: this.reconnectAttempt,
       pending_requests: this.pending.size,
       error: this.lastError,
@@ -137,6 +186,10 @@ export class RemoteGatewayTransport {
           type: 'extension_hello',
           protocol_version: '1',
           extension_id: typeof chrome !== 'undefined' && chrome.runtime?.id ? chrome.runtime.id : 'agentsurf-extension',
+          ...(this.deviceId ? { device_id: this.deviceId } : {}),
+          ...(this.deviceName ? { device_name: this.deviceName } : {}),
+          ...(this.lastActiveAt > 0 ? { last_active_at: this.lastActiveAt } : {}),
+          ...(this.pinned ? { pinned: true } : {}),
         });
       };
 
@@ -293,7 +346,7 @@ export class RemoteGatewayTransport {
     }, delay);
 
     if (typeof chrome !== 'undefined' && chrome.alarms) {
-      chrome.alarms.create(GATEWAY_RECONNECT_ALARM, { delayInMinutes: Math.max(delay / 60_000, 0.5) });
+      void chrome.alarms.create(GATEWAY_RECONNECT_ALARM, { delayInMinutes: Math.max(delay / 60_000, 0.5) });
     }
   }
 
@@ -303,7 +356,7 @@ export class RemoteGatewayTransport {
       this.reconnectTimer = null;
     }
     if (typeof chrome !== 'undefined' && chrome.alarms) {
-      chrome.alarms.clear(GATEWAY_RECONNECT_ALARM);
+      void chrome.alarms.clear(GATEWAY_RECONNECT_ALARM);
     }
   }
 
