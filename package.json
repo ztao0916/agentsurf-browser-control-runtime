@@ -1,18 +1,24 @@
 {
-  "name": "@agentsurf/mcp-server",
+  "name": "agentsurf-mcp",
   "version": "0.7.0",
-  "description": "Local MCP server and Chrome browser control runtime for AI agents.",
+  "description": "Local and remote MCP server giving AI agents safe control over your signed-in Chrome/Edge browser.",
+  "mcpName": "io.github.ztao0916/agentsurf",
   "license": "Apache-2.0",
   "author": "ztao",
-  "repository": "https://github.com/ztao0916/agentsurf-browser-control-runtime",
+  "homepage": "https://github.com/ztao0916/agentsurf-browser-control-runtime#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ztao0916/agentsurf-browser-control-runtime.git"
+  },
   "bugs": "https://github.com/ztao0916/agentsurf-browser-control-runtime/issues",
-  "keywords": ["mcp", "browser-automation", "chrome", "agentsurf"],
+  "keywords": ["mcp", "mcp-server", "browser-automation", "chrome", "edge", "agentsurf"],
   "bin": {
-    "agentsurf-mcp": "./dist/mcp/cli.js"
+    "agentsurf-mcp": "dist/mcp/cli.js"
   },
   "files": ["dist/mcp", "dist/native-host"],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "prepublishOnly": "npm run build",
   "type": "module",

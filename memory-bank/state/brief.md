@@ -4,7 +4,7 @@
 
 ## 项目名称
 
-**AgentSurf**（GitHub: `ztao0916/agentsurf-browser-control-runtime`，包名 `@agentsurf/mcp-server` `v0.7.0`，Apache-2.0）
+**AgentSurf**（GitHub: `ztao0916/agentsurf-browser-control-runtime`，包名 `agentsurf-mcp` `v0.7.0`，Apache-2.0）
 
 ## 项目定位
 

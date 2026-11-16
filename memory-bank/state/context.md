@@ -21,7 +21,7 @@
 3. **`mcpservers.org`（`wong2/awesome-mcp-servers` 入口）**：
    - 已通过 `$0` 免费通道提交 `AgentSurf`，等待审核邮件。
 4. **已放弃渠道**：今天未申请的渠道（Reddit 养号及发帖、V2EX、LINUX DO、Hacker News、`MCP.so`、`PulseMCP`、`Smithery`）全部正式放弃，不再投入时间。
-5. **npm 发布准备中**：本机 `.npmrc` 默认指向 `https://registry.npmmirror.com/`，需通过 `https://registry.npmjs.org` 完成 CLI 鉴权并确认包名（`@agentsurf/mcp-server` vs `agentsurf-mcp`）。
+5. **npm 发布就绪待 2FA 验证**：已定名 `agentsurf-mcp`（无作用域、`bin` 同名、未占用）并在 [package.json](../../package.json) 配好 `mcpName` 与 `publishConfig.registry`（`https://registry.npmjs.org/`）；本机已登录 npm 官方源，首次发布受 `E403` 2FA 策略拦截，待用户本机执行带 `--otp=<验证码>` 或免 2FA Granular Token 的 `npm publish` 完成最后一步发包。
 
 ## Current Risks / Constraints
 
