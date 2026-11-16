@@ -144,6 +144,8 @@ flowchart LR
    - **Gemini 网页端**：填入 `OAuth Client ID` 与 `OAuth Client Secret`，用 `add-oauth-redirect --uri "..."` 将 Gemini 的重定向 URI 加入白名单，授权时输入配对密钥确认即可。
    - **Notion AI / Dify / 自定义 HTTP MCP**：填入 `https://mcp.example.com/mcp` 与 `Authorization: Bearer <配对密钥>`。
 
+![Gemini 网页端通过 AgentSurf 云端网关（OAuth 2.0 + 反向 WSS）控制本地 Chrome 浏览器实录](docs/assets/gemini-web-demo.gif)
+
 👉 **完整部署与 OAuth 接入步骤请参阅**：**[云端远程网关部署与多环境接入指南 (docs/remote-gateway.md)](docs/remote-gateway.md)**
 
 ---

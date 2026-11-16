@@ -145,6 +145,8 @@ Use Remote Gateway mode when your AI runs in the cloud and needs to control your
    - **Gemini Web**: Use the generated `OAuth Client ID` and `OAuth Client Secret`, register Gemini's Redirect URI with `add-oauth-redirect --uri "..."`, and approve the browser prompt with your Pairing Token.
    - **Notion AI / Dify / Custom HTTP MCP**: Use `https://mcp.example.com/mcp` with `Authorization: Bearer <token>`.
 
+![Gemini Web controlling a local Chrome browser over AgentSurf Cloud Gateway (OAuth 2.0 + Reverse WSS)](docs/assets/gemini-web-demo.gif)
+
 👉 **Full step-by-step instructions**: **[Remote Gateway & OAuth 2.0 Guide (docs/remote-gateway.en.md)](docs/remote-gateway.en.md)**
 
 ---
