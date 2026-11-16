@@ -172,6 +172,7 @@ Gemini Web's **Connect to MCP server** dialog requires an **OAuth Client ID**, *
    node /root/standalone-gateway.js add-oauth-redirect --uri "<paste-redirect-uri>"
    ```
 4. Click **Next** in Gemini. When redirected to the AgentSurf authorization page, enter your **Bearer Pairing Token** and click **Authorize**.
+5. **(Optional) Skip per-tool confirmation prompts**: When tools run for the first time, Gemini prompts `Let Gemini use ...?`. To let multi-step browser tasks run smoothly without stopping at every step, click **`Review permissions`** on the prompt card (or open **Agentsurf → App actions** in Gemini) and switch the **`Write / delete` (31)** group dropdown to **`Always allow`** (keep gateway `read-only` mode or per-action prompts enabled when you want stricter control).
 
 To rotate the OAuth Client Secret (immediately revokes previously issued OAuth tokens):
 ```bash

@@ -238,7 +238,8 @@ Gemini 网页端（「连接到 MCP 服务器」->「其他设置」）要求填
    node /root/standalone-gateway.js add-oauth-redirect --uri "<粘贴你复制的重定向 URI>"
    ```
 4. 在 Gemini 点击 **【下一步】**，浏览器会跳转到网关授权确认页；输入你的 **AgentSurf 配对密钥 (Bearer Token)** 并点击 **【授权连接】** 即可完成配对。
-5. 如需轮换 OAuth 客户端密钥（会立即吊销已签发的 OAuth Token）：
+5. **（可选）减少调用弹窗确认**：首次在对话里触发工具时，Gemini 卡片会弹出确认框并提示点击 **`Review permissions`**。如需让连续多步网页操作不中断，进入 Agentsurf 应用的 **App actions** 页面，将 **`Write / delete`（31）** 分组下拉框设为 **`Always allow`**（日常非必要或只读场景建议保持网关 `read-only` 模式并谨慎放行写操作）。
+6. 如需轮换 OAuth 客户端密钥（会立即吊销已签发的 OAuth Token）：
    ```bash
    node /root/standalone-gateway.js rotate-oauth-secret
    ```
