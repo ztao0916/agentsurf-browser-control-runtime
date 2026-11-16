@@ -20,39 +20,28 @@
 
 ---
 
-## 2. 渠道调研矩阵与执行状态（截至 2026-11-16 实测）
+## 2. 渠道调研矩阵与执行状态（截至 2026-11-16 实测与范围确认）
 
-### 第一梯队：MCP 目录与 GitHub Awesome 榜单（长期搜索流量，零风控，立即可推进）
+### 活跃推进渠道（用户确认保留）
 
-| 渠道 | URL / 入口 | 2026-11-16 实测现状与规则 | 当前状态 |
-| --- | --- | --- | --- |
-| **awesome-mcp-servers** | `https://github.com/punkpeye/awesome-mcp-servers` | `97.7k` stars；`CONTRIBUTING.md` 欢迎有公开 GitHub 仓库的 MCP Server，Fork 后按格式加入 `Browser Automation` 分类提 PR 即可；`r/mcp` 置顶推荐 | 待提 PR |
-| **Glama MCP Registry** | `https://glama.ai/mcp/servers` | 收录 `121,954` 个 Server；右上角支持 `Add Server`，可标注 `Browser Automation`、`Hybrid`、`Local`、`Remote`、`Apache 2.0` | 待提交 |
-| **MCP.so** | `https://mcp.so/` | 顶部有 `Submit` 入口，首页已有 Chrome 浏览器自动化类上榜，支持中英文浏览 | 待提交 |
-| **PulseMCP** *(暂缓)* | `https://www.pulsemcp.com/servers` | 顶部横幅提示 **`New server submissions and listing changes are still paused`** | 暂停（暂不投入） |
-| **Smithery** *(不适用)* | `https://smithery.ai/` | 已并入 Arcade，横幅提示原有 MCP Proxy 与托管身份服务已于 Oct 31 关停 | 已淘汰 |
+| 渠道 | 2026-11-16 实测与执行模式 | 当前进度 |
+| --- | --- | --- |
+| **GitHub `punkpeye/awesome-mcp-servers`** | `97.7k` stars；按 `CONTRIBUTING.md` 规范加至 `Browser Automation` 分类；**节奏 A（先填好 PR 截图确认，不擅自点最终提交）** | 已 Fork 至 `ztao0916/awesome-mcp-servers` 并推送分支 `add-agentsurf`（`5682d52`），PR 表单已预填待确认提交 |
+| **Reddit 养号期（`r/mcp` / `r/LocalLLaMA` / `r/ClaudeAI`）** | 仅对真实技术讨论与求助发干货评论（严禁放自推链接、严禁 `"I found this.."` / astroturfing），先跨过全站外链过滤及 `r/ClaudeAI` `karma > 100` 门槛 | 已锁定首轮 2 条高匹配技术求助帖（`r/mcp` 远程写权限设计 + `r/LocalLLaMA` 本地推理硬件配置）待评论 |
+| **Reddit 正式发布期（`r/mcp` `showcase` / `r/LocalLLaMA` / `r/ClaudeAI`）** | 必须如实披露作者身份（`showcase` tag），附 [docs/assets/gemini-web-demo.gif](../../docs/assets/gemini-web-demo.gif)；**节奏 A（先确认文案后提交）** | 等待养号评论 Karma 积累达标后开启 |
 
-### 第二梯队：中文开发者社区（当前最适配、可直接引流第一批 Star 与反馈）
+### 已排除 / 暂不推进渠道（2026-11-16 用户确认）
 
-| 渠道 | URL / 节点 | 2026-11-16 实测规则与要点 | 当前状态 |
-| --- | --- | --- | --- |
-| **LINUX DO** | `https://linux.do/`（节点：`开发调优` / `资源荟萃`） | Claude / Gemini / Vibe Coding 极其活跃；**零容忍纯 AI 生成文案**，必须由作者本人手写口语化实战分享并附真实演示 GIF | 待本人撰稿发布 |
-| **V2EX 分享创造** | `https://www.v2ex.com/go/create` | 39,049 主题，允许并鼓励 `[开源]` 前缀自荐独立工具；需先登录账号 | 待登录发布 |
-
-### 第三梯队：海外核心开发者社区（先养号/遵守严苛规则后再集中引爆）
-
-| 渠道 | 2026-11-16 实测规模与规则 | 前置门槛与执行动作 | 当前状态 |
-| --- | --- | --- | --- |
-| **Hacker News `Show HN`** | `https://news.ycombinator.com/show`；1 天内已有同类项目 `Turbo-Browser-MCP`（47 pts）与 `Agweb`（108 pts / 37 comments）获关注 | 只允许作者本人发可运行开源项目；需先登录 HN 账号，标题客观写实、正文讲清技术架构与安全边界 | 待登录排期 |
-| **Reddit `r/mcp`** | `48K` 周访客 / `1.6K` 周贡献；Rule 1–4：No waitlists / No AI slop / No astroturfing / **必选 `showcase` tag** | 先积累评论 Karma 防自动 spam filter；发布时坦诚作者身份 + 附 `gemini-web-demo.gif` | 养号评论中 |
-| **Reddit `r/ClaudeAI`** | `2.1M` 成员；Rule 7：须由本人用 Claude 构建或专为 Claude 服务、免费可试、极简宣传语、**`Posts on the feed now require OP karma>100`** | 等账号 Karma `> 100` 后再发独立贴；前期可合规参与置顶 `Built with Claude` 讨论串 | Karma 未达标（待养号） |
-| **Reddit `r/LocalLLaMA`** | `932K` 成员；Rule 4：自推比例 `<= 10%`、必须披露作者身份、严禁 `"I found this.."`；置顶有 `[Bi-Weekly Megathread] Project Showcase` | 优先攒评论并控制自推比例，可先在双周置顶 `Project Showcase` 合规留言 | 待推进 |
-| **Reddit `r/SideProject`** | `347K` 成员；低 Karma 账号直接带外链新帖易被全站过滤器移除 | 仅在账号历史外链风控解除、积累正常互动后再考虑发布 | 暂缓 |
+| 渠道 | 排除原因 |
+| --- | --- |
+| **LINUX DO** / **V2EX** | 用户明确不做中文社区（`V2EX`、`LINUX DO` 均不投） |
+| **Glama / MCP.so / Hacker News `Show HN`** | 账号无法登录（若后续用户手动完成登录可按节奏 A 补交） |
+| **PulseMCP / Smithery** | `PulseMCP` 页顶公告暂停提交；`Smithery` 原 MCP Proxy 服务已关停并入 Arcade |
 
 ---
 
 ## 3. 本轮建议推进顺序
 
-1. **P0（今日可做）**：提交 `punkpeye/awesome-mcp-servers` PR + 提交 `Glama` 与 `MCP.so`。
-2. **P0（今日可做）**：在 `LINUX DO`（本人手写）与 `V2EX /go/create` 发布开源首发帖。
-3. **P1（未来 2–3 天）**：在 Reddit 技术板块日常参与高质量评论攒够 `comment karma`，随后按 **Show HN → `r/mcp (showcase)` → `r/LocalLLaMA` → `r/ClaudeAI`（karma>100 后）** 节奏依次发布。
+1. **P0（待确认即可完成）**：确认提交已预填好的 `punkpeye/awesome-mcp-servers` PR。
+2. **P0（养号进行中）**：在 `r/mcp` 与 `r/LocalLLaMA` 等真实技术求助帖持续发布高价值、无广告评论，积累 `comment karma`。
+3. **P1（Karma 达标后）**：按 **节奏 A** 发布 `r/mcp`（`showcase` tag）及 `r/LocalLLaMA`（`<= 10%` 自推比例），Karma `> 100` 后再发 `r/ClaudeAI`。

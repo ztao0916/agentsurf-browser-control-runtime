@@ -12,15 +12,13 @@
 
 ## Current Next Item
 
-**当前主线：执行开源冷启动推广第 1–3 阶段（详见 `memory-bank/strategy/promotion-outreach.md`）**
+**当前主线：聚焦 GitHub PR 与 Reddit 合规养号（节奏 A：填好预览待用户确认后提交，详见 `memory-bank/strategy/promotion-outreach.md`）**
 
-1. **优先零门槛长期收录入口（立即可做）**：
-   - 向 `punkpeye/awesome-mcp-servers` 提 PR 收录至 `Browser Automation` 分类；
-   - 提交至 `Glama`（`glama.ai/mcp/servers`）与 `MCP.so`（`mcp.so`）。
-2. **中文开发者社区首发**：
-   - 在 `LINUX DO`（由作者本人手写技术复盘帖，严禁纯 AI 拼接文案）与 `V2EX /go/create`（带 `[开源]` 标签）发布，附真实 `gemini-web-demo.gif`。
-3. **海外主战场（先养号互动，再坦诚自荐）**：
-   - Reddit 账号需先通过真诚评论互动积累 `comment karma`（避开全站外链过滤及 `r/ClaudeAI` 的 `karma > 100` 门槛），再依次发布 Hacker News `Show HN`、`r/mcp`（必选 `showcase` 标签）等，严禁使用假装路人“发现好工具”话术。
+1. **GitHub `punkpeye/awesome-mcp-servers` 收录 PR**：
+   - 已 Fork 并推送 `add-agentsurf` 分支至 `ztao0916/awesome-mcp-servers`（`5682d52`），在浏览器打开对比创建 PR 页填妥标题与描述，待用户确认提交。
+2. **Reddit 技术评论养号（`r/mcp` / `r/LocalLLaMA`）**：
+   - 先发布纯干货、无外链的技术回复积累 `comment karma`（跨过全站外链过滤与 `r/ClaudeAI` `karma > 100` 门槛），达标后再按节奏 A 发 `r/mcp`（`showcase` tag）等主帖。
+3. **已排除渠道**：按用户确认跳过 V2EX、LINUX DO 及当前无法登录的站点（Hacker News / Glama / MCP.so）。
 
 ## Current Risks / Constraints
 
