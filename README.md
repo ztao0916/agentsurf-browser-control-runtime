@@ -147,6 +147,8 @@ Use Remote Gateway mode when your AI runs in the cloud and needs to control your
 
 ![Gemini Web controlling a local Chrome browser over AgentSurf Cloud Gateway (OAuth 2.0 + Reverse WSS)](docs/assets/gemini-web-demo.gif)
 
+> **Note on Gemini Web confirmations**: The demo GIF above trims out waiting spinners and permission cards for brevity. AgentSurf marks read-only inspection tools with MCP `readOnlyHint: true` (which Gemini groups under **Read** and allows automatically), while **Gemini Web's client-side security policy still prompts you to click `Always allow` on interactive / state-changing tools** (`browser_start_session`, `browser_open`, `browser_type`, `browser_click`, `browser_scroll`, `browser_end_session`, etc.)—even if **Write / delete** is already set to `Always allow` in **App actions**.
+
 👉 **Full step-by-step instructions**: **[Remote Gateway & OAuth 2.0 Guide (docs/remote-gateway.en.md)](docs/remote-gateway.en.md)**
 
 ---

@@ -146,6 +146,8 @@ flowchart LR
 
 ![Gemini 网页端通过 AgentSurf 云端网关（OAuth 2.0 + 反向 WSS）控制本地 Chrome 浏览器实录](docs/assets/gemini-web-demo.gif)
 
+> **关于 Gemini 网页端连续授权提示的说明**：为保证演示紧凑，上方 GIF 已剪去等待连接与权限确认弹窗。AgentSurf 已为只读检查工具标记 MCP `readOnlyHint: true`（Gemini 会将其分到 **只读** 分组并自动放行），但受 **Gemini 网页端客户端对第三方 MCP 的安全策略限制**，在调用交互/写入类工具（如 `browser_start_session`、`browser_open`、`browser_type`、`browser_click`、`browser_scroll`、`browser_end_session`）时，**即使已在「应用操作 / App actions」里将「写入/删除」设为 `始终允许 / Always allow`，对话中仍会弹出 `Always allow` 确认卡片**，需要手动点击放行（该行为由 Gemini 网页端控制，非扩展或网关限制）。
+
 👉 **完整部署与 OAuth 接入步骤请参阅**：**[云端远程网关部署与多环境接入指南 (docs/remote-gateway.md)](docs/remote-gateway.md)**
 
 ---
