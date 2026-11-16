@@ -21,7 +21,7 @@
 3. **`mcpservers.org`（`wong2/awesome-mcp-servers` 入口）**：
    - 已通过 `$0` 免费通道提交 `AgentSurf`，等待审核邮件。
 4. **已放弃渠道**：今天未申请的渠道（Reddit 养号及发帖、V2EX、LINUX DO、Hacker News、`MCP.so`、`PulseMCP`、`Smithery`）全部正式放弃，不再投入时间。
-5. **npm 发布（已上传待放行）**：`agentsurf-mcp@0.7.0` 已成功上传至 npm 官方源，当前处于 staged release 占位状态（`0.0.0-stage`），待维护者在 npmjs.com 网页端确认放行后即切换为正式版 `0.7.0`。
+5. **npm 已正式上线**：`agentsurf-mcp@0.7.0` 已在 `https://registry.npmjs.org/agentsurf-mcp` 正式上线（`dist-tags.latest: 0.7.0`，`bin: agentsurf-mcp`），可直接通过 `npx -y agentsurf-mcp` 或 `npm install -g agentsurf-mcp` 安装运行。
 
 ## Current Risks / Constraints
 
