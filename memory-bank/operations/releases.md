@@ -15,3 +15,9 @@
   - 仓库新增 [Dockerfile](../../Dockerfile)、[.dockerignore](../../.dockerignore) 与 [glama.json](../../glama.json)（`aab2e94`），验证 stdio `tools/list` 无头返回 29 个工具后，完成 **Glama** `Runs from source` 表单提交审核；
   - 通过 `wong2/awesome-mcp-servers` 指定的官方入口 `https://mcpservers.org/submit` 完成 `$0` 免费提交（`AgentSurf`）。
 - **npm 正式发布上线 `agentsurf-mcp@0.7.0`（`e753ae7`）**：定名 `agentsurf-mcp`（与 `bin` 同名），配置 `mcpName`（`io.github.ztao0916/agentsurf`）与 `publishConfig.registry`；已正式发布并通过 `npm view` 核验 `dist-tags.latest: 0.7.0`（`535.7 kB` / `9` files）。
+
+## 2026-11-17
+
+- **Glama 认领、Docker 探测过审与 PR #19670 更新**：
+  - 完成 `glama.ai` 页面认领并在后台配置 `Build steps`（`["npm ci", "npm run build"]`）与 `CMD arguments`（`["node", "dist/mcp/cli.js"]`），`Build & Release` 执行成功（`Status: success`、`1m 53.7s`，`initialize` 与 `tools/list` 探测通过，发布 Release `0.1.0`）；
+  - 向 `ztao0916/awesome-mcp-servers`（`add-agentsurf` 分支、`abbe8d2`）补充 Glama 评分徽章，**PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)** 已通过 `check-submission` 并获 **`has-glama`** 标签。

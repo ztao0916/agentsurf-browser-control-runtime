@@ -12,16 +12,16 @@
 
 ## Current Next Item
 
-**当前主线：已完成首轮免费 MCP 目录提交；所有未申请渠道正式放弃，后续仅做结果收尾（详见 `memory-bank/strategy/promotion-outreach.md`）**
+**当前主线：前期发行与目录收录流程已全部完成并推送（详见 `memory-bank/strategy/promotion-outreach.md`），仅被动等待外部审核合入**
 
 1. **GitHub `punkpeye/awesome-mcp-servers` PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)**：
-   - 已提交并开启，`2/2` checks 通过、无冲突；待 Glama 过审后补充 score badge 即可继续合入。
+   - 已补充 Glama score badge（`abbe8d2`），`check-submission` 通过，标签已切换为 **`has-emoji, valid-name, has-glama`**，等待维护者合并。
 2. **Glama (`glama.ai/mcp/servers`)**：
-   - 已推送 `Dockerfile` + `.dockerignore` + `glama.json`（`aab2e94`）并在浏览器完成提交审核，等待审核结果邮件。
+   - 已认领页面并完成 Docker build + MCP introspection 配置（`["npm ci", "npm run build"]` + `["node", "dist/mcp/cli.js"]`），`Status: success` 并发布 Release `0.1.0`，`/schema` 已解锁 `Deploy`，等待 Glama 后台异步刷新 `quality` 评分索引。
 3. **`mcpservers.org`（`wong2/awesome-mcp-servers` 入口）**：
    - 已通过 `$0` 免费通道提交 `AgentSurf`，等待审核邮件。
-4. **已放弃渠道**：今天未申请的渠道（Reddit 养号及发帖、V2EX、LINUX DO、Hacker News、`MCP.so`、`PulseMCP`、`Smithery`）全部正式放弃，不再投入时间。
-5. **npm 已正式上线**：`agentsurf-mcp@0.7.0` 已在 `https://registry.npmjs.org/agentsurf-mcp` 正式上线（`dist-tags.latest: 0.7.0`，`bin: agentsurf-mcp`），可直接通过 `npx -y agentsurf-mcp` 或 `npm install -g agentsurf-mcp` 安装运行。
+4. **npm 已正式上线**：`agentsurf-mcp@0.7.0` 已在 `https://registry.npmjs.org/agentsurf-mcp` 正式上线（`dist-tags.latest: 0.7.0`，`bin: agentsurf-mcp`），可直接通过 `npx -y agentsurf-mcp` 或 `npm install -g agentsurf-mcp` 安装运行。
+5. **已放弃渠道**：未申请的渠道（Reddit 养号及发帖、V2EX、LINUX DO、Hacker News、`MCP.so`、`PulseMCP`、`Smithery`）全部正式放弃，不再投入时间。
 
 ## Current Risks / Constraints
 

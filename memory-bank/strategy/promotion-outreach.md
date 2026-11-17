@@ -22,12 +22,12 @@
 
 ## 2. 渠道调研矩阵与执行状态（截至 2026-11-16 实测与范围确认）
 
-### 已推进并保留的收录渠道（2026-11-16 已提交，仅跟踪收尾）
+### 已推进并保留的收录渠道（仅跟踪自动合入结果）
 
 | 渠道 | 当前进度 | 后续动作 |
 | --- | --- | --- |
-| **GitHub `punkpeye/awesome-mcp-servers`** | **已提交 Open PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670)**（`5682d52`），`2/2` checks 通过、无冲突；Bot 标记 `missing-glama` | 收到 Glama 过审链接后补充评分徽章至 PR |
-| **Glama (`glama.ai/mcp/servers`)** | 已新增 `Dockerfile`、`.dockerignore` 与 `glama.json`（`aab2e94`）；已在浏览器提交 `Runs from source` 审核 | 收到审核通过邮件后确认徽章地址可用 |
+| **GitHub `punkpeye/awesome-mcp-servers`** | **PR [#19670](https://github.com/punkpeye/awesome-mcp-servers/pull/19670) 已补充 Glama 评分徽章（`abbe8d2`）**：`check-submission` 通过，标签已从 `missing-glama` 更新为 **`has-glama`**（`has-emoji, valid-name, has-glama`） | 等待维护者审核合并 |
+| **Glama (`glama.ai/mcp/servers`)** | **已过审认领并发布 `0.1.0` 容器构建版本**：配置 `["npm ci", "npm run build"]` + `["node", "dist/mcp/cli.js"]` 通过 Docker build + MCP `initialize`/`tools/list` 探测（`Status: success`，`/schema` 已解锁 `Deploy`） | 等待 Glama 异步完成 `quality` 评级索引 |
 | **`mcpservers.org`（`wong2/awesome-mcp-servers` 入口）** | **已免费提交 `AgentSurf`**（`$0`，`development` 分类），最长 2 周审核 | 等待审核结果邮件即可 |
 
 ### 已放弃渠道（不再投入时间）
@@ -36,7 +36,6 @@
 
 ---
 
-## 3. 收尾事项
+## 3. 收尾状态
 
-1. **Glama → PR #19670 闭环**：待 Glama 审核邮件到位、确认 `score.svg` 徽章生效后，更新 PR `#19670` 即结束列表收录工作。
-2. **npm 发布（可选）**：若完成 npm CLI 登录与包名/Org 确认，发布包并视情况顺带关闭推广期，不再新增推广投入。
+- **已全部收尾上线/待审**：`npm`（`agentsurf-mcp@0.7.0` 已上线）、`Glama`（已认领并通过 Docker 构建与 MCP 探测）、`punkpeye/awesome-mcp-servers`（PR `#19670` 已挂 `has-glama` 待合入）、`mcpservers.org`（待邮件通知），不再新增推广动作。
